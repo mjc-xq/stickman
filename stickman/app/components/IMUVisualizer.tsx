@@ -108,23 +108,29 @@ export function IMUVisualizer() {
       s.gy += (t.gy - s.gy) * SMOOTHING;
       s.gz += (t.gz - s.gz) * SMOOTHING;
 
-      // 2. Gravity estimate (very slow low-pass → tracks gravity, ignores jolts)
+      // 2. Gravity estimate (low-pass tracks gravity, ignores jolts)
       g.x += (s.ax - g.x) * GRAV_LP;
       g.y += (s.ay - g.y) * GRAV_LP;
       g.z += (s.az - g.z) * GRAV_LP;
 
-      // 3. Linear acceleration = total accel − gravity (with deadzone)
-      let linX = s.ax - g.x;
-      let linY = s.ay - g.y;
-      if (Math.abs(linX) < ACCEL_DEAD) linX = 0;
-      if (Math.abs(linY) < ACCEL_DEAD) linY = 0;
+      // 3. Renormalize gravity to unit vector each frame
+      const gMag = Math.sqrt(g.x * g.x + g.y * g.y + g.z * g.z) || 1;
+      const gnx = g.x / gMag;
+      const gny = g.y / gMag;
+      const gnz = g.z / gMag;
 
-      // 4. Rest position from gravity tilt (axes flipped to match screen)
-      const halfPi = Math.PI / 2;
-      const restX = -Math.atan2(g.x, g.z) / halfPi;
-      const restY = -Math.atan2(g.y, g.z) / halfPi;
+      // 4. Linear acceleration: project out gravity component (true perpendicular accel)
+      const accelDotG = s.ax * gnx + s.ay * gny + s.az * gnz;
+      let linX = s.ax - accelDotG * gnx;
+      let linY = s.ay - accelDotG * gny;
+      const linMag = Math.sqrt(linX * linX + linY * linY);
+      if (linMag < ACCEL_DEAD) { linX = 0; linY = 0; }
 
-      // 5. Physics: spring to rest + acceleration kicks + damping
+      // 5. Rest position = normalized gravity X,Y (orient to gravity each point)
+      const restX = -gnx;
+      const restY = -gny;
+
+      // 6. Physics: spring to rest + acceleration kicks + damping
       vel.x += -linX * ACCEL_GAIN;
       vel.y += -linY * ACCEL_GAIN;
       vel.x += (restX - pos.x) * SPRING; // spring to tilt position
@@ -139,15 +145,13 @@ export function IMUVisualizer() {
       pos.x = Math.max(-1.8, Math.min(1.8, pos.x));
       pos.y = Math.max(-1.8, Math.min(1.8, pos.y));
 
-      // --- Arrow (from gravity tilt, same flip as dot) ---
-      const tiltX = -Math.atan2(g.x, g.z);
-      const tiltY = -Math.atan2(g.y, g.z);
+      // --- Arrow (from normalized gravity, matches dot) ---
       if (arrowRef.current) {
-        const angle = Math.atan2(tiltX, -tiltY) * (180 / Math.PI);
+        const angle = Math.atan2(-gnx, gny) * (180 / Math.PI);
         arrowRef.current.setAttribute("transform", `rotate(${angle})`);
       }
       if (tiltRingRef.current) {
-        const tiltMag = Math.min(Math.sqrt(tiltX * tiltX + tiltY * tiltY) / halfPi, 1);
+        const tiltMag = Math.sqrt(gnx * gnx + gny * gny);
         const circ = 2 * Math.PI * 85;
         tiltRingRef.current.setAttribute("stroke-dasharray", `${circ * tiltMag} ${circ}`);
         tiltRingRef.current.setAttribute(
