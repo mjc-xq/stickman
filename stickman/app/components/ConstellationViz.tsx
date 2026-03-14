@@ -1,9 +1,10 @@
 "use client";
 
-import { memo, useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Particles, { initParticlesEngine } from "@tsparticles/react";
 import type { Container, ISourceOptions } from "@tsparticles/engine";
 import { loadSlim } from "@tsparticles/slim";
+import { usePointer } from "@/app/hooks/stickman";
 
 const PARTICLE_OPTIONS: ISourceOptions = {
   background: { color: "#050510" },
@@ -56,13 +57,8 @@ const PARTICLE_OPTIONS: ISourceOptions = {
   },
 };
 
-interface ConstellationVizProps {
-  pointerRef: React.RefObject<{ x: number; y: number }>;
-}
-
-export const ConstellationViz = memo(function ConstellationViz({
-  pointerRef,
-}: ConstellationVizProps) {
+export function ConstellationViz() {
+  const pointer = usePointer();
   const [ready, setReady] = useState(false);
   const containerRef = useRef<Container | null>(null);
 
@@ -78,7 +74,7 @@ export const ConstellationViz = memo(function ConstellationViz({
     let id: number;
     const update = () => {
       const c = containerRef.current;
-      const norm = pointerRef.current;
+      const norm = pointer.current;
       if (c && norm) {
         const el = c.canvas.element;
         if (el) {
@@ -96,7 +92,7 @@ export const ConstellationViz = memo(function ConstellationViz({
     };
     id = requestAnimationFrame(update);
     return () => cancelAnimationFrame(id);
-  }, [ready, pointerRef]);
+  }, [ready, pointer]);
 
   const particlesLoaded = useCallback(async (container?: Container) => {
     if (container) containerRef.current = container;
@@ -112,4 +108,4 @@ export const ConstellationViz = memo(function ConstellationViz({
       options={PARTICLE_OPTIONS}
     />
   );
-});
+}
