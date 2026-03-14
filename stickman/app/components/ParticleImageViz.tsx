@@ -18,8 +18,8 @@ const IMAGE_SRC = "/images/bt4-clean.png";
 const DENSITY = 220;
 const PARTICLE_SIZE = 1.0;
 const PARTICLE_SPEED = 1;
-const ATTRACT_DISTANCE = 120;
-const ATTRACT_STRENGTH = 80;
+const ATTRACT_PCT = 0.15; // attract radius as fraction of image size
+const ATTRACT_STRENGTH = 50;
 const CANVAS_PCT = 80;
 const RESTLESS = 5;
 
@@ -228,9 +228,10 @@ export const ParticleImageViz = memo(function ParticleImageViz({
         const dmx = mx - p.x;
         const dmy = my - p.y;
         const mouseDist = Math.sqrt(dmx * dmx + dmy * dmy);
-        if (mouseDist < ATTRACT_DISTANCE && mouseDist > 1) {
+        const attractDist = Math.max(ib.w, ib.h) * ATTRACT_PCT;
+        if (mouseDist < attractDist && mouseDist > 1) {
           const invStr = Math.max(300 - ATTRACT_STRENGTH, 10);
-          const force = (ATTRACT_DISTANCE - mouseDist) / invStr;
+          const force = (attractDist - mouseDist) / invStr;
           // Pull toward pointer (+ slight spiral via angular offset)
           const angle = Math.atan2(dmy, dmx) + (Math.random() - 0.5) * 0.6;
           p.vx += Math.cos(angle) * force;
