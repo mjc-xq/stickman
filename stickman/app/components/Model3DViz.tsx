@@ -20,36 +20,51 @@ interface Model3DVizProps {
 // Three.js: +X = right, +Y = up, +Z = toward camera
 // Map: devX→X, devY→-Z, devZ→Y
 
+// Pre-allocated math objects (avoid GC in animation loop)
 const REST_UP = new THREE.Vector3(0, 1, 0);
+const FLIP_QUAT = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI);
+const _screenDir = new THREE.Vector3();
+const _targetQuat = new THREE.Quaternion();
+const _yawQuat = new THREE.Quaternion();
 
 function PigModel({ imuRef }: Model3DVizProps) {
   const groupRef = useRef<THREE.Group>(null);
   const smoothQuat = useRef(new THREE.Quaternion());
+  const yawAngle = useRef(0);
   const { scene } = useGLTF("/3d/animal-pig.glb");
 
-  useFrame(() => {
+  useFrame((_, delta) => {
     if (!groupRef.current || !imuRef.current) return;
 
     const { ax, ay, az, gz } = imuRef.current;
 
-    const gLen = Math.sqrt(ax * ax + ay * ay + az * az) || 1;
+    // Skip if no reliable gravity signal (freefall or sensor noise)
+    const gLen = Math.sqrt(ax * ax + ay * ay + az * az);
+    if (gLen < 0.5) return;
+
     const gnx = ax / gLen;
     const gny = ay / gLen;
     const gnz = az / gLen;
 
     // Screen normal = opposite of gravity, mapped to Three.js coords
-    const screenDir = new THREE.Vector3(-gnx, -gnz, gny);
-    screenDir.normalize();
+    _screenDir.set(-gnx, -gnz, gny).normalize();
 
-    const targetQuat = new THREE.Quaternion().setFromUnitVectors(REST_UP, screenDir);
+    // Handle anti-parallel singularity (device screen facing straight down)
+    const dot = _screenDir.dot(REST_UP);
+    if (dot < -0.999) {
+      _targetQuat.copy(FLIP_QUAT);
+    } else {
+      _targetQuat.setFromUnitVectors(REST_UP, _screenDir);
+    }
 
-    // Yaw from gyro Z
-    const dt = 1 / 60;
-    const yawDelta = -gz * dt * (Math.PI / 180);
-    const yawQuat = new THREE.Quaternion().setFromAxisAngle(screenDir, yawDelta);
-    targetQuat.premultiply(yawQuat);
+    // Accumulate yaw from gyro Z (drift is expected without magnetometer)
+    yawAngle.current += -gz * delta * (Math.PI / 180);
+    _yawQuat.setFromAxisAngle(REST_UP, yawAngle.current);
+    _targetQuat.multiply(_yawQuat); // post-multiply = local-frame yaw
 
-    smoothQuat.current.slerp(targetQuat, 0.12);
+    // Frame-rate independent slerp smoothing
+    const alpha = 1 - Math.pow(0.88, delta * 60);
+    smoothQuat.current.slerp(_targetQuat, alpha);
     groupRef.current.quaternion.copy(smoothQuat.current);
   });
 
@@ -112,5 +127,4 @@ export const Model3DViz = memo(function Model3DViz({ imuRef }: Model3DVizProps) 
   );
 });
 
-// Preload the model
 useGLTF.preload("/3d/animal-pig.glb");
