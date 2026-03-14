@@ -79,7 +79,7 @@ function PigModel() {
     // Step 2: Yaw from gyro Z — rotate around the screen normal direction
     // gyro Z measures twist around the device's Z axis (screen normal)
     // In Three.js space, the screen normal is wherever _upDir points
-    yawAngle.current += -imu.gz * delta * DEG_TO_RAD;
+    yawAngle.current += imu.gz * delta * DEG_TO_RAD;
     _yawQuat.setFromAxisAngle(_upDir, yawAngle.current);
 
     // Combine: first tilt to match gravity, then yaw around screen normal
