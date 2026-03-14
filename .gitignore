@@ -1,3 +1,14 @@
-node_modules
-.next
+# OS
 .DS_Store
+
+# Device (PlatformIO / ESP32)
+device/.pio
+device/.vscode
+
+# Next.js / Node
+stickman/node_modules
+stickman/.next
+stickman/out
+*.tsbuildinfo
+.env
+.env*.local
