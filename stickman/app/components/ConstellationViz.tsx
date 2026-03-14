@@ -84,9 +84,10 @@ export const ConstellationViz = memo(function ConstellationViz({
         if (el) {
           const w = el.offsetWidth;
           const h = el.offsetHeight;
+          const pxr = c.retina.pixelRatio ?? window.devicePixelRatio ?? 1;
           c.interactivity.mouse.position = {
-            x: w / 2 + norm.x * w * 0.45,
-            y: h / 2 + norm.y * h * 0.45,
+            x: (w / 2 + norm.x * w * 0.45) * pxr,
+            y: (h / 2 + norm.y * h * 0.45) * pxr,
           };
           c.interactivity.status = "pointermove";
         }
