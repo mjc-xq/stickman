@@ -11,6 +11,7 @@ export function useOrientation(): React.RefObject<OrientationState> {
   const gravRef = bus.sharedGravity;
   const imuRef = bus.sharedSmoothedIMU;
 
+  // eslint-disable-next-line react-hooks/refs -- computed ref getter; only read in effects/rAF, not during render
   Object.defineProperty(ref, "current", {
     get() {
       const g = gravRef.current;
