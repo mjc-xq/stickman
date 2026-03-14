@@ -43,6 +43,7 @@ export const ParticleImageViz = memo(function ParticleImageViz({
   pointerRef,
 }: ParticleImageVizProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const bgRef = useRef<HTMLCanvasElement | null>(null); // offscreen bg with stars
   const [imgIndex, setImgIndex] = useState(0);
   const particlesRef = useRef<Particle[]>([]);
   const sizeRef = useRef({ w: 0, h: 0 });
@@ -136,16 +137,63 @@ export const ParticleImageViz = memo(function ParticleImageViz({
 
     const ctx = canvas.getContext("2d")!;
 
+    const buildBg = (w: number, h: number) => {
+      const offscreen = document.createElement("canvas");
+      offscreen.width = w;
+      offscreen.height = h;
+      const bgCtx = offscreen.getContext("2d")!;
+
+      // Sunset gradient: deep purple at top → warm indigo → dark blue-violet at bottom
+      const grad = bgCtx.createLinearGradient(0, 0, 0, h);
+      grad.addColorStop(0, "#0a0618");
+      grad.addColorStop(0.25, "#1a0a3a");
+      grad.addColorStop(0.5, "#2a1050");
+      grad.addColorStop(0.75, "#1e0d40");
+      grad.addColorStop(1, "#0c0820");
+      bgCtx.fillStyle = grad;
+      bgCtx.fillRect(0, 0, w, h);
+
+      // Stars
+      const starCount = Math.round((w * h) / 1200);
+      for (let i = 0; i < starCount; i++) {
+        const sx = Math.random() * w;
+        const sy = Math.random() * h;
+        const sr = Math.random() * 1.3;
+        const alpha = 0.2 + Math.random() * 0.6;
+        // Slight color variation
+        const temp = Math.random();
+        const col =
+          temp < 0.6
+            ? `rgba(255,255,255,${alpha})`
+            : temp < 0.8
+              ? `rgba(200,210,255,${alpha})`
+              : `rgba(255,220,200,${alpha})`;
+        bgCtx.fillStyle = col;
+        bgCtx.beginPath();
+        bgCtx.arc(sx, sy, sr, 0, Math.PI * 2);
+        bgCtx.fill();
+      }
+
+      bgRef.current = offscreen;
+    };
+
     const resize = () => {
       const rect = canvas.getBoundingClientRect();
       sizeRef.current = { w: rect.width, h: rect.height };
       canvas.width = rect.width;
       canvas.height = rect.height;
+      buildBg(rect.width, rect.height);
     };
 
     const animate = () => {
       const { w, h } = sizeRef.current;
-      ctx.clearRect(0, 0, w, h);
+
+      // Draw cached background (gradient + stars)
+      if (bgRef.current) {
+        ctx.drawImage(bgRef.current, 0, 0);
+      } else {
+        ctx.clearRect(0, 0, w, h);
+      }
 
       const norm = pointerRef.current;
       const mx = w / 2 + norm.x * w * 0.45;
@@ -207,7 +255,7 @@ export const ParticleImageViz = memo(function ParticleImageViz({
       <canvas
         ref={canvasRef}
         className="absolute inset-0 w-full h-full"
-        style={{ background: "#050510" }}
+        style={{ background: "#0a0618" }}
         onClick={() => setImgIndex((i) => (i + 1) % IMAGES.length)}
       />
       <div className="absolute top-3 left-1/2 -translate-x-1/2 z-20 flex gap-1.5 pointer-events-none">
