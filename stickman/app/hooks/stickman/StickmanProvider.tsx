@@ -67,7 +67,6 @@ export function StickmanProvider({ children }: { children: ReactNode }) {
   const [connected, setConnected] = useState(false);
   const [connectionState, setConnectionState] = useState("disconnected");
   const [receiving, setReceiving] = useState(false);
-  const [presenceCount, setPresenceCount] = useState(0);
   const receivingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const receivingRef = useRef(false);
 
@@ -100,9 +99,14 @@ export function StickmanProvider({ children }: { children: ReactNode }) {
   });
 
   const { presenceData } = usePresenceListener("stickman");
+  const presenceCount = presenceData.length;
+
+  // Clean up receiving timer independently of animation loop
   useEffect(() => {
-    setPresenceCount(presenceData.length);
-  }, [presenceData]);
+    return () => {
+      if (receivingTimer.current) clearTimeout(receivingTimer.current);
+    };
+  }, []);
 
   useEffect(() => {
     let animId: number;
@@ -187,7 +191,6 @@ export function StickmanProvider({ children }: { children: ReactNode }) {
     return () => {
       cancelAnimationFrame(animId);
       document.removeEventListener("visibilitychange", onVisibility);
-      if (receivingTimer.current) clearTimeout(receivingTimer.current);
     };
   }, []);
 

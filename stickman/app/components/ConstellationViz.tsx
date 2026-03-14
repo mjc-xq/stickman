@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Particles, { initParticlesEngine } from "@tsparticles/react";
 import type { Container, ISourceOptions } from "@tsparticles/engine";
 import { loadSlim } from "@tsparticles/slim";
-import { usePointer } from "@/app/hooks/stickman";
+import { usePointer, pointerToScreen } from "@/app/hooks/stickman";
 
 const PARTICLE_OPTIONS: ISourceOptions = {
   background: { color: "#050510" },
@@ -65,7 +65,8 @@ export function ConstellationViz() {
   useEffect(() => {
     initParticlesEngine(async (engine) => {
       await loadSlim(engine);
-    }).then(() => setReady(true));
+    }).then(() => setReady(true))
+      .catch(console.error);
   }, []);
 
   // Pump the virtual pointer into the container each frame
@@ -81,9 +82,10 @@ export function ConstellationViz() {
           const w = el.offsetWidth;
           const h = el.offsetHeight;
           const pxr = c.retina.pixelRatio ?? window.devicePixelRatio ?? 1;
+          const screen = pointerToScreen(norm, w, h);
           c.interactivity.mouse.position = {
-            x: (w / 2 + norm.x * w * 0.45) * pxr,
-            y: (h / 2 + norm.y * h * 0.45) * pxr,
+            x: screen.x * pxr,
+            y: screen.y * pxr,
           };
           c.interactivity.status = "pointermove";
         }

@@ -7,16 +7,15 @@ import { dtSmooth, DEFAULTS } from "./utils";
 
 export function usePointer(config?: PointerConfig): React.RefObject<PointerState> {
   const bus = useStickmanBus();
-
-  if (!config) return bus.sharedPointer;
-
-  // eslint-disable-next-line react-hooks/rules-of-hooks
-  return useCustomPointer(bus, config);
+  const hasConfig = config !== undefined;
+  const customPointer = useCustomPointer(bus, config ?? {}, hasConfig);
+  return hasConfig ? customPointer : bus.sharedPointer;
 }
 
 function useCustomPointer(
   bus: ReturnType<typeof useStickmanBus>,
   config: PointerConfig,
+  active: boolean,
 ): React.RefObject<PointerState> {
   const pointer = useRef<PointerState>({ x: 0, y: 0, vx: 0, vy: 0 });
   const targetRef = useRef<IMURawEvent | null>(null);
@@ -25,13 +24,13 @@ function useCustomPointer(
   const vel = useRef({ x: 0, y: 0 });
   const lastTime = useRef(0);
 
-  const smoothing = config.smoothing ?? DEFAULTS.smoothing;
-  const posTrack = config.posTrack ?? DEFAULTS.posTrack;
-  const joltGain = config.joltGain ?? DEFAULTS.joltGain;
-  const joltDead = config.joltDead ?? DEFAULTS.joltDead;
-  const joltDecay = config.joltDecay ?? DEFAULTS.joltDecay;
-  const clamp = config.clamp ?? DEFAULTS.clamp;
-  const enabled = config.enabled ?? true;
+  // Store config in refs so the rAF loop doesn't restart on config changes
+  const configRef = useRef(config);
+  useEffect(() => {
+    configRef.current = config;
+  });
+
+  const enabled = (config.enabled ?? true) && active;
 
   useEffect(() => {
     if (!enabled) return;
@@ -47,6 +46,14 @@ function useCustomPointer(
       const now = performance.now() / 1000;
       let dt = now - lastTime.current;
       lastTime.current = now;
+
+      const c = configRef.current;
+      const smoothing = c.smoothing ?? DEFAULTS.smoothing;
+      const posTrack = c.posTrack ?? DEFAULTS.posTrack;
+      const joltGain = c.joltGain ?? DEFAULTS.joltGain;
+      const joltDead = c.joltDead ?? DEFAULTS.joltDead;
+      const joltDecay = c.joltDecay ?? DEFAULTS.joltDecay;
+      const clamp = c.clamp ?? DEFAULTS.clamp;
 
       if (dt > 0.2) {
         if (targetRef.current) {
@@ -101,7 +108,7 @@ function useCustomPointer(
       cancelAnimationFrame(animId);
       unsub();
     };
-  }, [bus, enabled, smoothing, posTrack, joltGain, joltDead, joltDecay, clamp]);
+  }, [bus, enabled]);
 
   return pointer;
 }

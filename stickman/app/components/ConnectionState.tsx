@@ -1,25 +1,15 @@
 "use client";
 
-import { useConnectionStateListener } from "ably/react";
-import { useState } from "react";
+import { useStickmanStatus } from "@/app/hooks/stickman";
 
 export function ConnectionState() {
-  const [state, setState] = useState("connecting");
-
-  useConnectionStateListener((stateChange) => {
-    setState(stateChange.current);
-  });
-
+  const { connectionState } = useStickmanStatus();
   const color =
-    state === "connected"
+    connectionState === "connected"
       ? "text-green-500"
-      : state === "connecting"
+      : connectionState === "connecting"
         ? "text-yellow-500"
         : "text-red-500";
 
-  return (
-    <span className={`text-sm font-mono ${color}`}>
-      {state}
-    </span>
-  );
+  return <span className={`text-sm font-mono ${color}`}>{connectionState}</span>;
 }

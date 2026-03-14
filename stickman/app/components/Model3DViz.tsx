@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useMemo, Suspense } from "react";
+import { useRef, useMemo, useEffect, Suspense } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
 import { OrbitControls, useGLTF, Environment, Grid, Center } from "@react-three/drei";
 import * as THREE from "three";
@@ -53,40 +53,52 @@ function PigModel() {
     return clone;
   }, [scene]);
 
+  useEffect(() => {
+    return () => {
+      clonedScene.traverse((child) => {
+        if ((child as THREE.Mesh).isMesh) {
+          ((child as THREE.Mesh).material as THREE.MeshStandardMaterial).dispose();
+        }
+      });
+    };
+  }, [clonedScene]);
+
   useFrame((_, delta) => {
     if (!groupRef.current) return;
 
     const o = orientation.current;
     const imu = smoothedIMU.current;
 
-    // Map device accelerometer (gravity estimate) to Three.js "up" direction
-    // Device: +X=right, +Y=USB(down), +Z=screen(out)
-    // Three.js: devX→X, devZ→Y, devY→-Z
-    _upDir.set(o.gravityX, o.gravityZ, -o.gravityY).normalize();
+    // Map device accelerometer to Three.js "up" direction
+    _upDir.set(o.gravityX, o.gravityZ, -o.gravityY);
 
-    // Skip if no reliable gravity signal (freefall or sensor noise)
-    if (_upDir.lengthSq() < 0.25) return;
+    // Check BEFORE normalizing — freefall gives near-zero vector
+    const lenSq = _upDir.lengthSq();
+    if (lenSq < 0.25) return;
+    _upDir.multiplyScalar(1 / Math.sqrt(lenSq));
 
-    // Step 1: Tilt quaternion — rotate REST_UP to match the device's "up"
+    // Tilt quaternion
     const dot = _upDir.dot(REST_UP);
     if (dot < -0.999) {
-      // Anti-parallel singularity (device screen facing straight down)
       _tiltQuat.copy(FLIP_QUAT);
     } else {
       _tiltQuat.setFromUnitVectors(REST_UP, _upDir);
     }
 
-    // Step 2: Yaw from gyro Z — rotate around the screen normal direction
-    // gyro Z measures twist around the device's Z axis (screen normal)
-    // In Three.js space, the screen normal is wherever _upDir points
-    yawAngle.current += imu.gz * delta * DEG_TO_RAD;
+    // Yaw from gyro Z with deadzone to reject sensor bias
+    const GYRO_DEADZONE = 1.0; // deg/s
+    const gz = Math.abs(imu.gz) > GYRO_DEADZONE ? imu.gz : 0;
+    yawAngle.current += gz * delta * DEG_TO_RAD;
+    // Wrap to [-PI, PI] to prevent floating-point precision loss
+    yawAngle.current = ((yawAngle.current % (2 * Math.PI)) + 3 * Math.PI) % (2 * Math.PI) - Math.PI;
     _yawQuat.setFromAxisAngle(_upDir, yawAngle.current);
 
-    // Combine: first tilt to match gravity, then yaw around screen normal
+    // Combine: tilt then yaw around screen normal
     _targetQuat.multiplyQuaternions(_yawQuat, _tiltQuat);
 
-    // Frame-rate independent slerp (responsive but smooth)
-    const alpha = 1 - Math.pow(0.85, delta * 60);
+    // Frame-rate independent slerp
+    const SMOOTH_SPEED = 10;
+    const alpha = 1 - Math.exp(-SMOOTH_SPEED * delta);
     smoothQuat.current.slerp(_targetQuat, alpha);
     groupRef.current.quaternion.copy(smoothQuat.current);
   });

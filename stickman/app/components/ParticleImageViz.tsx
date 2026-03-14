@@ -134,6 +134,9 @@ export function ParticleImageViz() {
       // If canvas is already sized, load particles now
       loadParticlesFromImage();
     };
+    img.onerror = () => {
+      console.error("ParticleImageViz: failed to load", IMAGE_SRC);
+    };
     img.src = IMAGE_SRC;
   }, [loadParticlesFromImage]);
 
@@ -144,11 +147,12 @@ export function ParticleImageViz() {
 
     const ctx = canvas.getContext("2d")!;
 
-    const buildBg = (w: number, h: number) => {
+    const buildBg = (w: number, h: number, dpr: number) => {
       const offscreen = document.createElement("canvas");
-      offscreen.width = w;
-      offscreen.height = h;
+      offscreen.width = w * dpr;
+      offscreen.height = h * dpr;
       const bgCtx = offscreen.getContext("2d")!;
+      bgCtx.scale(dpr, dpr);
 
       const grad = bgCtx.createLinearGradient(0, 0, 0, h);
       grad.addColorStop(0, "#0a0618");
@@ -183,22 +187,26 @@ export function ParticleImageViz() {
 
     const resize = () => {
       const rect = canvas.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
       sizeRef.current = { w: rect.width, h: rect.height };
-      canvas.width = rect.width;
-      canvas.height = rect.height;
-      buildBg(rect.width, rect.height);
+      canvas.width = rect.width * dpr;
+      canvas.height = rect.height * dpr;
+      buildBg(rect.width, rect.height, dpr);
       // Re-create particles with new dimensions
       loadParticlesFromImage();
     };
 
     const animate = () => {
       const { w, h } = sizeRef.current;
+      const dpr = window.devicePixelRatio || 1;
 
+      ctx.setTransform(1, 0, 0, 1, 0, 0); // Reset for bg blit
       if (bgRef.current) {
         ctx.drawImage(bgRef.current, 0, 0);
       } else {
-        ctx.clearRect(0, 0, w, h);
+        ctx.clearRect(0, 0, w * dpr, h * dpr);
       }
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0); // Scale for CSS coords
 
       // Constrain pointer to image bounds (with small padding)
       const ib = imgBounds.current;
