@@ -142,8 +142,8 @@ export function IMUVisualizer() {
       pos.x += vel.x;
       pos.y += vel.y;
       // Soft clamp
-      pos.x = Math.max(-1.8, Math.min(1.8, pos.x));
-      pos.y = Math.max(-1.8, Math.min(1.8, pos.y));
+      pos.x = Math.max(-2.5, Math.min(2.5, pos.x));
+      pos.y = Math.max(-2.5, Math.min(2.5, pos.y));
 
       // --- Arrow (from normalized gravity, matches dot) ---
       if (arrowRef.current) {
@@ -171,10 +171,11 @@ export function IMUVisualizer() {
       const h = canvasCSS.current.h;
       const cx = w / 2;
       const cy = h / 2;
-      const scale = Math.min(w, h) * 0.4;
+      const scaleX = w * 0.4;
+      const scaleY = h * 0.4;
 
-      const dotX = cx + pos.x * scale;
-      const dotY = cy + pos.y * scale;
+      const dotX = cx + pos.x * scaleX;
+      const dotY = cy + pos.y * scaleY;
 
       // Hue: cycles faster when spinning
       const gyroMag = Math.sqrt(s.gx * s.gx + s.gy * s.gy + s.gz * s.gz);
