@@ -2,6 +2,7 @@
 #include <utility/imu/MPU6886_Class.hpp>
 #include <WiFi.h>
 #include <WebSocketsClient.h>
+#include "faces.h"
 
 // ── WiFi ─────────────────────────────────────────────────────────────
 #define WIFI_SSID "Flapjack"
@@ -11,14 +12,10 @@
 #define ABLY_KEY "9X6hPw.YFBkcQ:vRU9-1-MuwTSteM4YXv5cnmtByZpNHlyvMvoL-xdy0c"
 #define ABLY_CHANNEL "stickman"
 
-// ── Sloth Color Palette (RGB565) ─────────────────────────────────────
-#define COLOR_BG    0xF79E
-#define COLOR_FACE  0xBDB7
-#define COLOR_PATCH 0x8C51
-#define COLOR_INNER 0x6328
-#define COLOR_TEXT  0x4228
-#define COLOR_BLUSH 0xFCD3
-#define COLOR_NOSE  0x39C7
+// ── Color Palette (RGB565) ────────────────────────────────────────────
+#define COLOR_BG    0xF79E  // Light Cream
+#define COLOR_FACE  0x4228  // Dark Coffee (face line color)
+#define COLOR_INNER 0x6328  // Mode indicator bar
 
 // ── App Modes ────────────────────────────────────────────────────────
 enum AppMode { MODE_WAND, MODE_TOSS, MODE_DEBUG };
@@ -225,107 +222,38 @@ static void publishIMU() {
   }
 }
 
-// ── Sloth Drawing (unchanged) ────────────────────────────────────────
+// ── Sprite Face Drawing ──────────────────────────────────────────────
 
-static void drawBaseFace() {
-  StickCP2.Display.fillSmoothCircle(67, 85, 62, COLOR_FACE);
-  StickCP2.Display.fillSmoothCircle(15, 40, 18, COLOR_FACE);
-  StickCP2.Display.fillSmoothCircle(119, 40, 18, COLOR_FACE);
-  StickCP2.Display.fillSmoothCircle(15, 40, 10, COLOR_INNER);
-  StickCP2.Display.fillSmoothCircle(119, 40, 10, COLOR_INNER);
-  StickCP2.Display.fillSmoothCircle(42, 85, 22, COLOR_INNER);
-  StickCP2.Display.fillSmoothCircle(92, 85, 22, COLOR_INNER);
-  StickCP2.Display.fillSmoothCircle(42, 85, 16, COLOR_PATCH);
-  StickCP2.Display.fillSmoothCircle(92, 85, 16, COLOR_PATCH);
-  StickCP2.Display.fillSmoothCircle(67, 105, 5, COLOR_NOSE);
-  StickCP2.Display.fillSmoothCircle(25, 110, 8, COLOR_BLUSH);
-  StickCP2.Display.fillSmoothCircle(109, 110, 8, COLOR_BLUSH);
+static FaceType currentFace = FACE_IDX_DEFAULT;
+static unsigned long lastRandomFace = 0;
+
+// Draw a 1-bit bitmap face centered on screen, black pixels on cream bg
+static void drawFace(FaceType face) {
+  currentFace = face;
+  const uint8_t* data = (const uint8_t*)pgm_read_ptr(&FACE_DATA[face]);
+  int x = (135 - FACE_W) / 2;
+  int y = 20; // below mode indicator
+
+  // Clear face area
+  StickCP2.Display.fillRect(0, y, 135, FACE_H, COLOR_BG);
+
+  // Draw 1-bit bitmap: set pixels = COLOR_FACE (dark), unset = skip (transparent)
+  for (int row = 0; row < FACE_H; row++) {
+    for (int col = 0; col < FACE_W; col++) {
+      int byteIdx = row * FACE_ROW_BYTES + (col >> 3);
+      int bitIdx = 7 - (col & 7);
+      if (pgm_read_byte(&data[byteIdx]) & (1 << bitIdx)) {
+        StickCP2.Display.drawPixel(x + col, y + row, COLOR_FACE);
+      }
+    }
+  }
 }
 
-static void clearEyes() {
-  StickCP2.Display.fillSmoothCircle(42, 85, 14, COLOR_PATCH);
-  StickCP2.Display.fillSmoothCircle(92, 85, 14, COLOR_PATCH);
-}
-static void clearMouth() { StickCP2.Display.fillRect(48, 115, 38, 22, COLOR_FACE); }
 static void clearTextArea() { StickCP2.Display.fillRect(0, 155, 135, 85, COLOR_BG); }
-
-static void drawEyes(const char* e) {
-  clearEyes();
-  if (strcmp(e, "blink") == 0 || strcmp(e, "sleep") == 0) {
-    StickCP2.Display.drawArc(42, 85, 7, 7, 0, 180, COLOR_TEXT);
-    StickCP2.Display.drawArc(92, 85, 7, 7, 0, 180, COLOR_TEXT);
-  } else if (strcmp(e, "surprised") == 0) {
-    StickCP2.Display.fillSmoothCircle(42, 85, 10, BLACK);
-    StickCP2.Display.fillSmoothCircle(92, 85, 10, BLACK);
-    StickCP2.Display.fillSmoothCircle(44, 82, 3, WHITE);
-    StickCP2.Display.fillSmoothCircle(94, 82, 3, WHITE);
-  } else if (strcmp(e, "excited") == 0) {
-    StickCP2.Display.fillSmoothCircle(42, 85, 9, BLACK);
-    StickCP2.Display.fillSmoothCircle(92, 85, 9, BLACK);
-    StickCP2.Display.fillSmoothCircle(44, 83, 3, WHITE);
-    StickCP2.Display.fillSmoothCircle(94, 83, 3, WHITE);
-    StickCP2.Display.fillSmoothCircle(39, 87, 2, WHITE);
-    StickCP2.Display.fillSmoothCircle(89, 87, 2, WHITE);
-  } else if (strcmp(e, "dizzy") == 0) {
-    StickCP2.Display.drawArc(42, 85, 8, 8, 0, 270, BLACK);
-    StickCP2.Display.drawArc(42, 85, 5, 5, 90, 360, BLACK);
-    StickCP2.Display.drawArc(92, 85, 8, 8, 0, 270, BLACK);
-    StickCP2.Display.drawArc(92, 85, 5, 5, 90, 360, BLACK);
-  } else if (strcmp(e, "sleepy") == 0) {
-    StickCP2.Display.fillSmoothCircle(42, 87, 6, BLACK);
-    StickCP2.Display.fillRect(28, 75, 28, 12, COLOR_PATCH);
-    StickCP2.Display.fillSmoothCircle(92, 87, 6, BLACK);
-    StickCP2.Display.fillRect(78, 75, 28, 12, COLOR_PATCH);
-  } else if (strcmp(e, "determined") == 0) {
-    StickCP2.Display.fillSmoothCircle(42, 86, 7, BLACK);
-    StickCP2.Display.fillSmoothCircle(92, 86, 7, BLACK);
-    StickCP2.Display.fillSmoothCircle(43, 84, 2, WHITE);
-    StickCP2.Display.fillSmoothCircle(93, 84, 2, WHITE);
-    StickCP2.Display.drawLine(33, 72, 48, 74, COLOR_TEXT);
-    StickCP2.Display.drawLine(86, 74, 101, 72, COLOR_TEXT);
-  } else if (strcmp(e, "scared") == 0) {
-    StickCP2.Display.fillSmoothCircle(42, 85, 11, WHITE);
-    StickCP2.Display.fillSmoothCircle(92, 85, 11, WHITE);
-    StickCP2.Display.fillSmoothCircle(42, 86, 6, BLACK);
-    StickCP2.Display.fillSmoothCircle(92, 86, 6, BLACK);
-    StickCP2.Display.fillSmoothCircle(43, 85, 2, WHITE);
-    StickCP2.Display.fillSmoothCircle(93, 85, 2, WHITE);
-  } else if (strcmp(e, "proud") == 0) {
-    StickCP2.Display.drawArc(42, 88, 7, 7, 180, 360, COLOR_TEXT);
-    StickCP2.Display.drawArc(92, 88, 7, 7, 180, 360, COLOR_TEXT);
-  } else {
-    StickCP2.Display.fillSmoothCircle(42, 85, 7, BLACK);
-    StickCP2.Display.fillSmoothCircle(92, 85, 7, BLACK);
-    StickCP2.Display.fillSmoothCircle(44, 83, 2, WHITE);
-    StickCP2.Display.fillSmoothCircle(94, 83, 2, WHITE);
-  }
-}
-
-static void drawMouth(const char* e) {
-  clearMouth();
-  if (strcmp(e, "surprised") == 0 || strcmp(e, "scared") == 0) {
-    StickCP2.Display.fillSmoothCircle(67, 122, 6, COLOR_TEXT);
-    StickCP2.Display.fillSmoothCircle(67, 122, 3, COLOR_FACE);
-  } else if (strcmp(e, "sleep") == 0 || strcmp(e, "determined") == 0) {
-    StickCP2.Display.drawFastHLine(60, 122, 14, COLOR_TEXT);
-    StickCP2.Display.drawFastHLine(60, 123, 14, COLOR_TEXT);
-  } else if (strcmp(e, "excited") == 0) {
-    StickCP2.Display.fillSmoothCircle(67, 122, 7, COLOR_TEXT);
-    StickCP2.Display.fillRect(58, 114, 18, 8, COLOR_FACE);
-  } else if (strcmp(e, "sleepy") == 0) {
-    StickCP2.Display.fillSmoothCircle(67, 122, 5, COLOR_TEXT);
-    StickCP2.Display.fillSmoothCircle(67, 122, 3, COLOR_FACE);
-  } else if (strcmp(e, "proud") == 0) {
-    StickCP2.Display.drawArc(67, 118, 10, 10, 10, 170, COLOR_TEXT);
-    StickCP2.Display.drawArc(67, 118, 9, 9, 10, 170, COLOR_TEXT);
-  } else {
-    StickCP2.Display.drawArc(67, 118, 8, 8, 10, 170, COLOR_TEXT);
-  }
-}
 
 static void showMessage(const char* l1, const char* l2 = nullptr) {
   clearTextArea();
-  StickCP2.Display.setTextColor(COLOR_TEXT, COLOR_BG);
+  StickCP2.Display.setTextColor(COLOR_FACE, COLOR_BG);
   StickCP2.Display.setTextDatum(BC_DATUM);
   if (l2) {
     StickCP2.Display.drawString(l1, 67, 200, 4);
@@ -335,8 +263,9 @@ static void showMessage(const char* l1, const char* l2 = nullptr) {
   }
 }
 
-static void updateExpression(const char* expr, const char* m1, const char* m2 = nullptr) {
-  drawEyes(expr); drawMouth(expr); showMessage(m1, m2);
+static void showFace(FaceType face, const char* m1, const char* m2 = nullptr) {
+  drawFace(face);
+  showMessage(m1, m2);
 }
 
 // ── Mode indicator ───────────────────────────────────────────────────
@@ -486,7 +415,7 @@ static void updateTossDetection(float accMag, unsigned long now) {
       if (accMag > launchAccPeak) launchAccPeak = accMag;
       if (accMag < 0.4f) {
         tossState = TOSS_FREEFALL; freefallStart = now; freefallSamples = 0;
-        updateExpression("scared", "AAAH!");
+        showFace(FACE_IDX_SHOCKED, "AAAH!");
         char launchData[64];
         snprintf(launchData, sizeof(launchData), "{\\\"state\\\":\\\"airborne\\\",\\\"launchG\\\":%.1f}", launchAccPeak);
         publishEvent("toss", launchData);
@@ -504,10 +433,10 @@ static void updateTossDetection(float accMag, unsigned long now) {
         char hs[20];
         if (hi >= 12.0f) { int ft=(int)(hi/12.0f); int in=(int)(hi-ft*12.0f); snprintf(hs,sizeof(hs),"%d'%d\"",ft,in); }
         else snprintf(hs,sizeof(hs),"%.0f in",hi);
-        if (hi > 48) updateExpression("scared","SO HIGH!",hs);
-        else if (hi > 24) updateExpression("excited","Wow!",hs);
-        else if (hi > 8) updateExpression("proud","Nice!",hs);
-        else updateExpression("happy","Caught!",hs);
+        if (hi > 48) showFace(FACE_IDX_SHOCKED,"SO HIGH!",hs);
+        else if (hi > 24) showFace(FACE_IDX_SILLY,"Wow!",hs);
+        else if (hi > 8) showFace(FACE_IDX_HAPPY,"Nice!",hs);
+        else showFace(FACE_IDX_DEFAULT,"Caught!",hs);
         // Publish landed event with height
         char catchData[96];
         snprintf(catchData, sizeof(catchData),
@@ -517,14 +446,14 @@ static void updateTossDetection(float accMag, unsigned long now) {
         tossResultTime = now;
       }
       if (tossState == TOSS_FREEFALL && now - freefallStart > 3000) {
-        tossState = TOSS_IDLE; updateExpression("dizzy","Lost me?"); tossResultTime = now;
+        tossState = TOSS_IDLE; showFace(FACE_IDX_SAD,"Lost me?"); tossResultTime = now;
         publishEvent("toss", "{\\\"state\\\":\\\"lost\\\"}");
       }
       break;
     case TOSS_CAUGHT:
       if (now - tossResultTime > 3000) {
-        tossState = TOSS_IDLE; drawEyes("happy"); drawMouth("happy");
-        showMessage("Toss me","up!");
+        tossState = TOSS_IDLE;
+        showFace(FACE_IDX_HAPPY,"Toss me","up!");
       }
       break;
   }
@@ -547,9 +476,9 @@ static void enterSleep() {
   state = STATE_SLEEPING;
   webSocket.disconnect();
   WiFi.disconnect(true);
-  updateExpression("sleepy","*yawn*"); delay(800);
-  updateExpression("sleep","Zzz..."); delay(600);
-  StickCP2.Display.setTextColor(COLOR_TEXT, COLOR_BG);
+  showFace(FACE_IDX_TIRED,"*yawn*"); delay(800);
+  showFace(FACE_IDX_TIRED,"Zzz..."); delay(600);
+  StickCP2.Display.setTextColor(COLOR_FACE, COLOR_BG);
   StickCP2.Display.setTextDatum(TL_DATUM);
   StickCP2.Display.drawString("z",100,30,2); delay(250);
   StickCP2.Display.drawString("z",108,18,2); delay(250);
@@ -565,21 +494,19 @@ static void enterSleep() {
 static void playWakeAnimation() {
   StickCP2.Display.setBrightness(80);
   StickCP2.Display.fillScreen(COLOR_BG);
-  drawBaseFace();
-  drawEyes("sleep"); drawMouth("sleep"); delay(400);
-  drawEyes("sleepy"); drawMouth("sleepy"); showMessage("*yawn*"); delay(600);
-  drawEyes("happy"); drawMouth("happy"); showMessage("Hi there!"); delay(800);
+  showFace(FACE_IDX_TIRED,""); delay(400);
+  showFace(FACE_IDX_TIRED,"*yawn*"); delay(600);
+  showFace(FACE_IDX_HAPPY,"Hi there!"); delay(800);
 }
 
 // ── Show Ready ───────────────────────────────────────────────────────
 
 static void showReady() {
   StickCP2.Display.fillScreen(COLOR_BG);
-  drawBaseFace();
   drawModeIndicator();
   switch (mode) {
-    case MODE_WAND: updateExpression("happy","Wave the","wand!"); break;
-    case MODE_TOSS: updateExpression("happy","Toss me","up!"); break;
+    case MODE_WAND: showFace(FACE_IDX_DEFAULT,"Wave the","wand!"); break;
+    case MODE_TOSS: showFace(FACE_IDX_HAPPY,"Toss me","up!"); break;
     case MODE_DEBUG: drawDebugScreen(); break;
   }
 }
@@ -690,13 +617,19 @@ void loop() {
         break;
       }
 
-      // Blink (skip during active toss)
+      // Random face change (skip during active toss)
       if (!(mode == MODE_TOSS && tossState != TOSS_IDLE)) {
         if (now - lastBlink > blinkInterval && !isBlinking) {
-          drawEyes("blink"); isBlinking = true; lastBlink = now;
-          blinkInterval = random(3000, 8000);
+          // Randomly show silly or default face briefly
+          FaceType randFace = (random(3) == 0) ? FACE_IDX_SILLY : FACE_IDX_TIRED;
+          drawFace(randFace);
+          isBlinking = true; lastBlink = now;
+          blinkInterval = random(4000, 10000);
         }
-        if (isBlinking && now - lastBlink >= 150) { drawEyes("happy"); isBlinking = false; }
+        if (isBlinking && now - lastBlink >= 300) {
+          drawFace(currentFace == FACE_IDX_TIRED ? FACE_IDX_DEFAULT : FACE_IDX_HAPPY);
+          isBlinking = false;
+        }
       }
 
       if (mode == MODE_WAND) {
@@ -708,10 +641,10 @@ void loop() {
           snprintf(gestData, sizeof(gestData), "{\\\"gesture\\\":\\\"%s\\\"}", GESTURE_NAMES[g]);
           publishEvent("gesture", gestData);
           switch (g) {
-            case GESTURE_CIRCLE_LEFT:  updateExpression("dizzy","Circle","Left!"); break;
-            case GESTURE_CIRCLE_RIGHT: updateExpression("dizzy","Circle","Right!"); break;
-            case GESTURE_TAP:          updateExpression("surprised","Tap!"); break;
-            case GESTURE_THRUST:       updateExpression("determined","Thrust!"); break;
+            case GESTURE_CIRCLE_LEFT:  showFace(FACE_IDX_DIZZY,"Circle","Left!"); break;
+            case GESTURE_CIRCLE_RIGHT: showFace(FACE_IDX_DIZZY,"Circle","Right!"); break;
+            case GESTURE_TAP:          showFace(FACE_IDX_SHOCKED,"Tap!"); break;
+            case GESTURE_THRUST:       showFace(FACE_IDX_SILLY,"Thrust!"); break;
             default: break;
           }
         }
