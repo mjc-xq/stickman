@@ -246,6 +246,33 @@ export const ParticleImageViz = memo(function ParticleImageViz({
         ctx.fill();
       }
 
+      // Sparkle cluster around pointer
+      const t = performance.now() * 0.001;
+      const sparkleCount = 6;
+      for (let i = 0; i < sparkleCount; i++) {
+        const angle = t * (1.5 + i * 0.4) + (i * Math.PI * 2) / sparkleCount;
+        const orbit = 8 + Math.sin(t * 2 + i) * 6;
+        const sx = mx + Math.cos(angle) * orbit;
+        const sy = my + Math.sin(angle) * orbit;
+        const sparkleAlpha = 0.5 + Math.sin(t * 4 + i * 1.3) * 0.4;
+        const sr = 1.0 + Math.sin(t * 3 + i * 0.7) * 0.6;
+        ctx.globalCompositeOperation = "lighter";
+        ctx.fillStyle = `rgba(220, 210, 255, ${sparkleAlpha})`;
+        ctx.beginPath();
+        ctx.arc(sx, sy, sr, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      // Soft glow at center
+      const glowAlpha = 0.12 + Math.sin(t * 2.5) * 0.06;
+      const grd = ctx.createRadialGradient(mx, my, 0, mx, my, 20);
+      grd.addColorStop(0, `rgba(200, 180, 255, ${glowAlpha})`);
+      grd.addColorStop(1, "rgba(200, 180, 255, 0)");
+      ctx.fillStyle = grd;
+      ctx.beginPath();
+      ctx.arc(mx, my, 20, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalCompositeOperation = "source-over";
+
       animRef.current = requestAnimationFrame(animate);
     };
 
