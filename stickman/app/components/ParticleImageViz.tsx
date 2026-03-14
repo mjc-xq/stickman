@@ -15,11 +15,11 @@ interface Particle {
 }
 
 const IMAGES = ["/images/bingo-t2-clean.png", "/images/bt3-clean.png", "/images/bt4-clean.png"];
-const DENSITY = 80;
-const PARTICLE_SIZE = 1.8;
+const DENSITY = 160;
+const PARTICLE_SIZE = 1.2;
 const PARTICLE_SPEED = 1;
-const REPULSE_DISTANCE = 120;
-const REPULSE_STRENGTH = 180;
+const REPULSE_DISTANCE = 60;
+const REPULSE_STRENGTH = 80;
 const CANVAS_PCT = 65;
 const RESTLESS = 6;
 
