@@ -174,8 +174,8 @@ static void publishIMU() {
   if (ablyState != ABLY_ATTACHED) return;
   unsigned long now = millis();
 
-  // Max 25Hz (40ms) — stays under Ably's 50 msg/s limit with headroom
-  if (now - lastAblyPublish < 40) return;
+  // Max 10Hz (100ms) — ~600/min max during sustained motion, 0 when still
+  if (now - lastAblyPublish < 100) return;
 
   // Compute pitch/roll from accel (degrees)
   float pitch = atan2f(imuAx, sqrtf(imuAy*imuAy + imuAz*imuAz)) * 57.2958f;
