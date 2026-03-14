@@ -32,6 +32,20 @@ function PigModel({ imuRef }: Model3DVizProps) {
   const smoothQuat = useRef(new THREE.Quaternion());
   const yawAngle = useRef(0);
   const { scene } = useGLTF("/3d/animal-pig.glb");
+  const clonedScene = useRef<THREE.Group | null>(null);
+
+  // Clone scene once and tint it pink
+  if (!clonedScene.current) {
+    clonedScene.current = scene.clone() as THREE.Group;
+    clonedScene.current.traverse((child) => {
+      if ((child as THREE.Mesh).isMesh) {
+        const mesh = child as THREE.Mesh;
+        const mat = (mesh.material as THREE.MeshStandardMaterial).clone();
+        mat.color.set("#f5a0b8");
+        mesh.material = mat;
+      }
+    });
+  }
 
   useFrame((_, delta) => {
     if (!groupRef.current || !imuRef.current) return;
@@ -71,7 +85,7 @@ function PigModel({ imuRef }: Model3DVizProps) {
   return (
     <group ref={groupRef}>
       <Center>
-        <primitive object={scene.clone()} scale={1.5} />
+        <primitive object={clonedScene.current} scale={1.5} />
       </Center>
     </group>
   );
