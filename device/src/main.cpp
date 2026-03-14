@@ -505,7 +505,7 @@ static void showReady() {
   StickCP2.Display.fillScreen(COLOR_BG);
   drawModeIndicator();
   switch (mode) {
-    case MODE_WAND: showFace(FACE_IDX_DEFAULT,"Wave the","wand!"); break;
+    case MODE_WAND: showFace(FACE_IDX_HAPPY,"Wave the","wand!"); break;
     case MODE_TOSS: showFace(FACE_IDX_HAPPY,"Toss me","up!"); break;
     case MODE_DEBUG: drawDebugScreen(); break;
   }
@@ -617,17 +617,19 @@ void loop() {
         break;
       }
 
-      // Random face change (skip during active toss)
+      // Occasional random face (rare, skip during active toss)
       if (!(mode == MODE_TOSS && tossState != TOSS_IDLE)) {
         if (now - lastBlink > blinkInterval && !isBlinking) {
-          // Randomly show silly or default face briefly
-          FaceType randFace = (random(3) == 0) ? FACE_IDX_SILLY : FACE_IDX_TIRED;
-          drawFace(randFace);
-          isBlinking = true; lastBlink = now;
-          blinkInterval = random(4000, 10000);
+          // 1 in 4 chance of a silly/tired flash, otherwise just stay happy
+          if (random(4) == 0) {
+            drawFace(random(2) ? FACE_IDX_SILLY : FACE_IDX_DEFAULT);
+            isBlinking = true;
+          }
+          lastBlink = now;
+          blinkInterval = random(8000, 20000); // 8-20 seconds between checks
         }
-        if (isBlinking && now - lastBlink >= 300) {
-          drawFace(currentFace == FACE_IDX_TIRED ? FACE_IDX_DEFAULT : FACE_IDX_HAPPY);
+        if (isBlinking && now - lastBlink >= 400) {
+          drawFace(FACE_IDX_HAPPY);
           isBlinking = false;
         }
       }
