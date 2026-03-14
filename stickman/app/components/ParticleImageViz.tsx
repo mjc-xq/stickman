@@ -1,6 +1,7 @@
 "use client";
 
-import { memo, useEffect, useRef, useCallback } from "react";
+import { useEffect, useRef, useCallback } from "react";
+import { usePointer } from "@/app/hooks/stickman";
 
 interface Particle {
   x: number;
@@ -32,13 +33,8 @@ function randColor(): string {
   return palettes[Math.floor(Math.random() * palettes.length)];
 }
 
-interface ParticleImageVizProps {
-  pointerRef: React.RefObject<{ x: number; y: number }>;
-}
-
-export const ParticleImageViz = memo(function ParticleImageViz({
-  pointerRef,
-}: ParticleImageVizProps) {
+export function ParticleImageViz() {
+  const pointer = usePointer();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const bgRef = useRef<HTMLCanvasElement | null>(null);
   const particlesRef = useRef<Particle[]>([]);
@@ -206,7 +202,7 @@ export const ParticleImageViz = memo(function ParticleImageViz({
 
       // Constrain pointer to image bounds (with small padding)
       const ib = imgBounds.current;
-      const norm = pointerRef.current;
+      const norm = pointer.current;
       const pad = Math.max(ib.w, ib.h) * 0.15;
       const mx = ib.x + ib.w / 2 + norm.x * (ib.w / 2 + pad);
       const my = ib.y + ib.h / 2 + norm.y * (ib.h / 2 + pad);
@@ -287,7 +283,7 @@ export const ParticleImageViz = memo(function ParticleImageViz({
       cancelAnimationFrame(animRef.current);
       obs.disconnect();
     };
-  }, [pointerRef, loadParticlesFromImage]);
+  }, [pointer, loadParticlesFromImage]);
 
   return (
     <canvas
@@ -296,4 +292,4 @@ export const ParticleImageViz = memo(function ParticleImageViz({
       style={{ background: "#0a0618" }}
     />
   );
-});
+}
