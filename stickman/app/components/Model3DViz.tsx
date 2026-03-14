@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, Suspense } from "react";
+import { useRef, useMemo, Suspense } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
 import { OrbitControls, useGLTF, Environment, Grid, Center } from "@react-three/drei";
 import * as THREE from "three";
@@ -38,12 +38,11 @@ function PigModel() {
   const smoothQuat = useRef(new THREE.Quaternion());
   const yawAngle = useRef(0);
   const { scene } = useGLTF("/3d/animal-pig.glb");
-  const clonedScene = useRef<THREE.Group | null>(null);
 
-  // Clone scene once and tint it pink
-  if (!clonedScene.current) {
-    clonedScene.current = scene.clone() as THREE.Group;
-    clonedScene.current.traverse((child) => {
+  // Clone scene once and tint it pink (useMemo avoids ref-during-render lint errors)
+  const clonedScene = useMemo(() => {
+    const clone = scene.clone() as THREE.Group;
+    clone.traverse((child) => {
       if ((child as THREE.Mesh).isMesh) {
         const mesh = child as THREE.Mesh;
         const mat = (mesh.material as THREE.MeshStandardMaterial).clone();
@@ -51,7 +50,8 @@ function PigModel() {
         mesh.material = mat;
       }
     });
-  }
+    return clone;
+  }, [scene]);
 
   useFrame((_, delta) => {
     if (!groupRef.current) return;
@@ -94,7 +94,7 @@ function PigModel() {
   return (
     <group ref={groupRef}>
       <Center>
-        <primitive object={clonedScene.current} scale={1.5} />
+        <primitive object={clonedScene} scale={1.5} />
       </Center>
     </group>
   );
