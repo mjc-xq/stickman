@@ -111,6 +111,13 @@ static void readIMUFull() {
 
 // ── Ably WebSocket handlers ──────────────────────────────────────────
 
+static void ablyAttach() {
+  char attach[128];
+  snprintf(attach, sizeof(attach),
+    "{\"action\":10,\"channel\":\"%s\"}", ABLY_CHANNEL);
+  webSocket.sendTXT(attach);
+}
+
 static void ablyEvent(WStype_t type, uint8_t* payload, size_t length) {
   switch (type) {
     case WStype_CONNECTED:
@@ -118,41 +125,41 @@ static void ablyEvent(WStype_t type, uint8_t* payload, size_t length) {
       break;
     case WStype_TEXT: {
       char* text = (char*)payload;
-      // Heartbeat (action 0) — must respond or Ably disconnects
-      if (strstr(text, "\"action\":0")) {
+      // Parse action number from the message (avoid strstr false matches)
+      // Format is always {"action":N,... where N is 1-2 digits
+      int action = -1;
+      const char* ap = strstr(text, "\"action\":");
+      if (ap) action = atoi(ap + 9);
+
+      if (action == 0) {
+        // Heartbeat — must respond
         webSocket.sendTXT("{\"action\":0}");
       }
-      // CONNECTED (action 4)
-      else if (strstr(text, "\"action\":4")) {
+      else if (action == 4) {
+        // CONNECTED
         Serial.println("Ably: CONNECTED");
         ablyMsgSerial = 0;
-        char attach[128];
-        snprintf(attach, sizeof(attach),
-          "{\"action\":10,\"channel\":\"%s\"}", ABLY_CHANNEL);
-        webSocket.sendTXT(attach);
+        ablyAttach();
         ablyState = ABLY_CONNECTED;
       }
-      // ATTACHED (action 11)
-      else if (strstr(text, "\"action\":11")) {
+      else if (action == 11) {
+        // ATTACHED
         Serial.printf("Ably: ATTACHED to %s\n", ABLY_CHANNEL);
         ablyState = ABLY_ATTACHED;
         ablyMsgCount = 0;
         ablyMsgCountStart = millis();
       }
-      // NACK (action 2) — message rejected
-      else if (strstr(text, "\"action\":2")) {
+      else if (action == 2) {
+        // NACK
         Serial.printf("Ably NACK: %.*s\n", (int)fminf(length, 100), text);
       }
-      // DETACHED (action 13) or ERROR (action 9) — re-attach
-      else if (strstr(text, "\"action\":13") || strstr(text, "\"action\":9")) {
+      else if (action == 13 || action == 9) {
+        // DETACHED or ERROR — re-attach
         Serial.printf("Ably ERR: %.*s\n", (int)fminf(length, 120), text);
         ablyState = ABLY_CONNECTED;
-        char attach[128];
-        snprintf(attach, sizeof(attach),
-          "{\"action\":10,\"channel\":\"%s\"}", ABLY_CHANNEL);
-        webSocket.sendTXT(attach);
+        ablyAttach();
       }
-      // Action 14 = PRESENCE, 15 = MESSAGE, 1 = ACK — ignore silently
+      // Action 1=ACK, 14=PRESENCE, 15=MESSAGE — ignore
       break;
     }
     case WStype_DISCONNECTED:
@@ -225,27 +232,23 @@ static void publishIMU() {
 // ── Sprite Face Drawing ──────────────────────────────────────────────
 
 static FaceType currentFace = FACE_IDX_DEFAULT;
-static unsigned long lastRandomFace = 0;
 
-// Draw a 1-bit bitmap face centered on screen, black pixels on cream bg
+// Draw a 1-bit bitmap face centered on screen using row-buffered pushImage
+// (110 pixels × 2 bytes = 220 bytes on stack per row — ~100x faster than drawPixel)
 static void drawFace(FaceType face) {
   currentFace = face;
   const uint8_t* data = (const uint8_t*)pgm_read_ptr(&FACE_DATA[face]);
   int x = (135 - FACE_W) / 2;
-  int y = 20; // below mode indicator
-
-  // Clear face area
-  StickCP2.Display.fillRect(0, y, 135, FACE_H, COLOR_BG);
-
-  // Draw 1-bit bitmap: set pixels = COLOR_FACE (dark), unset = skip (transparent)
+  int y = 20;
+  uint16_t lineBuf[FACE_W];
   for (int row = 0; row < FACE_H; row++) {
     for (int col = 0; col < FACE_W; col++) {
       int byteIdx = row * FACE_ROW_BYTES + (col >> 3);
       int bitIdx = 7 - (col & 7);
-      if (pgm_read_byte(&data[byteIdx]) & (1 << bitIdx)) {
-        StickCP2.Display.drawPixel(x + col, y + row, COLOR_FACE);
-      }
+      lineBuf[col] = (pgm_read_byte(&data[byteIdx]) & (1 << bitIdx))
+                     ? COLOR_FACE : COLOR_BG;
     }
+    StickCP2.Display.pushImage(x, y + row, FACE_W, 1, lineBuf);
   }
 }
 
@@ -274,11 +277,12 @@ static void drawModeIndicator() {
   StickCP2.Display.fillRect(0, 0, 135, 18, COLOR_INNER);
   StickCP2.Display.setTextColor(COLOR_BG, COLOR_INNER);
   StickCP2.Display.setTextDatum(TC_DATUM);
-  const char* s;
+  const char* s = "???";
   switch (mode) {
     case MODE_WAND: s = "~ Wand Mode ~"; break;
     case MODE_TOSS: s = "^ Toss Mode ^"; break;
     case MODE_DEBUG: s = "# Debug #"; break;
+    default: break;
   }
   StickCP2.Display.drawString(s, 67, 1, 2);
 }
