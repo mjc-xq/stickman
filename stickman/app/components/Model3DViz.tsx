@@ -7,18 +7,29 @@ import * as THREE from "three";
 import { useOrientation, useSmoothedIMU } from "@/app/hooks/stickman";
 
 // Device axes (M5StickC Plus 2, portrait, USB at bottom):
-//   +X = right edge, +Y = down (USB), +Z = out of screen
+//   +X = right edge    (flat on back: ax ≈ 0)
+//   +Y = toward USB    (flat on back: ay ≈ 0)
+//   +Z = out of screen (flat on back: az ≈ +1g)
 //
-// Calibration: device flat on back, screen up -> gravity ~ (0, 0, -1)
-// Three.js: +X = right, +Y = up, +Z = toward camera
-// Map: devX->X, devY->-Z, devZ->Y
+// Three.js axes: +X = right, +Y = up, +Z = toward camera
+//
+// Axis mapping (device accel → Three.js "up" direction):
+//   Device +X → Three.js +X  (right stays right)
+//   Device +Z → Three.js +Y  (screen normal → up)
+//   Device +Y → Three.js -Z  (USB direction → away from camera)
+//
+// Verified with live calibration readings:
+//   Flat on back (az=+1): → Three.js (0,1,0) = up    → pig upright ✓
+//   Standing USB down (ay=+1): → Three.js (0,0,-1)    → pig tilts back ✓
+//   Landscape port right (ax=+1): → Three.js (1,0,0)  → pig tilts right ✓
 
-// Pre-allocated math objects (avoid GC in animation loop)
+const DEG_TO_RAD = Math.PI / 180;
 const REST_UP = new THREE.Vector3(0, 1, 0);
 const FLIP_QUAT = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI);
-const _screenDir = new THREE.Vector3();
-const _targetQuat = new THREE.Quaternion();
+const _upDir = new THREE.Vector3();
+const _tiltQuat = new THREE.Quaternion();
 const _yawQuat = new THREE.Quaternion();
+const _targetQuat = new THREE.Quaternion();
 
 function PigModel() {
   const orientation = useOrientation();
@@ -48,28 +59,34 @@ function PigModel() {
     const o = orientation.current;
     const imu = smoothedIMU.current;
 
-    // Screen normal = opposite of gravity, mapped to Three.js coords
-    _screenDir.set(-o.gravityX, -o.gravityZ, o.gravityY).normalize();
+    // Map device accelerometer (gravity estimate) to Three.js "up" direction
+    // Device: +X=right, +Y=USB(down), +Z=screen(out)
+    // Three.js: devX→X, devZ→Y, devY→-Z
+    _upDir.set(o.gravityX, o.gravityZ, -o.gravityY).normalize();
 
     // Skip if no reliable gravity signal (freefall or sensor noise)
-    if (_screenDir.length() < 0.5) return;
+    if (_upDir.lengthSq() < 0.25) return;
 
-    // Handle anti-parallel singularity (device screen facing straight down)
-    const dot = _screenDir.dot(REST_UP);
+    // Step 1: Tilt quaternion — rotate REST_UP to match the device's "up"
+    const dot = _upDir.dot(REST_UP);
     if (dot < -0.999) {
-      _targetQuat.copy(FLIP_QUAT);
+      // Anti-parallel singularity (device screen facing straight down)
+      _tiltQuat.copy(FLIP_QUAT);
     } else {
-      _targetQuat.setFromUnitVectors(REST_UP, _screenDir);
+      _tiltQuat.setFromUnitVectors(REST_UP, _upDir);
     }
 
-    // Accumulate yaw from gyro Z (drift is expected without magnetometer)
-    const yawDelta = -imu.gz * delta * (Math.PI / 180);
-    yawAngle.current += yawDelta;
-    _yawQuat.setFromAxisAngle(REST_UP, yawAngle.current);
-    _targetQuat.multiply(_yawQuat); // post-multiply = local-frame yaw
+    // Step 2: Yaw from gyro Z — rotate around the screen normal direction
+    // gyro Z measures twist around the device's Z axis (screen normal)
+    // In Three.js space, the screen normal is wherever _upDir points
+    yawAngle.current += -imu.gz * delta * DEG_TO_RAD;
+    _yawQuat.setFromAxisAngle(_upDir, yawAngle.current);
 
-    // Frame-rate independent slerp smoothing
-    const alpha = 1 - Math.pow(0.88, delta * 60);
+    // Combine: first tilt to match gravity, then yaw around screen normal
+    _targetQuat.multiplyQuaternions(_yawQuat, _tiltQuat);
+
+    // Frame-rate independent slerp (responsive but smooth)
+    const alpha = 1 - Math.pow(0.85, delta * 60);
     smoothQuat.current.slerp(_targetQuat, alpha);
     groupRef.current.quaternion.copy(smoothQuat.current);
   });
