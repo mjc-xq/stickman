@@ -27,10 +27,10 @@ const PARTICLE_OPTIONS: ISourceOptions = {
     size: { value: { min: 0.3, max: 2.8 } },
     links: {
       enable: true,
-      distance: 130,
-      color: "#3a5599",
-      opacity: 0.1,
-      width: 0.5,
+      distance: 150,
+      color: "#4a6ab5",
+      opacity: 0.25,
+      width: 0.8,
     },
     move: {
       enable: true,
@@ -48,9 +48,9 @@ const PARTICLE_OPTIONS: ISourceOptions = {
     },
     modes: {
       repulse: {
-        distance: 250,
+        distance: 100,
         duration: 0.4,
-        speed: 3,
+        speed: 0.5,
       },
     },
   },
