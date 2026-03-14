@@ -1,0 +1,8 @@
+#ifndef __MODEL_JSON_H__
+#define __MODEL_JSON_H__
+
+const char recognition_model_string_json[] = {"{\"NumModels\":1,\"ModelIndexes\":{\"0\":\"WIZARD_WAND_MODEL\"},\"ModelDescriptions\":[{\"Name\":\"WIZARD_WAND_MODEL\",\"ClassMaps\":{\"1\":\"E\",\"2\":\"I\",\"3\":\"L\",\"4\":\"M\",\"5\":\"N\",\"6\":\"S\",\"7\":\"Unknown\",\"0\":\"Unknown\"},\"ModelType\":\"DecisionTreeEnsemble\",\"FeatureFunctions\":[\"DownsampleMaxWithNormaliztion\",\"DownsampleMaxWithNormaliztion\",\"DownsampleMaxWithNormaliztion\",\"DownsampleMaxWithNormaliztion\",\"DownsampleMaxWithNormaliztion\",\"DownsampleMaxWithNormaliztion\",\"DownsampleMaxWithNormaliztion\",\"DownsampleMaxWithNormaliztion\",\"DownsampleMaxWithNormaliztion\",\"DownsampleMaxWithNormaliztion\",\"DownsampleMaxWithNormaliztion\",\"DownsampleMaxWithNormaliztion\",\"DownsampleMaxWithNormaliztion\",\"DownsampleMaxWithNormaliztion\",\"DownsampleMaxWithNormaliztion\",\"DownsampleMaxWithNormaliztion\",\"DownsampleMaxWithNormaliztion\",\"DownsampleMaxWithNormaliztion\",\"DownsampleMaxWithNormaliztion\",\"DownsampleMaxWithNormaliztion\",\"DownsampleMaxWithNormaliztion\",\"DownsampleMaxWithNormaliztion\",\"DownsampleMaxWithNormaliztion\",\"DownsampleMaxWithNormaliztion\",\"DownsampleMaxWithNormaliztion\",\"DownsampleMaxWithNormaliztion\",\"DownsampleMaxWithNormaliztion\",\"DownsampleMaxWithNormaliztion\",\"DownsampleMaxWithNormaliztion\",\"DownsampleMaxWithNormaliztion\",\"DownsampleMaxWithNormaliztion\",\"DownsampleMaxWithNormaliztion\",\"DownsampleMaxWithNormaliztion\",\"DownsampleMaxWithNormaliztion\",\"DownsampleMaxWithNormaliztion\",\"DownsampleMaxWithNormaliztion\"]}]}"};
+
+int recognition_model_string_json_len = sizeof(recognition_model_string_json);
+
+#endif /* __MODEL_JSON_H__ */
