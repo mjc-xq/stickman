@@ -1,14 +1,14 @@
-# Stickman - Magic Wand
+# Stickman - Sloth Wand & Toss
 
-ESP32 magic wand gesture recognition app for M5StickC Plus 2. Draw letters in the air while holding Button A — the device recognizes the gesture and displays it on screen.
+Cute sloth-faced companion app for M5StickC Plus 2. Two modes: Wand (gesture detection) and Toss (throw height measurement).
 
 ## Hardware
 
 - **Board**: M5StickC Plus 2 (ESP32-PICO-V3-02, 240MHz, 320KB RAM, 4MB Flash)
 - **USB-Serial**: CH9102 at `/dev/cu.usbserial-5B1E0467791`
-- **Display**: 1.14" TFT LCD (135x240)
-- **IMU**: MPU6886 (6-axis, accel + gyro) with FIFO at 250Hz
-- **Power**: AXP2101
+- **Display**: 1.14" TFT LCD (135x240), portrait orientation (rotation 0)
+- **IMU**: MPU6886 (6-axis accel + gyro), direct register reads at ~50Hz
+- **Buttons**: BtnA (GPIO 37, front), BtnB (GPIO 39, side), Power (GPIO 35)
 
 ## Build & Upload
 
@@ -20,52 +20,63 @@ pio device monitor       # Serial monitor (115200 baud)
 
 ## How It Works
 
-1. Boot → "READY" screen
-2. Hold **Button A** + draw a letter in the air → "Drawing..." screen
-3. Release Button A → SensiML ML model classifies the gesture
-4. Detected letter shown on screen for 2 seconds, then back to ready
+### Boot
+Wake-up animation: eyes open, yawn, smile → ready state
 
-## Recognized Gestures
+### Wand Mode (default)
+Wave the device to trigger gestures detected algorithmically (no ML):
+- **Tap**: Sharp acceleration spike (flick/tap the device)
+- **Thrust**: Sustained strong acceleration along Y axis (push forward)
+- **Circle Left/Right**: Gyroscope Z rotation accumulation (>200 degrees)
 
-| Class | Letter | Color |
-|-------|--------|-------|
-| 1 | E | Red |
-| 2 | I | Green |
-| 3 | L | Blue |
-| 4 | M | Yellow |
-| 5 | N | Cyan |
-| 6 | S | Magenta |
-| 0,7 | Unknown | Gray |
+Each gesture triggers a unique sloth expression + message for 2 seconds.
+
+### Toss Mode (press BtnB to switch)
+Throw the device in the air:
+1. **Launch**: detected when accel > 3G
+2. **Freefall**: detected when accel drops < 0.3G (near weightlessness)
+3. **Catch**: detected when accel spikes > 1.5G again
+4. Height calculated from freefall duration: `h = 0.5 * g * (t/2)^2`
+
+Sloth shows scared face during freefall, then height result with expression based on height.
+
+### Power Management
+- **No motion for 1 min** → sleep (yawn animation → Zzz → deep sleep)
+- **No button press for 3 min** → sleep
+- **Wake**: press power button (GPIO 35, handled by M5Unified `deepSleep`)
+
+## Known Issues / Quirks
+
+- **Button references**: Use `M5.BtnA`/`M5.BtnB` instead of `StickCP2.BtnA`/`StickCP2.BtnB` due to C++ static initialization order fiasco (StickCP2 wrapper binds references before M5 is constructed → null pointer crash).
+- `lib_ignore = DFRobot_GP8XXX` — compile error in M5Unified dependency, unused by our board.
+- SensiML library still in `lib/sensiml/` but not linked (removed from build_flags). Can be deleted.
 
 ## Project Structure
 
-- `src/main.cpp` — Main app: state machine, IMU FIFO reading, KB integration, display
-- `lib/sensiml/` — SensiML Knowledge Pack (Decision Tree Ensemble classifier)
-  - `src/kb.h` — KB API: `kb_model_init()`, `kb_data_streaming()`, `kb_run_model()`, etc.
-  - `src/kb_typedefs.h` — `SENSOR_DATA_T` = `signed short`, sensor column ordering
-  - `src/esp32/libsensiml.a` — Precompiled ML model (~4.9MB)
-- `platformio.ini` — Board config, lib deps, linker flags for sensiml
+- `src/main.cpp` — Full application: sloth UI, gesture detection, toss physics, power management
+- `lib/sensiml/` — SensiML Knowledge Pack (unused, can delete)
+- `platformio.ini` — Board config
 
-## Key Technical Details
+## Sloth Expressions
 
-- **IMU data pipeline**: MPU6886 FIFO enabled at 250Hz via `m5::MPU6886_Class::enableFIFO()`. Raw int16 accel+gyro data read in a loop via `getImuRawData()`.
-- **Trigger channel**: 7th sensor column. Set to 4096 while Button A held, 0 on release. The model uses this for segmentation.
-- **Classification flow**: While button held → `kb_data_streaming()` fills ring buffer. On release → `kb_run_model()` runs one-shot classification, then `kb_flush_model_buffer()` + `kb_reset_model()`.
-- **Model**: Decision Tree Ensemble trained on downsampled max-normalized features from 6 IMU axes.
+| Expression | Eyes | Used For |
+|-----------|------|----------|
+| happy | Round with highlight | Default/ready |
+| blink | Arcs (closed) | Periodic blink |
+| surprised | Big round + highlight | Tap gesture |
+| excited | Double highlights | High toss / Circle |
+| dizzy | Spiral arcs | Circle gestures |
+| determined | Focused + eyebrows | Thrust gesture |
+| scared | Wide white sclera | Freefall |
+| proud | Closed smile arcs | Medium toss |
+| sleepy | Half-closed | Yawn before sleep |
+| sleep | Closed arcs | Deep sleep |
 
-## Libraries
-
-- **M5StickCPlus2** (via M5Unified + M5GFX) — Board support, display, buttons, IMU
-- **SensiML Knowledge Pack** — Gesture classification ML model
-- `DFRobot_GP8XXX` in `lib_ignore` (compile error with this framework version)
-
-## M5Unified API
+## M5Unified API Notes
 
 ```cpp
-auto cfg = M5.config();
-StickCP2.begin(cfg);
-StickCP2.Display              // LCD (LGFX-based)
-StickCP2.BtnA / StickCP2.BtnB // Buttons
-StickCP2.Imu                  // IMU sensor
-StickCP2.Imu.getImuInstancePtr(0) // Raw MPU6886 access
+StickCP2.Display     // LCD (LGFX) - use for display
+StickCP2.Imu         // IMU access (getImuInstancePtr for raw MPU6886)
+StickCP2.Power       // Power management (deepSleep)
+M5.BtnA / M5.BtnB   // Buttons (NOT StickCP2.BtnA - see known issues)
 ```
