@@ -45,12 +45,17 @@ All device events as a discriminated union. One source of truth for the protocol
 ```typescript
 // hooks/stickman/types.ts
 
+// Device axes (M5StickC Plus 2, portrait, USB at bottom):
+//   +X = right edge    (flat on back: ax ≈ 0)
+//   +Y = toward USB    (flat on back: ay ≈ 0)
+//   +Z = out of screen (flat on back: az ≈ +1g)
+// Accelerometer reads reaction force — axis pointing up reads +1g at rest.
 export interface IMURawEvent {
   type: 'imu';
-  ax: number; ay: number; az: number;
-  gx: number; gy: number; gz: number;
-  p: number; r: number;
-  t: number; // Device uptime in ms (millis()), resets on reboot. NOT wall-clock.
+  ax: number; ay: number; az: number;  // Accelerometer in g (±8G)
+  gx: number; gy: number; gz: number;  // Gyroscope in deg/s (±2000 dps)
+  p: number; r: number;                // Pitch/roll in degrees (accel-derived)
+  t: number;                           // Device uptime ms (millis()), resets on reboot
 }
 
 export interface ButtonEvent {

@@ -46,10 +46,33 @@ Published at up to 10Hz, only when orientation changes ≥2° or acceleration ch
 }
 ```
 
+**Axis Orientation** (M5StickC Plus 2, portrait, USB at bottom):
+
+```
+        +Z (out of screen)
+         ↑
+         |
+    +---------+
+    |         |
+    | SCREEN  | → +X (right edge)
+    |         |
+    +---------+
+         |
+         ↓ +Y (toward USB)
+```
+
+| Orientation | ax | ay | az | Description |
+|---|---|---|---|---|
+| Flat on back, screen up | ~0 | ~0 | **+1.0** | Gravity along +Z |
+| Standing portrait, USB down | ~0 | **+1.0** | ~0 | Gravity along +Y |
+| Landscape, port right (rotated 90° left) | **+1.0** | ~0 | ~0 | Gravity along +X |
+
 **Notes:**
-- `ax/ay/az` are raw accelerometer values. At rest, one axis reads ~1g (gravity).
-- `gx/gy/gz` are angular velocity. At rest, these are near zero.
+- Accelerometer reads the **reaction force** (opposite gravity). At rest, the axis pointing up reads +1g.
+- `ax/ay/az` are raw accelerometer values in g (±8G range). At rest, one axis reads ~1g (gravity).
+- `gx/gy/gz` are angular velocity in degrees/sec (±2000 dps range). At rest, these are near zero.
 - `p` (pitch) and `r` (roll) are tilt angles derived from accelerometer only — accurate when the device is relatively still, noisy during fast motion.
+- `t` is device uptime in milliseconds (`millis()`), resets on reboot. Not a wall-clock timestamp.
 - No events are published when the device is stationary.
 
 ---
