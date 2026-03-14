@@ -179,12 +179,21 @@ export function IMUVisualizer() {
       const dotX = cx + (s.p / 90) * scale;
       const dotY = cy + (s.r / 90) * scale;
 
-      // Color: cyan at rest, magenta when spinning fast
+      // Color: cycles through hues based on trail position, shifts warm when spinning
       const gyroMag = Math.sqrt(s.gx * s.gx + s.gy * s.gy + s.gz * s.gz);
       const intensity = Math.min(gyroMag / 400, 1);
-      const cr = Math.round(intensity * 255);
-      const cg = Math.round(212 - intensity * 162);
-      const cb = 255;
+      const hue = (Date.now() * 0.05) % 360;
+      const sat = 80 + intensity * 20;
+      const lit = 55 + intensity * 15;
+      // Convert HSL to RGB for canvas use
+      const hslToRgb = (h: number, s: number, l: number) => {
+        s /= 100; l /= 100;
+        const k = (n: number) => (n + h / 30) % 12;
+        const a = s * Math.min(l, 1 - l);
+        const f = (n: number) => l - a * Math.max(-1, Math.min(k(n) - 3, 9 - k(n), 1));
+        return [Math.round(f(0) * 255), Math.round(f(8) * 255), Math.round(f(4) * 255)];
+      };
+      const [cr, cg, cb] = hslToRgb(hue, sat, lit);
 
       // Trail
       if (receiving) {
@@ -201,8 +210,8 @@ export function IMUVisualizer() {
           ctx.beginPath();
           ctx.moveTo(p0.x, p0.y);
           ctx.lineTo(p1.x, p1.y);
-          ctx.strokeStyle = `rgba(${p1.cr},${p1.cg},${p1.cb},${frac * 0.55})`;
-          ctx.lineWidth = frac * 5;
+          ctx.strokeStyle = `rgba(${p1.cr},${p1.cg},${p1.cb},${frac * 0.7})`;
+          ctx.lineWidth = frac * 12;
           ctx.lineCap = "round";
           ctx.stroke();
         }
@@ -211,24 +220,24 @@ export function IMUVisualizer() {
       // Dot
       if (receiving) {
         // Outer glow
-        const grd = ctx.createRadialGradient(dotX, dotY, 0, dotX, dotY, 40);
-        grd.addColorStop(0, `rgba(${cr},${cg},${cb},0.3)`);
-        grd.addColorStop(0.5, `rgba(${cr},${cg},${cb},0.08)`);
+        const grd = ctx.createRadialGradient(dotX, dotY, 0, dotX, dotY, 60);
+        grd.addColorStop(0, `rgba(${cr},${cg},${cb},0.35)`);
+        grd.addColorStop(0.4, `rgba(${cr},${cg},${cb},0.1)`);
         grd.addColorStop(1, `rgba(${cr},${cg},${cb},0)`);
         ctx.beginPath();
-        ctx.arc(dotX, dotY, 40, 0, Math.PI * 2);
+        ctx.arc(dotX, dotY, 60, 0, Math.PI * 2);
         ctx.fillStyle = grd;
         ctx.fill();
 
         // Dot body
         ctx.beginPath();
-        ctx.arc(dotX, dotY, 7, 0, Math.PI * 2);
+        ctx.arc(dotX, dotY, 14, 0, Math.PI * 2);
         ctx.fillStyle = `rgb(${cr},${cg},${cb})`;
         ctx.fill();
 
         // Hot center
         ctx.beginPath();
-        ctx.arc(dotX, dotY, 2.5, 0, Math.PI * 2);
+        ctx.arc(dotX, dotY, 5, 0, Math.PI * 2);
         ctx.fillStyle = "#fff";
         ctx.fill();
       }
@@ -265,11 +274,11 @@ export function IMUVisualizer() {
   }
 
   return (
-    <div className="flex flex-col h-screen bg-[#0a0a0a] text-zinc-100 select-none">
+    <div className="flex flex-col h-[100dvh] bg-[#0a0a0a] text-zinc-100 select-none overflow-hidden">
       {/* Header */}
-      <header className="flex items-center justify-between px-5 py-2.5 border-b border-zinc-800/60">
-        <h1 className="text-base font-semibold tracking-wide">STICKMAN</h1>
-        <div className="flex items-center gap-4 text-xs">
+      <header className="flex items-center justify-between px-4 py-2 border-b border-zinc-800/60 shrink-0">
+        <h1 className="text-sm font-semibold tracking-wide">STICKMAN</h1>
+        <div className="flex items-center gap-3 text-xs">
           <span className="text-zinc-500">
             {presenceData.length} connected
           </span>
@@ -277,13 +286,25 @@ export function IMUVisualizer() {
         </div>
       </header>
 
-      {/* Main visualization */}
-      <div className="flex flex-1 min-h-0">
-        {/* Arrow compass */}
-        <div className="w-[340px] shrink-0 flex flex-col items-center justify-center border-r border-zinc-800/40 p-6 gap-4">
-          <svg viewBox="-120 -120 240 240" className="w-full max-w-[300px]">
+      {/* Full-screen dot canvas */}
+      <div className="flex-1 relative min-h-0">
+        <canvas
+          ref={canvasRef}
+          className="absolute inset-0 w-full h-full"
+        />
+        {!receiving && (
+          <div className="absolute inset-0 flex items-center justify-center z-10 pointer-events-none">
+            <p className="text-zinc-500 animate-pulse text-base tracking-wide">
+              Waiting for device…
+            </p>
+          </div>
+        )}
+
+        {/* Arrow compass — overlaid bottom-right */}
+        <div className="absolute bottom-4 right-4 z-20 pointer-events-none">
+          <svg viewBox="-120 -120 240 240" className="w-28 h-28 sm:w-36 sm:h-36 drop-shadow-lg">
             {/* Inner dark fill */}
-            <circle cx="0" cy="0" r="108" fill="#0d0d0d" />
+            <circle cx="0" cy="0" r="108" fill="#0d0d0d" opacity="0.85" />
             {/* Outer ring */}
             <circle cx="0" cy="0" r="108" fill="none" stroke="#1a1a1a" strokeWidth="2" />
 
@@ -328,79 +349,29 @@ export function IMUVisualizer() {
               <circle cx="0" cy="40" r="3.5" fill="#00d4ff" opacity="0.3" />
             </g>
           </svg>
-
-          {/* Angle readout */}
           {rawData && (
-            <div className="text-center font-mono text-xs text-zinc-500">
-              <span className="text-zinc-600">pitch</span>{" "}
-              <span className="text-zinc-400">{rawData.p.toFixed(1)}°</span>
-              <span className="mx-2 text-zinc-700">|</span>
-              <span className="text-zinc-600">roll</span>{" "}
-              <span className="text-zinc-400">{rawData.r.toFixed(1)}°</span>
+            <div className="text-center font-mono text-[9px] text-zinc-500 mt-0.5">
+              {rawData.p.toFixed(1)}° / {rawData.r.toFixed(1)}°
             </div>
           )}
         </div>
 
-        {/* Dot tracking canvas */}
-        <div className="flex-1 relative">
-          <canvas
-            ref={canvasRef}
-            className="absolute inset-0 w-full h-full"
-          />
-          {!receiving && (
-            <div className="absolute inset-0 flex items-center justify-center z-10 pointer-events-none">
-              <p className="text-zinc-500 animate-pulse text-base tracking-wide">
-                Waiting for device…
-              </p>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* HUD footer */}
-      <footer className="flex items-center justify-between px-5 py-2 border-t border-zinc-800/60 font-mono text-[11px] text-zinc-500">
-        {rawData ? (
-          <>
-            <div className="flex gap-5">
-              <span>
-                <span className="text-zinc-600">ax</span>{" "}
-                <span className="text-zinc-300">{rawData.ax.toFixed(3)}</span>
-              </span>
-              <span>
-                <span className="text-zinc-600">ay</span>{" "}
-                <span className="text-zinc-300">{rawData.ay.toFixed(3)}</span>
-              </span>
-              <span>
-                <span className="text-zinc-600">az</span>{" "}
-                <span className="text-zinc-300">{rawData.az.toFixed(3)}</span>
-              </span>
-            </div>
-            <div className="flex gap-5">
-              <span>
-                <span className="text-zinc-600">gx</span>{" "}
-                <span className="text-zinc-400">{rawData.gx.toFixed(1)}</span>
-              </span>
-              <span>
-                <span className="text-zinc-600">gy</span>{" "}
-                <span className="text-zinc-400">{rawData.gy.toFixed(1)}</span>
-              </span>
-              <span>
-                <span className="text-zinc-600">gz</span>{" "}
-                <span className="text-zinc-400">{rawData.gz.toFixed(1)}</span>
-              </span>
-            </div>
-            <div className="flex gap-3">
-              {presenceData.map((m, i) => (
-                <span key={i} className="text-zinc-600">
-                  {m.clientId}
-                </span>
-              ))}
-            </div>
-          </>
-        ) : (
-          <span className="text-zinc-600">No data</span>
+        {/* HUD overlay — bottom-left */}
+        {rawData && (
+          <div className="absolute bottom-4 left-4 z-20 pointer-events-none font-mono text-[10px] text-zinc-600 flex flex-col gap-0.5">
+            <span>
+              ax <span className="text-zinc-400">{rawData.ax.toFixed(3)}</span>{" "}
+              ay <span className="text-zinc-400">{rawData.ay.toFixed(3)}</span>{" "}
+              az <span className="text-zinc-400">{rawData.az.toFixed(3)}</span>
+            </span>
+            <span>
+              gx <span className="text-zinc-500">{rawData.gx.toFixed(1)}</span>{" "}
+              gy <span className="text-zinc-500">{rawData.gy.toFixed(1)}</span>{" "}
+              gz <span className="text-zinc-500">{rawData.gz.toFixed(1)}</span>
+            </span>
+          </div>
         )}
-      </footer>
+      </div>
     </div>
   );
 }
