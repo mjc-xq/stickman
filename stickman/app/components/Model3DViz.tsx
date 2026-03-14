@@ -1,24 +1,17 @@
 "use client";
 
-import { memo, useRef, Suspense } from "react";
+import { useRef, Suspense } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
 import { OrbitControls, useGLTF, Environment, Grid, Center } from "@react-three/drei";
 import * as THREE from "three";
-
-interface Model3DVizProps {
-  imuRef: React.RefObject<{
-    ax: number; ay: number; az: number;
-    gx: number; gy: number; gz: number;
-    p: number; r: number; t: number;
-  }>;
-}
+import { useOrientation, useSmoothedIMU } from "@/app/hooks/stickman";
 
 // Device axes (M5StickC Plus 2, portrait, USB at bottom):
 //   +X = right edge, +Y = down (USB), +Z = out of screen
 //
-// Calibration: device flat on back, screen up → gravity ≈ (0, 0, -1)
+// Calibration: device flat on back, screen up -> gravity ~ (0, 0, -1)
 // Three.js: +X = right, +Y = up, +Z = toward camera
-// Map: devX→X, devY→-Z, devZ→Y
+// Map: devX->X, devY->-Z, devZ->Y
 
 // Pre-allocated math objects (avoid GC in animation loop)
 const REST_UP = new THREE.Vector3(0, 1, 0);
@@ -27,7 +20,9 @@ const _screenDir = new THREE.Vector3();
 const _targetQuat = new THREE.Quaternion();
 const _yawQuat = new THREE.Quaternion();
 
-function PigModel({ imuRef }: Model3DVizProps) {
+function PigModel() {
+  const orientation = useOrientation();
+  const smoothedIMU = useSmoothedIMU();
   const groupRef = useRef<THREE.Group>(null);
   const smoothQuat = useRef(new THREE.Quaternion());
   const yawAngle = useRef(0);
@@ -48,20 +43,16 @@ function PigModel({ imuRef }: Model3DVizProps) {
   }
 
   useFrame((_, delta) => {
-    if (!groupRef.current || !imuRef.current) return;
+    if (!groupRef.current) return;
 
-    const { ax, ay, az, gz } = imuRef.current;
-
-    // Skip if no reliable gravity signal (freefall or sensor noise)
-    const gLen = Math.sqrt(ax * ax + ay * ay + az * az);
-    if (gLen < 0.5) return;
-
-    const gnx = ax / gLen;
-    const gny = ay / gLen;
-    const gnz = az / gLen;
+    const o = orientation.current;
+    const imu = smoothedIMU.current;
 
     // Screen normal = opposite of gravity, mapped to Three.js coords
-    _screenDir.set(-gnx, -gnz, gny).normalize();
+    _screenDir.set(-o.gravityX, -o.gravityZ, o.gravityY).normalize();
+
+    // Skip if no reliable gravity signal (freefall or sensor noise)
+    if (_screenDir.length() < 0.5) return;
 
     // Handle anti-parallel singularity (device screen facing straight down)
     const dot = _screenDir.dot(REST_UP);
@@ -72,7 +63,8 @@ function PigModel({ imuRef }: Model3DVizProps) {
     }
 
     // Accumulate yaw from gyro Z (drift is expected without magnetometer)
-    yawAngle.current += -gz * delta * (Math.PI / 180);
+    const yawDelta = -imu.gz * delta * (Math.PI / 180);
+    yawAngle.current += yawDelta;
     _yawQuat.setFromAxisAngle(REST_UP, yawAngle.current);
     _targetQuat.multiply(_yawQuat); // post-multiply = local-frame yaw
 
@@ -91,7 +83,7 @@ function PigModel({ imuRef }: Model3DVizProps) {
   );
 }
 
-function Scene({ imuRef }: Model3DVizProps) {
+function Scene() {
   return (
     <>
       <ambientLight intensity={0.6} />
@@ -99,7 +91,7 @@ function Scene({ imuRef }: Model3DVizProps) {
       <pointLight position={[-3, 4, -3]} intensity={0.4} color="#6688ff" />
       <pointLight position={[3, -2, 5]} intensity={0.2} color="#ff8866" />
 
-      <PigModel imuRef={imuRef} />
+      <PigModel />
 
       <Grid
         position={[0, -2, 0]}
@@ -125,7 +117,7 @@ function Scene({ imuRef }: Model3DVizProps) {
   );
 }
 
-export const Model3DViz = memo(function Model3DViz({ imuRef }: Model3DVizProps) {
+export function Model3DViz() {
   return (
     <div className="absolute inset-0 w-full h-full" style={{ background: "#050510" }}>
       <Canvas
@@ -134,11 +126,11 @@ export const Model3DViz = memo(function Model3DViz({ imuRef }: Model3DVizProps) 
         gl={{ antialias: true, alpha: false }}
       >
         <Suspense fallback={null}>
-          <Scene imuRef={imuRef} />
+          <Scene />
         </Suspense>
       </Canvas>
     </div>
   );
-});
+}
 
 useGLTF.preload("/3d/animal-pig.glb");
