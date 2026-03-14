@@ -519,6 +519,8 @@ static void enterSleep() {
   StickCP2.Display.drawString("z",108,18,2); delay(250);
   StickCP2.Display.drawString("Z",112,5,2); delay(400);
   Serial.println("Deep sleep..."); Serial.flush();
+  // Wake on BtnA (GPIO 37) in addition to power button (GPIO 35 via M5Unified)
+  esp_sleep_enable_ext1_wakeup(1ULL << GPIO_NUM_37, ESP_EXT1_WAKEUP_ALL_LOW);
   StickCP2.Power.deepSleep(0, true);
 }
 
