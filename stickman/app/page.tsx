@@ -1,5 +1,10 @@
+import { StickmanProvider } from "./hooks/stickman";
 import { IMUVisualizer } from "./components/IMUVisualizer";
 
 export default function Home() {
-  return <IMUVisualizer />;
+  return (
+    <StickmanProvider>
+      <IMUVisualizer />
+    </StickmanProvider>
+  );
 }
