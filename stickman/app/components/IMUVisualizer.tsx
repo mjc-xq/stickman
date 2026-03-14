@@ -17,7 +17,7 @@ interface IMUData {
 }
 
 const SMOOTHING = 0.08;
-const MAX_TRAIL = 120;
+const FADE_RATE = 0.012;
 
 export function IMUVisualizer() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -26,7 +26,7 @@ export function IMUVisualizer() {
 
   const target = useRef({ ax: 0, ay: 0, az: 1, gx: 0, gy: 0, gz: 0, p: 0, r: 0, t: 0 });
   const smooth = useRef({ ax: 0, ay: 0, az: 1, gx: 0, gy: 0, gz: 0, p: 0, r: 0, t: 0 });
-  const trail = useRef<{ x: number; y: number; cr: number; cg: number; cb: number }[]>([]);
+  const lastDot = useRef<{ x: number; y: number } | null>(null);
   const canvasCSS = useRef({ w: 300, h: 300 });
   const msgCount = useRef(0);
 
@@ -87,7 +87,7 @@ export function IMUVisualizer() {
 
       // --- Arrow: rotation from pitch (side tilt) and roll (forward tilt) ---
       if (arrowRef.current) {
-        const angle = Math.atan2(s.p, -s.r) * (180 / Math.PI);
+        const angle = Math.atan2(s.r, s.p) * (180 / Math.PI);
         arrowRef.current.setAttribute("transform", `rotate(${angle})`);
       }
       if (tiltRingRef.current) {
@@ -121,125 +121,64 @@ export function IMUVisualizer() {
       ctx.save();
       ctx.scale(dpr, dpr);
 
-      // Background
-      ctx.fillStyle = "#0a0a0a";
+      // Persistence fade — previous strokes slowly dim
+      ctx.fillStyle = `rgba(0,0,0,${FADE_RATE})`;
       ctx.fillRect(0, 0, w, h);
 
-      // Grid
-      ctx.strokeStyle = "rgba(255,255,255,0.035)";
-      ctx.lineWidth = 1;
-      const sp = 50;
-      for (let x = cx % sp; x < w; x += sp) {
-        ctx.beginPath();
-        ctx.moveTo(x, 0);
-        ctx.lineTo(x, h);
-        ctx.stroke();
-      }
-      for (let y = cy % sp; y < h; y += sp) {
-        ctx.beginPath();
-        ctx.moveTo(0, y);
-        ctx.lineTo(w, y);
-        ctx.stroke();
-      }
-
-      // Crosshair
-      ctx.strokeStyle = "rgba(255,255,255,0.06)";
-      ctx.setLineDash([8, 8]);
-      ctx.beginPath();
-      ctx.moveTo(0, cy);
-      ctx.lineTo(w, cy);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.moveTo(cx, 0);
-      ctx.lineTo(cx, h);
-      ctx.stroke();
-      ctx.setLineDash([]);
-
-      // Reference circles (45° and 90° tilt)
+      // Dot position: roll drives X, pitch drives Y (inverted for screen coords)
       const scale = Math.min(w, h) * 0.4;
-      const ref45 = scale * (45 / 90);
-      const ref90 = scale;
-      ctx.strokeStyle = "rgba(255,255,255,0.04)";
-      ctx.beginPath();
-      ctx.arc(cx, cy, ref45, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.arc(cx, cy, ref90, 0, Math.PI * 2);
-      ctx.stroke();
+      const dotX = cx + (s.r / 90) * scale;
+      const dotY = cy - (s.p / 90) * scale;
 
-      // Labels
-      ctx.fillStyle = "rgba(255,255,255,0.12)";
-      ctx.font = "10px monospace";
-      ctx.fillText("45°", cx + ref45 + 4, cy - 4);
-      ctx.fillText("90°", cx + ref90 + 4, cy - 4);
-
-      // Dot position: pitch drives X, roll drives Y
-      // pitch > 0 = tilted right → dot moves right
-      // roll > 0 = tilted forward (tip down) → dot moves down
-      const dotX = cx + (s.p / 90) * scale;
-      const dotY = cy + (s.r / 90) * scale;
-
-      // Color: cycles through hues based on trail position, shifts warm when spinning
-      const gyroMag = Math.sqrt(s.gx * s.gx + s.gy * s.gy + s.gz * s.gz);
-      const intensity = Math.min(gyroMag / 400, 1);
-      const hue = (Date.now() * 0.05) % 360;
-      const sat = 80 + intensity * 20;
-      const lit = 55 + intensity * 15;
-      // Convert HSL to RGB for canvas use
-      const hslToRgb = (h: number, s: number, l: number) => {
-        s /= 100; l /= 100;
-        const k = (n: number) => (n + h / 30) % 12;
-        const a = s * Math.min(l, 1 - l);
-        const f = (n: number) => l - a * Math.max(-1, Math.min(k(n) - 3, 9 - k(n), 1));
-        return [Math.round(f(0) * 255), Math.round(f(8) * 255), Math.round(f(4) * 255)];
-      };
-      const [cr, cg, cb] = hslToRgb(hue, sat, lit);
-
-      // Trail
       if (receiving) {
-        trail.current.push({ x: dotX, y: dotY, cr, cg, cb });
-        if (trail.current.length > MAX_TRAIL) trail.current.shift();
-      }
+        // Hue cycles slowly, shifts warmer when spinning fast
+        const gyroMag = Math.sqrt(s.gx * s.gx + s.gy * s.gy + s.gz * s.gz);
+        const intensity = Math.min(gyroMag / 300, 1);
+        const hue = (Date.now() * 0.04) % 360;
+        const sat = 85 + intensity * 15;
+        const lit = 55 + intensity * 20;
+        const color = `hsl(${hue}, ${sat}%, ${lit}%)`;
 
-      const tLen = trail.current.length;
-      if (tLen > 1) {
-        for (let i = 1; i < tLen; i++) {
-          const p0 = trail.current[i - 1];
-          const p1 = trail.current[i];
-          const frac = i / tLen;
+        // Stroke from last position to current (fills gaps)
+        const prev = lastDot.current;
+        if (prev) {
           ctx.beginPath();
-          ctx.moveTo(p0.x, p0.y);
-          ctx.lineTo(p1.x, p1.y);
-          ctx.strokeStyle = `rgba(${p1.cr},${p1.cg},${p1.cb},${frac * 0.7})`;
-          ctx.lineWidth = frac * 12;
+          ctx.moveTo(prev.x, prev.y);
+          ctx.lineTo(dotX, dotY);
+          ctx.strokeStyle = color;
+          ctx.lineWidth = 10;
           ctx.lineCap = "round";
           ctx.stroke();
         }
-      }
 
-      // Dot
-      if (receiving) {
-        // Outer glow
-        const grd = ctx.createRadialGradient(dotX, dotY, 0, dotX, dotY, 60);
-        grd.addColorStop(0, `rgba(${cr},${cg},${cb},0.35)`);
-        grd.addColorStop(0.4, `rgba(${cr},${cg},${cb},0.1)`);
-        grd.addColorStop(1, `rgba(${cr},${cg},${cb},0)`);
+        // Additive glow — overlapping areas bloom brighter
+        ctx.globalCompositeOperation = "lighter";
+
+        // Wide soft aura
+        const grd = ctx.createRadialGradient(dotX, dotY, 0, dotX, dotY, 50);
+        grd.addColorStop(0, `hsla(${hue}, ${sat}%, ${lit}%, 0.5)`);
+        grd.addColorStop(0.3, `hsla(${hue}, ${sat}%, ${lit}%, 0.12)`);
+        grd.addColorStop(1, `hsla(${hue}, ${sat}%, ${lit}%, 0)`);
         ctx.beginPath();
-        ctx.arc(dotX, dotY, 60, 0, Math.PI * 2);
+        ctx.arc(dotX, dotY, 50, 0, Math.PI * 2);
         ctx.fillStyle = grd;
         ctx.fill();
 
-        // Dot body
+        ctx.globalCompositeOperation = "source-over";
+
+        // Bright dot
         ctx.beginPath();
-        ctx.arc(dotX, dotY, 14, 0, Math.PI * 2);
-        ctx.fillStyle = `rgb(${cr},${cg},${cb})`;
+        ctx.arc(dotX, dotY, 10, 0, Math.PI * 2);
+        ctx.fillStyle = color;
         ctx.fill();
 
-        // Hot center
+        // White-hot center
         ctx.beginPath();
-        ctx.arc(dotX, dotY, 5, 0, Math.PI * 2);
+        ctx.arc(dotX, dotY, 4, 0, Math.PI * 2);
         ctx.fillStyle = "#fff";
         ctx.fill();
+
+        lastDot.current = { x: dotX, y: dotY };
       }
 
       ctx.restore();
