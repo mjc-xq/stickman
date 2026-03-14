@@ -146,16 +146,16 @@ static void ablyEvent(WStype_t type, uint8_t* payload, size_t length) {
       else if (strstr(text, "\"action\":2")) {
         Serial.printf("Ably NACK: %.*s\n", (int)fminf(length, 100), text);
       }
-      // ERROR (action 9) or channel DETACHED (action 14) — re-attach
-      else if (strstr(text, "\"action\":9") || strstr(text, "\"action\":14")) {
-        Serial.printf("Ably ERR: %.*s\n", (int)fminf(length, 250), text);
-        // Re-attach the channel
+      // DETACHED (action 13) or ERROR (action 9) — re-attach
+      else if (strstr(text, "\"action\":13") || strstr(text, "\"action\":9")) {
+        Serial.printf("Ably ERR: %.*s\n", (int)fminf(length, 120), text);
         ablyState = ABLY_CONNECTED;
         char attach[128];
         snprintf(attach, sizeof(attach),
           "{\"action\":10,\"channel\":\"%s\"}", ABLY_CHANNEL);
         webSocket.sendTXT(attach);
       }
+      // Action 14 = PRESENCE, 15 = MESSAGE, 1 = ACK — ignore silently
       break;
     }
     case WStype_DISCONNECTED:
