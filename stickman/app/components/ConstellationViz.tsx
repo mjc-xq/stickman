@@ -10,7 +10,7 @@ const PARTICLE_OPTIONS: ISourceOptions = {
   fpsLimit: 60,
   fullScreen: false,
   particles: {
-    number: { value: 160, density: { enable: true } },
+    number: { value: 500, density: { enable: true } },
     color: {
       value: ["#ffffff", "#b0c4ff", "#8fa8e6", "#c8b8ff", "#6688cc"],
     },
@@ -48,9 +48,9 @@ const PARTICLE_OPTIONS: ISourceOptions = {
     },
     modes: {
       repulse: {
-        distance: 200,
+        distance: 250,
         duration: 0.4,
-        speed: 2,
+        speed: 3,
       },
     },
   },
