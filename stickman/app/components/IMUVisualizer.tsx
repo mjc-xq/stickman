@@ -3,6 +3,7 @@
 import { useChannel, usePresence, usePresenceListener } from "ably/react";
 import { useEffect, useRef, useState } from "react";
 import { ConnectionState } from "./ConnectionState";
+import { ConstellationViz } from "./ConstellationViz";
 
 interface IMUData {
   ax: number;
@@ -24,14 +25,16 @@ interface TrailPoint {
   lit: number;
 }
 
+type VizMode = "paint" | "stars";
+
 // --- Tuning ---
-const SMOOTHING = 0.18; // raw IMU smoothing (higher = more responsive)
-const GRAV_LP = 0.08; // gravity estimator convergence
-const POS_TRACK = 0.25; // how fast dot tracks tilt (higher = snappier)
-const JOLT_GAIN = 0.03; // how much a jerk pushes the dot
-const JOLT_DEAD = 0.12; // ignore linear accel below this (g)
-const JOLT_DECAY = 0.85; // jolt velocity friction per frame
-const TRAIL_LEN = 150; // ~2.5 seconds at 60fps
+const SMOOTHING = 0.18;
+const GRAV_LP = 0.08;
+const POS_TRACK = 0.25;
+const JOLT_GAIN = 0.03;
+const JOLT_DEAD = 0.12;
+const JOLT_DECAY = 0.85;
+const TRAIL_LEN = 150;
 
 export function IMUVisualizer() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -41,18 +44,22 @@ export function IMUVisualizer() {
   const target = useRef({ ax: 0, ay: 0, az: 1, gx: 0, gy: 0, gz: 0, p: 0, r: 0, t: 0 });
   const smooth = useRef({ ax: 0, ay: 0, az: 1, gx: 0, gy: 0, gz: 0, p: 0, r: 0, t: 0 });
 
-  // Physics state
-  const grav = useRef({ x: 0, y: 0, z: 1 }); // gravity estimate (low-pass)
-  const dotPos = useRef({ x: 0, y: 0 }); // normalized position
-  const dotVel = useRef({ x: 0, y: 0 }); // velocity
+  const grav = useRef({ x: 0, y: 0, z: 1 });
+  const dotPos = useRef({ x: 0, y: 0 });
+  const dotVel = useRef({ x: 0, y: 0 });
+  const pointerNorm = useRef({ x: 0, y: 0 }); // shared with ConstellationViz
   const trail = useRef<TrailPoint[]>([]);
   const hueAccum = useRef(0);
-
   const canvasCSS = useRef({ w: 300, h: 300 });
   const msgCount = useRef(0);
+  const modeRef = useRef<VizMode>("paint");
 
   const [rawData, setRawData] = useState<IMUData | null>(null);
   const [receiving, setReceiving] = useState(false);
+  const [mode, setMode] = useState<VizMode>("paint");
+
+  // Keep modeRef in sync
+  useEffect(() => { modeRef.current = mode; }, [mode]);
 
   usePresence("stickman", { type: "web" });
   const { presenceData } = usePresenceListener("stickman");
@@ -71,7 +78,7 @@ export function IMUVisualizer() {
     }
   });
 
-  // Canvas resize
+  // Canvas resize (only matters in paint mode, but keep it running)
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -86,9 +93,9 @@ export function IMUVisualizer() {
     const obs = new ResizeObserver(resize);
     obs.observe(canvas);
     return () => obs.disconnect();
-  }, []);
+  }, [mode]);
 
-  // Animation loop
+  // Animation loop — always processes IMU, conditionally draws
   useEffect(() => {
     let id: number;
 
@@ -107,37 +114,43 @@ export function IMUVisualizer() {
       s.gy += (t.gy - s.gy) * SMOOTHING;
       s.gz += (t.gz - s.gz) * SMOOTHING;
 
-      // 2. Gravity estimate (low-pass tracks gravity, ignores jolts)
+      // 2. Gravity estimate
       g.x += (s.ax - g.x) * GRAV_LP;
       g.y += (s.ay - g.y) * GRAV_LP;
       g.z += (s.az - g.z) * GRAV_LP;
 
-      // 3. Renormalize gravity to unit vector each frame
+      // 3. Renormalize gravity
       const gMag = Math.sqrt(g.x * g.x + g.y * g.y + g.z * g.z) || 1;
       const gnx = g.x / gMag;
       const gny = g.y / gMag;
-      const gnz = g.z / gMag;
 
-      // 4. Linear acceleration: project out gravity component (true perpendicular accel)
-      const accelDotG = s.ax * gnx + s.ay * gny + s.az * gnz;
+      // 4. Linear acceleration perpendicular to gravity
+      const accelDotG = s.ax * gnx + s.ay * gny + s.az * (g.z / gMag);
       let linX = s.ax - accelDotG * gnx;
       let linY = s.ay - accelDotG * gny;
       const linMag = Math.sqrt(linX * linX + linY * linY);
       if (linMag < JOLT_DEAD) { linX = 0; linY = 0; }
 
-      // 5. Rest position = normalized gravity X,Y (orient to gravity each point)
+      // 5. Rest position
       const restX = -gnx;
       const restY = -gny;
 
-      // 6. Position directly tracks tilt (no spring indirection)
+      // 6. Position tracks tilt directly
       pos.x += (restX - pos.x) * POS_TRACK;
       pos.y += (restY - pos.y) * POS_TRACK;
 
-      // 7. Jolts add a decaying velocity offset (for spatial movement)
+      // 7. Jolt velocity
       vel.x = vel.x * JOLT_DECAY - linX * JOLT_GAIN;
       vel.y = vel.y * JOLT_DECAY - linY * JOLT_GAIN;
 
-      // --- Arrow (from normalized gravity, matches dot) ---
+      // Final normalized position
+      const finalX = Math.max(-2, Math.min(2, pos.x + vel.x));
+      const finalY = Math.max(-2, Math.min(2, pos.y + vel.y));
+
+      // Always update pointer for constellation mode
+      pointerNorm.current = { x: finalX, y: finalY };
+
+      // --- Arrow ---
       if (arrowRef.current) {
         const angle = Math.atan2(-gnx, gny) * (180 / Math.PI);
         arrowRef.current.setAttribute("transform", `rotate(${angle})`);
@@ -146,133 +159,125 @@ export function IMUVisualizer() {
         const tiltMag = Math.sqrt(gnx * gnx + gny * gny);
         const circ = 2 * Math.PI * 85;
         tiltRingRef.current.setAttribute("stroke-dasharray", `${circ * tiltMag} ${circ}`);
-        tiltRingRef.current.setAttribute(
-          "stroke",
-          `rgba(0, 212, 255, ${0.06 + tiltMag * 0.5})`
-        );
+        tiltRingRef.current.setAttribute("stroke", `rgba(0, 212, 255, ${0.06 + tiltMag * 0.5})`);
       }
 
-      // --- Canvas ---
-      const canvas = canvasRef.current;
-      if (!canvas) { id = requestAnimationFrame(animate); return; }
-      const ctx = canvas.getContext("2d");
-      if (!ctx) { id = requestAnimationFrame(animate); return; }
+      // --- Paint mode: draw canvas ---
+      if (modeRef.current === "paint") {
+        const canvas = canvasRef.current;
+        if (!canvas) { id = requestAnimationFrame(animate); return; }
+        const ctx = canvas.getContext("2d");
+        if (!ctx) { id = requestAnimationFrame(animate); return; }
 
-      const dpr = window.devicePixelRatio || 1;
-      const w = canvasCSS.current.w;
-      const h = canvasCSS.current.h;
-      const cx = w / 2;
-      const cy = h / 2;
-      const scaleX = w * 0.45;
-      const scaleY = h * 0.45;
+        const dpr = window.devicePixelRatio || 1;
+        const w = canvasCSS.current.w;
+        const h = canvasCSS.current.h;
+        const cx = w / 2;
+        const cy = h / 2;
+        const scaleX = w * 0.45;
+        const scaleY = h * 0.45;
 
-      // Final position = direct tilt tracking + jolt offset
-      const finalX = Math.max(-2, Math.min(2, pos.x + vel.x));
-      const finalY = Math.max(-2, Math.min(2, pos.y + vel.y));
-      const dotX = cx + finalX * scaleX;
-      const dotY = cy + finalY * scaleY;
+        const dotX = cx + finalX * scaleX;
+        const dotY = cy + finalY * scaleY;
 
-      // Hue: cycles faster when spinning
-      const gyroMag = Math.sqrt(s.gx * s.gx + s.gy * s.gy + s.gz * s.gz);
-      const spin = Math.min(gyroMag / 300, 1);
-      hueAccum.current += 0.6 + spin * 4;
-      const hue = hueAccum.current % 360;
-      const sat = 85 + spin * 15;
-      const lit = 55 + spin * 20;
+        // Hue
+        const gyroMag = Math.sqrt(s.gx * s.gx + s.gy * s.gy + s.gz * s.gz);
+        const spin = Math.min(gyroMag / 300, 1);
+        hueAccum.current += 0.6 + spin * 4;
+        const hue = hueAccum.current % 360;
+        const sat = 85 + spin * 15;
+        const lit = 55 + spin * 20;
 
-      // Trail
-      if (receiving) {
-        trail.current.push({ x: dotX, y: dotY, hue, sat, lit });
-        if (trail.current.length > TRAIL_LEN) trail.current.shift();
-      }
-
-      // --- Draw ---
-      ctx.save();
-      ctx.scale(dpr, dpr);
-
-      // Clear
-      ctx.fillStyle = "#050505";
-      ctx.fillRect(0, 0, w, h);
-
-      const tr = trail.current;
-      const tLen = tr.length;
-
-      if (tLen > 1) {
-        // Glow pass (additive, last ~40 points)
-        ctx.globalCompositeOperation = "lighter";
-        const glowStart = Math.max(1, tLen - 40);
-        for (let i = glowStart; i < tLen; i++) {
-          const p0 = tr[i - 1];
-          const p1 = tr[i];
-          const frac = (i - glowStart) / (tLen - glowStart);
-          ctx.beginPath();
-          ctx.moveTo(p0.x, p0.y);
-          ctx.lineTo(p1.x, p1.y);
-          ctx.strokeStyle = `hsla(${p1.hue}, ${p1.sat}%, ${p1.lit}%, ${frac * 0.15})`;
-          ctx.lineWidth = 20 + frac * 16;
-          ctx.lineCap = "round";
-          ctx.stroke();
-        }
-        ctx.globalCompositeOperation = "source-over";
-
-        // Main trail pass
-        for (let i = 1; i < tLen; i++) {
-          const p0 = tr[i - 1];
-          const p1 = tr[i];
-          const frac = i / tLen; // 0→old, 1→new
-          ctx.beginPath();
-          ctx.moveTo(p0.x, p0.y);
-          ctx.lineTo(p1.x, p1.y);
-          ctx.strokeStyle = `hsla(${p1.hue}, ${p1.sat}%, ${p1.lit}%, ${frac * 0.75})`;
-          ctx.lineWidth = 2 + frac * 10;
-          ctx.lineCap = "round";
-          ctx.stroke();
+        // Trail
+        if (receiving) {
+          trail.current.push({ x: dotX, y: dotY, hue, sat, lit });
+          if (trail.current.length > TRAIL_LEN) trail.current.shift();
         }
 
-        // Bright core (last ~60 points)
-        const coreStart = Math.max(1, tLen - 60);
-        for (let i = coreStart; i < tLen; i++) {
-          const p0 = tr[i - 1];
-          const p1 = tr[i];
-          const frac = (i - coreStart) / (tLen - coreStart);
-          ctx.beginPath();
-          ctx.moveTo(p0.x, p0.y);
-          ctx.lineTo(p1.x, p1.y);
-          ctx.strokeStyle = `hsla(${p1.hue}, ${Math.max(p1.sat - 30, 0)}%, ${Math.min(p1.lit + 30, 95)}%, ${frac * 0.9})`;
-          ctx.lineWidth = 1 + frac * 3;
-          ctx.lineCap = "round";
-          ctx.stroke();
+        ctx.save();
+        ctx.scale(dpr, dpr);
+        ctx.fillStyle = "#050505";
+        ctx.fillRect(0, 0, w, h);
+
+        const tr = trail.current;
+        const tLen = tr.length;
+
+        if (tLen > 1) {
+          // Glow pass
+          ctx.globalCompositeOperation = "lighter";
+          const glowStart = Math.max(1, tLen - 40);
+          for (let i = glowStart; i < tLen; i++) {
+            const p0 = tr[i - 1];
+            const p1 = tr[i];
+            const frac = (i - glowStart) / (tLen - glowStart);
+            ctx.beginPath();
+            ctx.moveTo(p0.x, p0.y);
+            ctx.lineTo(p1.x, p1.y);
+            ctx.strokeStyle = `hsla(${p1.hue}, ${p1.sat}%, ${p1.lit}%, ${frac * 0.15})`;
+            ctx.lineWidth = 20 + frac * 16;
+            ctx.lineCap = "round";
+            ctx.stroke();
+          }
+          ctx.globalCompositeOperation = "source-over";
+
+          // Main trail
+          for (let i = 1; i < tLen; i++) {
+            const p0 = tr[i - 1];
+            const p1 = tr[i];
+            const frac = i / tLen;
+            ctx.beginPath();
+            ctx.moveTo(p0.x, p0.y);
+            ctx.lineTo(p1.x, p1.y);
+            ctx.strokeStyle = `hsla(${p1.hue}, ${p1.sat}%, ${p1.lit}%, ${frac * 0.75})`;
+            ctx.lineWidth = 2 + frac * 10;
+            ctx.lineCap = "round";
+            ctx.stroke();
+          }
+
+          // Core
+          const coreStart = Math.max(1, tLen - 60);
+          for (let i = coreStart; i < tLen; i++) {
+            const p0 = tr[i - 1];
+            const p1 = tr[i];
+            const frac = (i - coreStart) / (tLen - coreStart);
+            ctx.beginPath();
+            ctx.moveTo(p0.x, p0.y);
+            ctx.lineTo(p1.x, p1.y);
+            ctx.strokeStyle = `hsla(${p1.hue}, ${Math.max(p1.sat - 30, 0)}%, ${Math.min(p1.lit + 30, 95)}%, ${frac * 0.9})`;
+            ctx.lineWidth = 1 + frac * 3;
+            ctx.lineCap = "round";
+            ctx.stroke();
+          }
         }
+
+        // Leading dot
+        if (receiving) {
+          const hue = hueAccum.current % 360;
+          ctx.globalCompositeOperation = "lighter";
+          const grd = ctx.createRadialGradient(dotX, dotY, 0, dotX, dotY, 35);
+          grd.addColorStop(0, `hsla(${hue}, ${sat}%, ${lit}%, 0.5)`);
+          grd.addColorStop(0.4, `hsla(${hue}, ${sat}%, ${lit}%, 0.1)`);
+          grd.addColorStop(1, `hsla(${hue}, ${sat}%, ${lit}%, 0)`);
+          ctx.beginPath();
+          ctx.arc(dotX, dotY, 35, 0, Math.PI * 2);
+          ctx.fillStyle = grd;
+          ctx.fill();
+          ctx.globalCompositeOperation = "source-over";
+
+          ctx.beginPath();
+          ctx.arc(dotX, dotY, 10, 0, Math.PI * 2);
+          ctx.fillStyle = `hsl(${hue}, ${sat}%, ${lit}%)`;
+          ctx.fill();
+
+          ctx.beginPath();
+          ctx.arc(dotX, dotY, 4, 0, Math.PI * 2);
+          ctx.fillStyle = "#fff";
+          ctx.fill();
+        }
+
+        ctx.restore();
       }
 
-      // Leading dot
-      if (receiving) {
-        // Glow
-        ctx.globalCompositeOperation = "lighter";
-        const grd = ctx.createRadialGradient(dotX, dotY, 0, dotX, dotY, 35);
-        grd.addColorStop(0, `hsla(${hue}, ${sat}%, ${lit}%, 0.5)`);
-        grd.addColorStop(0.4, `hsla(${hue}, ${sat}%, ${lit}%, 0.1)`);
-        grd.addColorStop(1, `hsla(${hue}, ${sat}%, ${lit}%, 0)`);
-        ctx.beginPath();
-        ctx.arc(dotX, dotY, 35, 0, Math.PI * 2);
-        ctx.fillStyle = grd;
-        ctx.fill();
-        ctx.globalCompositeOperation = "source-over";
-
-        // Body
-        ctx.beginPath();
-        ctx.arc(dotX, dotY, 10, 0, Math.PI * 2);
-        ctx.fillStyle = `hsl(${hue}, ${sat}%, ${lit}%)`;
-        ctx.fill();
-
-        // Hot center
-        ctx.beginPath();
-        ctx.arc(dotX, dotY, 4, 0, Math.PI * 2);
-        ctx.fillStyle = "#fff";
-        ctx.fill();
-      }
-
-      ctx.restore();
       id = requestAnimationFrame(animate);
     };
 
@@ -308,20 +313,45 @@ export function IMUVisualizer() {
       {/* Header */}
       <header className="flex items-center justify-between px-4 py-2 border-b border-zinc-800/60 shrink-0">
         <h1 className="text-sm font-semibold tracking-wide">STICKMAN</h1>
-        <div className="flex items-center gap-3 text-xs">
-          <span className="text-zinc-500">
+        <div className="flex items-center gap-3">
+          {/* Mode toggle */}
+          <div className="flex bg-zinc-800/80 rounded-full p-0.5 gap-0.5">
+            {(["paint", "stars"] as const).map((m) => (
+              <button
+                key={m}
+                className={`px-3 py-1 rounded-full text-xs transition-colors ${
+                  mode === m
+                    ? "bg-zinc-600 text-white"
+                    : "text-zinc-500 hover:text-zinc-300"
+                }`}
+                onClick={() => setMode(m)}
+              >
+                {m === "paint" ? "Paint" : "Stars"}
+              </button>
+            ))}
+          </div>
+          <span className="text-zinc-500 text-xs">
             {presenceData.length} connected
           </span>
           <ConnectionState />
         </div>
       </header>
 
-      {/* Full-screen dot canvas */}
+      {/* Visualization area */}
       <div className="flex-1 relative min-h-0">
-        <canvas
-          ref={canvasRef}
-          className="absolute inset-0 w-full h-full"
-        />
+        {/* Paint mode canvas */}
+        {mode === "paint" && (
+          <canvas
+            ref={canvasRef}
+            className="absolute inset-0 w-full h-full"
+          />
+        )}
+
+        {/* Stars mode */}
+        {mode === "stars" && (
+          <ConstellationViz pointerRef={pointerNorm} />
+        )}
+
         {!receiving && (
           <div className="absolute inset-0 flex items-center justify-center z-10 pointer-events-none">
             <p className="text-zinc-500 animate-pulse text-base tracking-wide">
@@ -330,7 +360,7 @@ export function IMUVisualizer() {
           </div>
         )}
 
-        {/* Arrow compass — overlaid bottom-right */}
+        {/* Arrow compass */}
         <div className="absolute bottom-4 right-4 z-20 pointer-events-none">
           <svg viewBox="-120 -120 240 240" className="w-28 h-28 sm:w-36 sm:h-36 drop-shadow-lg">
             <circle cx="0" cy="0" r="108" fill="#0d0d0d" opacity="0.85" />
@@ -339,12 +369,9 @@ export function IMUVisualizer() {
             <circle
               ref={tiltRingRef}
               cx="0" cy="0" r="85"
-              fill="none"
-              stroke="rgba(0,212,255,0.06)"
-              strokeWidth="6"
-              strokeLinecap="round"
-              strokeDasharray="0 534"
-              transform="rotate(-90)"
+              fill="none" stroke="rgba(0,212,255,0.06)"
+              strokeWidth="6" strokeLinecap="round"
+              strokeDasharray="0 534" transform="rotate(-90)"
             />
             <line x1="-12" y1="0" x2="12" y2="0" stroke="#333" strokeWidth="0.8" />
             <line x1="0" y1="-12" x2="0" y2="12" stroke="#333" strokeWidth="0.8" />
@@ -362,7 +389,7 @@ export function IMUVisualizer() {
           )}
         </div>
 
-        {/* HUD overlay — bottom-left */}
+        {/* HUD */}
         {rawData && (
           <div className="absolute bottom-4 left-4 z-20 pointer-events-none font-mono text-[10px] text-zinc-600 flex flex-col gap-0.5">
             <span>
