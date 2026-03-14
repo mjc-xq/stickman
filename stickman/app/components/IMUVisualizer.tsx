@@ -4,6 +4,7 @@ import { useChannel, usePresence, usePresenceListener } from "ably/react";
 import { useEffect, useRef, useState } from "react";
 import { ConnectionState } from "./ConnectionState";
 import { ConstellationViz } from "./ConstellationViz";
+import { ParticleImageViz } from "./ParticleImageViz";
 
 interface IMUData {
   ax: number;
@@ -25,7 +26,7 @@ interface TrailPoint {
   lit: number;
 }
 
-type VizMode = "paint" | "stars";
+type VizMode = "paint" | "stars" | "bingo";
 
 // --- Tuning ---
 const SMOOTHING = 0.18;
@@ -316,7 +317,7 @@ export function IMUVisualizer() {
         <div className="flex items-center gap-3">
           {/* Mode toggle */}
           <div className="flex bg-zinc-800/80 rounded-full p-0.5 gap-0.5">
-            {(["paint", "stars"] as const).map((m) => (
+            {([["paint", "Paint"], ["stars", "Stars"], ["bingo", "Bingo"]] as const).map(([m, label]) => (
               <button
                 key={m}
                 className={`px-3 py-1 rounded-full text-xs transition-colors ${
@@ -326,7 +327,7 @@ export function IMUVisualizer() {
                 }`}
                 onClick={() => setMode(m)}
               >
-                {m === "paint" ? "Paint" : "Stars"}
+                {label}
               </button>
             ))}
           </div>
@@ -350,6 +351,11 @@ export function IMUVisualizer() {
         {/* Stars mode */}
         {mode === "stars" && (
           <ConstellationViz pointerRef={pointerNorm} />
+        )}
+
+        {/* Bingo particle image mode */}
+        {mode === "bingo" && (
+          <ParticleImageViz pointerRef={pointerNorm} />
         )}
 
         {!receiving && (
