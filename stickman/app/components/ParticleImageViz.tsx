@@ -14,14 +14,26 @@ interface Particle {
   radius: number;
 }
 
-const IMAGES = ["/images/bingo-t2-clean.png", "/images/bt3-clean.png", "/images/bt4-clean.png"];
-const DENSITY = 160;
-const PARTICLE_SIZE = 1.2;
+const IMAGES = ["/images/bt4-clean.png", "/images/bingo-t2-clean.png", "/images/bt3-clean.png"];
+const DENSITY = 220;
+const PARTICLE_SIZE = 1.0;
 const PARTICLE_SPEED = 1;
-const REPULSE_DISTANCE = 60;
-const REPULSE_STRENGTH = 80;
-const CANVAS_PCT = 65;
-const RESTLESS = 6;
+const REPULSE_DISTANCE = 70;
+const REPULSE_STRENGTH = 60;
+const CANVAS_PCT = 80;
+const RESTLESS = 5;
+
+function randColor(): string {
+  const palettes = [
+    // cool blues/purples
+    "#c8d8ff", "#a0b8f0", "#8090dd", "#b0a0e8", "#d0c8ff",
+    // warm accents (sparse)
+    "#ffb8c0", "#ffd0a0", "#ffe0b0",
+    // whites
+    "#ffffff", "#e8e8f0", "#d0d4e0",
+  ];
+  return palettes[Math.floor(Math.random() * palettes.length)];
+}
 
 interface ParticleImageVizProps {
   pointerRef: React.RefObject<{ x: number; y: number }>;
@@ -51,24 +63,22 @@ export const ParticleImageViz = memo(function ParticleImageViz({
       const canvasAspect = w / h;
       let drawW: number, drawH: number;
       if (imgAspect < canvasAspect) {
-        drawH = Math.round((h * CANVAS_PCT) / 100);
+        drawH = Math.min(Math.round((h * CANVAS_PCT) / 100), h - 20);
         drawW = Math.round(drawH * imgAspect);
       } else {
-        drawW = Math.round((w * CANVAS_PCT) / 100);
+        drawW = Math.min(Math.round((w * CANVAS_PCT) / 100), w - 20);
         drawH = Math.round(drawW / imgAspect);
       }
       const drawX = Math.round(w / 2 - drawW / 2);
       const drawY = Math.round(h / 2 - drawH / 2);
 
-      // Sample pixels
       ctx.clearRect(0, 0, w, h);
       ctx.drawImage(img, drawX, drawY, drawW, drawH);
       const pixelData = ctx.getImageData(drawX, drawY, drawW, drawH);
       ctx.clearRect(0, 0, w, h);
 
-      // Build new destination list
       const newDests: { x: number; y: number }[] = [];
-      const inc = Math.round(drawW / DENSITY);
+      const inc = Math.max(1, Math.round(drawW / DENSITY));
       for (let i = 0; i < drawW; i += inc) {
         for (let j = 0; j < drawH; j += inc) {
           if (pixelData.data[(i + j * drawW) * 4 + 3] > 128) {
@@ -78,10 +88,8 @@ export const ParticleImageViz = memo(function ParticleImageViz({
       }
 
       const existing = particlesRef.current;
-      const colors = ["#ffffff", "#d0d8ff", "#a0b0e0", "#c0c8ff"];
 
       if (existing.length === 0) {
-        // First load: scatter from random positions
         particlesRef.current = newDests.map((d) => ({
           x: Math.random() * w,
           y: Math.random() * h,
@@ -90,20 +98,17 @@ export const ParticleImageViz = memo(function ParticleImageViz({
           vx: (Math.random() - 0.5) * PARTICLE_SPEED,
           vy: (Math.random() - 0.5) * PARTICLE_SPEED,
           friction: Math.random() * 0.01 + 0.92,
-          color: colors[Math.floor(Math.random() * colors.length)],
-          radius: PARTICLE_SIZE * (0.5 + Math.random() * 0.5),
+          color: randColor(),
+          radius: PARTICLE_SIZE * (0.4 + Math.random() * 0.6),
         }));
       } else {
-        // Image switch: retarget existing particles to new destinations
         const next: Particle[] = [];
         for (let i = 0; i < newDests.length; i++) {
           if (i < existing.length) {
-            // Reuse particle, just change destination
             existing[i].destX = newDests[i].x;
             existing[i].destY = newDests[i].y;
             next.push(existing[i]);
           } else {
-            // Need more particles — spawn from a random existing one
             const src = existing[Math.floor(Math.random() * existing.length)];
             next.push({
               x: src.x,
@@ -113,19 +118,18 @@ export const ParticleImageViz = memo(function ParticleImageViz({
               vx: (Math.random() - 0.5) * PARTICLE_SPEED,
               vy: (Math.random() - 0.5) * PARTICLE_SPEED,
               friction: Math.random() * 0.01 + 0.92,
-              color: colors[Math.floor(Math.random() * colors.length)],
-              radius: PARTICLE_SIZE * (0.5 + Math.random() * 0.5),
+              color: randColor(),
+              radius: PARTICLE_SIZE * (0.4 + Math.random() * 0.6),
             });
           }
         }
-        // Extra particles fly to random new dest or just get trimmed
         particlesRef.current = next;
       }
     };
     img.src = IMAGES[imgIndex];
   }, [imgIndex]);
 
-  // Canvas resize + initial setup
+  // Canvas resize + animation loop
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -160,13 +164,17 @@ export const ParticleImageViz = memo(function ParticleImageViz({
         p.vx = (p.vx + dx / 500) * p.friction;
         p.vy = (p.vy + dy / 500) * p.friction;
 
+        // Repulse with random scatter angle
         const dmx = p.x - mx;
         const dmy = p.y - my;
         const mouseDist = Math.sqrt(dmx * dmx + dmy * dmy);
-        if (mouseDist < REPULSE_DISTANCE) {
+        if (mouseDist < REPULSE_DISTANCE && mouseDist > 0) {
           const invStr = Math.max(300 - REPULSE_STRENGTH, 10);
-          p.vx += dmx / invStr;
-          p.vy += dmy / invStr;
+          // Add random angular scatter to the repulsion direction
+          const angle = Math.atan2(dmy, dmx) + (Math.random() - 0.5) * 1.2;
+          const force = (REPULSE_DISTANCE - mouseDist) / invStr;
+          p.vx += Math.cos(angle) * force;
+          p.vy += Math.sin(angle) * force;
         }
 
         p.x += p.vx;
@@ -182,9 +190,7 @@ export const ParticleImageViz = memo(function ParticleImageViz({
     };
 
     resize();
-    // Trigger initial image load after resize sets dimensions
     setImgIndex((i) => i);
-
     animate();
 
     const obs = new ResizeObserver(resize);
