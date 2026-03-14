@@ -239,15 +239,16 @@ static void drawFace(FaceType face) {
   const uint8_t* data = (const uint8_t*)pgm_read_ptr(&FACE_DATA[face]);
   int x = (135 - FACE_W) / 2;
   int y = 20;
-  uint16_t lineBuf[FACE_W];
+  // Clear face area to white, then draw black pixels
+  StickCP2.Display.fillRect(0, y, 135, FACE_H, WHITE);
   for (int row = 0; row < FACE_H; row++) {
     for (int col = 0; col < FACE_W; col++) {
       int byteIdx = row * FACE_ROW_BYTES + (col >> 3);
       int bitIdx = 7 - (col & 7);
-      lineBuf[col] = (pgm_read_byte(&data[byteIdx]) & (1 << bitIdx))
-                     ? COLOR_FACE : COLOR_BG;
+      if (pgm_read_byte(&data[byteIdx]) & (1 << bitIdx)) {
+        StickCP2.Display.drawPixel(x + col, y + row, BLACK);
+      }
     }
-    StickCP2.Display.pushImage(x, y + row, FACE_W, 1, lineBuf);
   }
 }
 
