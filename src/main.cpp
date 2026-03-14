@@ -26,7 +26,7 @@ enum GestureType {
 };
 
 static const char* GESTURE_NAMES[] = {
-  "None", "Circle L", "Circle R", "Tap!", "Thrust!"
+  "None", "Circle Left", "Circle Right", "Tap", "Thrust"
 };
 
 // ── Toss States ──────────────────────────────────────────────────────
@@ -250,11 +250,12 @@ static void updateExpression(const char* expression, const char* msg1, const cha
 // ── Mode indicator (small text at top) ───────────────────────────────
 
 static void drawModeIndicator() {
-  StickCP2.Display.fillRect(0, 0, 135, 16, COLOR_BG);
-  StickCP2.Display.setTextColor(COLOR_INNER, COLOR_BG);
+  // Mode label at top
+  StickCP2.Display.fillRect(0, 0, 135, 18, COLOR_INNER);
+  StickCP2.Display.setTextColor(COLOR_BG, COLOR_INNER);
   StickCP2.Display.setTextDatum(TC_DATUM);
-  const char* modeStr = (mode == MODE_WAND) ? "[Wand]" : "[Toss]";
-  StickCP2.Display.drawString(modeStr, 67, 2, 2);
+  const char* modeStr = (mode == MODE_WAND) ? "~ Wand Mode ~" : "^ Toss Mode ^";
+  StickCP2.Display.drawString(modeStr, 67, 1, 2);
 }
 
 // ── Wand Gesture Detection ───────────────────────────────────────────
@@ -265,46 +266,51 @@ static GestureType detectWandGesture(float accX, float accY, float accZ, float g
 
   float accMag = sqrtf(accX * accX + accY * accY + accZ * accZ);
 
-  // TAP: sharp spike in accel magnitude
-  float accDelta = fabsf(accMag - prevAccMag);
-  prevAccMag = accMag;
+  // Update gyro accumulation first (always runs, even if cooldown active above)
+  float dt = (lastGyroTime > 0) ? (now - lastGyroTime) / 1000.0f : 0.02f;
+  lastGyroTime = now;
+  if (dt > 0.1f) dt = 0.02f; // clamp stale dt after mode switch
 
-  if (accDelta > 1.5f && now - lastTapTime > 400) {
-    lastTapTime = now;
-    lastGestureTime = now;
-    return GESTURE_TAP;
+  // CIRCLE: accumulate gyro Z rotation (check first - it's the most intentional gesture)
+  if (fabsf(gyroZ) > 50.0f) {
+    gyroZAccum += gyroZ * dt;
+  } else {
+    if (fabsf(gyroZAccum) > 180.0f) {
+      GestureType g = (gyroZAccum > 0) ? GESTURE_CIRCLE_RIGHT : GESTURE_CIRCLE_LEFT;
+      gyroZAccum = 0;
+      lastGestureTime = now;
+      return g;
+    }
+    gyroZAccum *= 0.92f;
+    if (fabsf(gyroZAccum) < 15.0f) gyroZAccum = 0;
   }
 
-  // THRUST: sustained strong accel on Y axis (device long axis)
-  if (fabsf(accY) > 2.0f) {
+  // THRUST: sustained strong accel along device Y axis (long axis)
+  if (fabsf(accY) > 2.5f) {
     thrustAccum += accY;
     thrustSamples++;
-    if (thrustSamples > 5 && fabsf(thrustAccum / thrustSamples) > 1.8f) {
+    if (thrustSamples >= 4 && fabsf(thrustAccum / thrustSamples) > 2.0f) {
       thrustAccum = 0;
       thrustSamples = 0;
       lastGestureTime = now;
       return GESTURE_THRUST;
     }
   } else {
+    if (thrustSamples > 0 && thrustSamples < 3) {
+      // Too brief for thrust, might be a tap
+    }
     thrustAccum = 0;
     thrustSamples = 0;
   }
 
-  // CIRCLE: accumulate gyro Z rotation
-  float dt = (lastGyroTime > 0) ? (now - lastGyroTime) / 1000.0f : 0.02f;
-  lastGyroTime = now;
+  // TAP: sharp spike in accel magnitude (check last - most prone to false positives)
+  float accDelta = fabsf(accMag - prevAccMag);
+  prevAccMag = accMag;
 
-  if (fabsf(gyroZ) > 30.0f) {
-    gyroZAccum += gyroZ * dt;
-  } else {
-    if (fabsf(gyroZAccum) > 200.0f) {
-      GestureType g = (gyroZAccum > 0) ? GESTURE_CIRCLE_RIGHT : GESTURE_CIRCLE_LEFT;
-      gyroZAccum = 0;
-      lastGestureTime = now;
-      return g;
-    }
-    gyroZAccum *= 0.95f;
-    if (fabsf(gyroZAccum) < 10.0f) gyroZAccum = 0;
+  if (accDelta > 2.0f && now - lastTapTime > 500) {
+    lastTapTime = now;
+    lastGestureTime = now;
+    return GESTURE_TAP;
   }
 
   return GESTURE_NONE;
@@ -315,77 +321,73 @@ static GestureType detectWandGesture(float accX, float accY, float accZ, float g
 static void updateTossDetection(float accMag, unsigned long now) {
   switch (tossState) {
     case TOSS_IDLE:
-      // Detect launch: very high acceleration (throw upward)
-      if (accMag > 3.0f) {
+      // Detect launch: acceleration spike from throwing
+      if (accMag > 2.0f) {
         launchAccPeak = accMag;
         launchTime = now;
         tossState = TOSS_LAUNCHED;
-        Serial.println("Toss: launch detected");
+        Serial.printf("Toss: launch (%.1fG)\n", accMag);
       }
       break;
 
     case TOSS_LAUNCHED:
-      // Track peak launch force
       if (accMag > launchAccPeak) launchAccPeak = accMag;
-      // Transition to freefall when accel drops near zero
-      if (accMag < 0.3f) {
+      // Freefall: accel drops near zero (weightless)
+      if (accMag < 0.4f) {
         tossState = TOSS_FREEFALL;
         freefallStart = now;
         freefallSamples = 0;
         Serial.println("Toss: freefall!");
         updateExpression("scared", "AAAH!");
-      } else if (now - launchTime > 500) {
-        // Timeout: no freefall within 500ms, reset
-        tossState = TOSS_IDLE;
-      } else if (accMag < 2.0f && accMag > 0.5f) {
-        // Settled back to normal without freefall
+      } else if (now - launchTime > 300) {
+        // Timeout: no freefall within 300ms, reset
         tossState = TOSS_IDLE;
       }
       break;
 
     case TOSS_FREEFALL:
       freefallSamples++;
-      // Still in freefall if near-zero gravity
-      if (accMag < 0.5f) {
-        // Still falling
-      } else if (accMag > 1.5f && freefallSamples > 3) {
-        // Caught! High accel = impact of catch
+      if (accMag < 0.6f) {
+        // Still in freefall
+      } else if (accMag > 1.3f && freefallSamples >= 1) {
+        // Caught! Even 1 sample of freefall counts for short tosses
         freefallEnd = now;
         tossState = TOSS_CAUGHT;
 
-        // Height from freefall: h = 0.5 * g * (t/2)^2
-        // t = total freefall (up + down), t/2 = time to apex
+        // Height: h = 0.5 * g * (t/2)^2
         float freefallSec = (freefallEnd - freefallStart) / 1000.0f;
         float halfTime = freefallSec / 2.0f;
         lastTossHeight = 0.5f * 9.81f * halfTime * halfTime; // meters
 
-        // Convert to cm for display
-        float heightCm = lastTossHeight * 100.0f;
+        // Convert to inches
+        float heightIn = lastTossHeight * 39.37f;
 
-        char heightStr[16];
-        if (heightCm >= 100) {
-          snprintf(heightStr, sizeof(heightStr), "%.1fm!", lastTossHeight);
+        char heightStr[20];
+        if (heightIn >= 12.0f) {
+          int feet = (int)(heightIn / 12.0f);
+          int inches = (int)(heightIn - feet * 12.0f);
+          snprintf(heightStr, sizeof(heightStr), "%d'%d\"", feet, inches);
         } else {
-          snprintf(heightStr, sizeof(heightStr), "%.0fcm!", heightCm);
+          snprintf(heightStr, sizeof(heightStr), "%.0f in", heightIn);
         }
 
         // Pick expression based on height
-        if (heightCm > 100) {
+        if (heightIn > 48) {
           updateExpression("scared", "SO HIGH!", heightStr);
-        } else if (heightCm > 50) {
+        } else if (heightIn > 24) {
           updateExpression("excited", "Wow!", heightStr);
-        } else if (heightCm > 20) {
+        } else if (heightIn > 8) {
           updateExpression("proud", "Nice!", heightStr);
         } else {
-          updateExpression("happy", "Whee!", heightStr);
+          updateExpression("happy", "Caught!", heightStr);
         }
 
         tossResultTime = now;
-        Serial.printf("Toss caught! Height: %.1f cm (freefall: %.0f ms)\n",
-                      heightCm, freefallSec * 1000);
+        Serial.printf("Toss: %.1f in (%.0f ms freefall)\n",
+                      heightIn, freefallSec * 1000);
       }
-      // Timeout: if freefall lasts > 3 seconds, something is wrong
-      if (now - freefallStart > 3000) {
+      // Timeout: freefall > 3 seconds = lost
+      if (tossState == TOSS_FREEFALL && now - freefallStart > 3000) {
         tossState = TOSS_IDLE;
         updateExpression("dizzy", "Lost me?");
         tossResultTime = now;
@@ -393,12 +395,11 @@ static void updateTossDetection(float accMag, unsigned long now) {
       break;
 
     case TOSS_CAUGHT:
-      // Show result for 3 seconds
       if (now - tossResultTime > 3000) {
         tossState = TOSS_IDLE;
-        showMessage("Toss me!");
         drawEyes("happy");
         drawMouth("happy");
+        showMessage("Toss me", "up!");
       }
       break;
   }
@@ -470,8 +471,11 @@ static void showReady() {
   StickCP2.Display.fillScreen(COLOR_BG);
   drawBaseFace();
   drawModeIndicator();
-  const char* msg = (mode == MODE_WAND) ? "Wave wand!" : "Toss me!";
-  updateExpression("happy", msg);
+  if (mode == MODE_WAND) {
+    updateExpression("happy", "Wave the", "wand!");
+  } else {
+    updateExpression("happy", "Toss me", "up!");
+  }
 }
 
 // ── Setup ────────────────────────────────────────────────────────────
@@ -577,12 +581,11 @@ void loop() {
           lastGesture = g;
           state = STATE_RESULT;
           resultTime = now;
-          // Show gesture-specific expression
           switch (g) {
-            case GESTURE_CIRCLE_LEFT:  updateExpression("dizzy", "Whee L!"); break;
-            case GESTURE_CIRCLE_RIGHT: updateExpression("dizzy", "Whee R!"); break;
-            case GESTURE_TAP:          updateExpression("surprised", "Boop!"); break;
-            case GESTURE_THRUST:       updateExpression("determined", "Whoosh!"); break;
+            case GESTURE_CIRCLE_LEFT:  updateExpression("dizzy", "Circle", "Left!"); break;
+            case GESTURE_CIRCLE_RIGHT: updateExpression("dizzy", "Circle", "Right!"); break;
+            case GESTURE_TAP:          updateExpression("surprised", "Tap!"); break;
+            case GESTURE_THRUST:       updateExpression("determined", "Thrust!"); break;
             default: break;
           }
           Serial.printf("Wand: %s\n", GESTURE_NAMES[g]);
