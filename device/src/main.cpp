@@ -142,11 +142,18 @@ static void ablyEvent(WStype_t type, uint8_t* payload, size_t length) {
         ablyMsgCount = 0;
         ablyMsgCountStart = millis();
       }
+      // NACK (action 2) or ERROR (action 9/14) — log for diagnostics
+      else if (strstr(text, "\"action\":2") || strstr(text, "\"action\":9") || strstr(text, "\"action\":14")) {
+        Serial.printf("Ably ERR: %.*s\n", (int)fminf(length, 120), text);
+      }
       break;
     }
     case WStype_DISCONNECTED:
       Serial.println("Ably: disconnected");
       ablyState = ABLY_DISCONNECTED;
+      // Reset change-tracking so first message after reconnect always publishes
+      prevPitch = 0; prevRoll = 0;
+      prevSentAx = 0; prevSentAy = 0; prevSentAz = 0;
       break;
     default:
       break;
@@ -157,8 +164,8 @@ static void publishIMU() {
   if (ablyState != ABLY_ATTACHED) return;
   unsigned long now = millis();
 
-  // Minimum interval: 20ms (~50Hz max)
-  if (now - lastAblyPublish < 20) return;
+  // Max 25Hz (40ms) — stays under Ably's 50 msg/s limit with headroom
+  if (now - lastAblyPublish < 40) return;
 
   // Compute pitch/roll from accel (degrees)
   float pitch = atan2f(imuAx, sqrtf(imuAy*imuAy + imuAz*imuAz)) * 57.2958f;
@@ -167,10 +174,10 @@ static void publishIMU() {
   // Check orientation change (>= 1 degree)
   bool orientChanged = fabsf(pitch - prevPitch) >= 1.0f || fabsf(roll - prevRoll) >= 1.0f;
 
-  // Check accel change (>= 5%)
-  float dax = (prevSentAx != 0) ? fabsf(imuAx - prevSentAx) / fabsf(prevSentAx) : 1.0f;
-  float day = (prevSentAy != 0) ? fabsf(imuAy - prevSentAy) / fabsf(prevSentAy) : 1.0f;
-  float daz = (prevSentAz != 0) ? fabsf(imuAz - prevSentAz) / fabsf(prevSentAz) : 1.0f;
+  // Check accel change (>= 5% with min denominator to avoid near-zero noise)
+  float dax = fabsf(imuAx - prevSentAx) / fmaxf(fabsf(prevSentAx), 0.1f);
+  float day = fabsf(imuAy - prevSentAy) / fmaxf(fabsf(prevSentAy), 0.1f);
+  float daz = fabsf(imuAz - prevSentAz) / fmaxf(fabsf(prevSentAz), 0.1f);
   bool accelChanged = dax >= 0.05f || day >= 0.05f || daz >= 0.05f;
 
   if (!orientChanged && !accelChanged) return;

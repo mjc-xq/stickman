@@ -63,14 +63,18 @@ Connects to WiFi on boot. Streams IMU data to Ably WebSocket pubsub.
 
 ### Publishing Rules
 - **Change-based**: only publishes when orientation changes ≥1° OR acceleration changes ≥5%
-- **Max rate**: 50Hz (20ms minimum interval)
+- **Max rate**: 25Hz (40ms minimum interval) — stays under Ably's 50 msg/s limit
 - **Burst-tolerant**: when device is moving, publishes at high rate; when still, publishes rarely
+- Accel change uses min denominator (0.1g) to avoid false triggers near zero
 
 ### Ably Protocol Details
 - Uses Ably realtime protocol action 15 (MESSAGE) with `msgSerial` counter
 - Responds to action 0 (HEARTBEAT) to keep connection alive
+- Logs NACK (action 2) and ERROR (action 9/14) for diagnostics
+- Resets change-tracking state on disconnect so first message after reconnect always publishes
 - WebSocket keepalive: ping every 15s
 - Auto-reconnects every 3s on disconnect
+- BtnA (GPIO 37) wakes from deep sleep via ext1, power button via ext0
 
 ## Power Management
 - No motion 1 min → deep sleep
