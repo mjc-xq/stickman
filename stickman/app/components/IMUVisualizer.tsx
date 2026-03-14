@@ -11,10 +11,12 @@ interface IMUData {
   gx: number;
   gy: number;
   gz: number;
+  p: number; // pitch (degrees) — atan2(ax, sqrt(ay²+az²))
+  r: number; // roll (degrees)  — atan2(ay, sqrt(ax²+az²))
   t: number;
 }
 
-const SMOOTHING = 0.15;
+const SMOOTHING = 0.08;
 const MAX_TRAIL = 120;
 
 export function IMUVisualizer() {
@@ -22,8 +24,8 @@ export function IMUVisualizer() {
   const arrowRef = useRef<SVGGElement>(null);
   const tiltRingRef = useRef<SVGCircleElement>(null);
 
-  const target = useRef({ ax: 0, ay: 0, az: 1, gx: 0, gy: 0, gz: 0, t: 0 });
-  const smooth = useRef({ ax: 0, ay: 0, az: 1, gx: 0, gy: 0, gz: 0, t: 0 });
+  const target = useRef({ ax: 0, ay: 0, az: 1, gx: 0, gy: 0, gz: 0, p: 0, r: 0, t: 0 });
+  const smooth = useRef({ ax: 0, ay: 0, az: 1, gx: 0, gy: 0, gz: 0, p: 0, r: 0, t: 0 });
   const trail = useRef<{ x: number; y: number; cr: number; cg: number; cb: number }[]>([]);
   const canvasCSS = useRef({ w: 300, h: 300 });
   const msgCount = useRef(0);
@@ -73,20 +75,23 @@ export function IMUVisualizer() {
       const s = smooth.current;
       const t = target.current;
 
+      // Smooth all values
       s.ax += (t.ax - s.ax) * SMOOTHING;
       s.ay += (t.ay - s.ay) * SMOOTHING;
       s.az += (t.az - s.az) * SMOOTHING;
       s.gx += (t.gx - s.gx) * SMOOTHING;
       s.gy += (t.gy - s.gy) * SMOOTHING;
       s.gz += (t.gz - s.gz) * SMOOTHING;
+      s.p += (t.p - s.p) * SMOOTHING;
+      s.r += (t.r - s.r) * SMOOTHING;
 
-      // --- Arrow ---
+      // --- Arrow: rotation from pitch (side tilt) and roll (forward tilt) ---
       if (arrowRef.current) {
-        const angle = Math.atan2(s.ax, -s.ay) * (180 / Math.PI);
+        const angle = Math.atan2(s.p, -s.r) * (180 / Math.PI);
         arrowRef.current.setAttribute("transform", `rotate(${angle})`);
       }
       if (tiltRingRef.current) {
-        const tiltMag = Math.min(Math.sqrt(s.ax * s.ax + s.ay * s.ay), 1);
+        const tiltMag = Math.min(Math.sqrt(s.p * s.p + s.r * s.r) / 90, 1);
         const circ = 2 * Math.PI * 85;
         tiltRingRef.current.setAttribute("stroke-dasharray", `${circ * tiltMag} ${circ}`);
         tiltRingRef.current.setAttribute(
@@ -150,26 +155,29 @@ export function IMUVisualizer() {
       ctx.stroke();
       ctx.setLineDash([]);
 
-      // Reference circles
-      const refR = Math.min(w, h) * 0.35;
+      // Reference circles (45° and 90° tilt)
+      const scale = Math.min(w, h) * 0.4;
+      const ref45 = scale * (45 / 90);
+      const ref90 = scale;
       ctx.strokeStyle = "rgba(255,255,255,0.04)";
       ctx.beginPath();
-      ctx.arc(cx, cy, refR * 0.5, 0, Math.PI * 2);
+      ctx.arc(cx, cy, ref45, 0, Math.PI * 2);
       ctx.stroke();
       ctx.beginPath();
-      ctx.arc(cx, cy, refR, 0, Math.PI * 2);
+      ctx.arc(cx, cy, ref90, 0, Math.PI * 2);
       ctx.stroke();
 
-      // Labels on reference circles
+      // Labels
       ctx.fillStyle = "rgba(255,255,255,0.12)";
       ctx.font = "10px monospace";
-      ctx.fillText("0.5g", cx + refR * 0.5 + 4, cy - 4);
-      ctx.fillText("1.0g", cx + refR + 4, cy - 4);
+      ctx.fillText("45°", cx + ref45 + 4, cy - 4);
+      ctx.fillText("90°", cx + ref90 + 4, cy - 4);
 
-      // Dot position
-      const scale = refR; // 1g = refR pixels
-      const dotX = cx + s.ax * scale;
-      const dotY = cy + s.ay * scale;
+      // Dot position: pitch drives X, roll drives Y
+      // pitch > 0 = tilted right → dot moves right
+      // roll > 0 = tilted forward (tip down) → dot moves down
+      const dotX = cx + (s.p / 90) * scale;
+      const dotY = cy + (s.r / 90) * scale;
 
       // Color: cyan at rest, magenta when spinning fast
       const gyroMag = Math.sqrt(s.gx * s.gx + s.gy * s.gy + s.gz * s.gz);
@@ -274,17 +282,10 @@ export function IMUVisualizer() {
         {/* Arrow compass */}
         <div className="w-[340px] shrink-0 flex flex-col items-center justify-center border-r border-zinc-800/40 p-6 gap-4">
           <svg viewBox="-120 -120 240 240" className="w-full max-w-[300px]">
-            {/* Outer ring */}
-            <circle
-              cx="0"
-              cy="0"
-              r="108"
-              fill="none"
-              stroke="#1a1a1a"
-              strokeWidth="2"
-            />
             {/* Inner dark fill */}
             <circle cx="0" cy="0" r="108" fill="#0d0d0d" />
+            {/* Outer ring */}
+            <circle cx="0" cy="0" r="108" fill="none" stroke="#1a1a1a" strokeWidth="2" />
 
             {/* Ticks */}
             {ticks}
@@ -331,7 +332,11 @@ export function IMUVisualizer() {
           {/* Angle readout */}
           {rawData && (
             <div className="text-center font-mono text-xs text-zinc-500">
-              {(Math.atan2(rawData.ax, -rawData.ay) * (180 / Math.PI)).toFixed(1)}°
+              <span className="text-zinc-600">pitch</span>{" "}
+              <span className="text-zinc-400">{rawData.p.toFixed(1)}°</span>
+              <span className="mx-2 text-zinc-700">|</span>
+              <span className="text-zinc-600">roll</span>{" "}
+              <span className="text-zinc-400">{rawData.r.toFixed(1)}°</span>
             </div>
           )}
         </div>

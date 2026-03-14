@@ -142,9 +142,19 @@ static void ablyEvent(WStype_t type, uint8_t* payload, size_t length) {
         ablyMsgCount = 0;
         ablyMsgCountStart = millis();
       }
-      // NACK (action 2) or ERROR (action 9/14) — log for diagnostics
-      else if (strstr(text, "\"action\":2") || strstr(text, "\"action\":9") || strstr(text, "\"action\":14")) {
-        Serial.printf("Ably ERR: %.*s\n", (int)fminf(length, 120), text);
+      // NACK (action 2) — message rejected
+      else if (strstr(text, "\"action\":2")) {
+        Serial.printf("Ably NACK: %.*s\n", (int)fminf(length, 100), text);
+      }
+      // ERROR (action 9) or channel DETACHED (action 14) — re-attach
+      else if (strstr(text, "\"action\":9") || strstr(text, "\"action\":14")) {
+        Serial.printf("Ably ERR: %.*s\n", (int)fminf(length, 250), text);
+        // Re-attach the channel
+        ablyState = ABLY_CONNECTED;
+        char attach[128];
+        snprintf(attach, sizeof(attach),
+          "{\"action\":10,\"channel\":\"%s\"}", ABLY_CHANNEL);
+        webSocket.sendTXT(attach);
       }
       break;
     }
@@ -171,14 +181,13 @@ static void publishIMU() {
   float pitch = atan2f(imuAx, sqrtf(imuAy*imuAy + imuAz*imuAz)) * 57.2958f;
   float roll  = atan2f(imuAy, sqrtf(imuAx*imuAx + imuAz*imuAz)) * 57.2958f;
 
-  // Check orientation change (>= 1 degree)
-  bool orientChanged = fabsf(pitch - prevPitch) >= 1.0f || fabsf(roll - prevRoll) >= 1.0f;
+  // Check orientation change (>= 2 degrees — 1 degree is within IMU noise)
+  bool orientChanged = fabsf(pitch - prevPitch) >= 2.0f || fabsf(roll - prevRoll) >= 2.0f;
 
-  // Check accel change (>= 5% with min denominator to avoid near-zero noise)
-  float dax = fabsf(imuAx - prevSentAx) / fmaxf(fabsf(prevSentAx), 0.1f);
-  float day = fabsf(imuAy - prevSentAy) / fmaxf(fabsf(prevSentAy), 0.1f);
-  float daz = fabsf(imuAz - prevSentAz) / fmaxf(fabsf(prevSentAz), 0.1f);
-  bool accelChanged = dax >= 0.05f || day >= 0.05f || daz >= 0.05f;
+  // Check accel change — absolute threshold of 0.05g per axis (not percentage)
+  bool accelChanged = fabsf(imuAx - prevSentAx) >= 0.05f
+                   || fabsf(imuAy - prevSentAy) >= 0.05f
+                   || fabsf(imuAz - prevSentAz) >= 0.05f;
 
   if (!orientChanged && !accelChanged) return;
 
