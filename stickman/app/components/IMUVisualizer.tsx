@@ -17,7 +17,7 @@ interface IMUData {
 }
 
 const SMOOTHING = 0.08;
-const FADE_RATE = 0.012;
+const FADE_RATE = 0.06;
 
 export function IMUVisualizer() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -85,13 +85,20 @@ export function IMUVisualizer() {
       s.p += (t.p - s.p) * SMOOTHING;
       s.r += (t.r - s.r) * SMOOTHING;
 
-      // --- Arrow: rotation from pitch (side tilt) and roll (forward tilt) ---
+      // --- Gravity-based tilt (works regardless of device orientation) ---
+      // atan2(ax, az) gives left/right tilt relative to gravity
+      // atan2(ay, az) gives forward/back tilt relative to gravity
+      const tiltX = Math.atan2(s.ax, s.az); // radians
+      const tiltY = Math.atan2(s.ay, s.az); // radians
+      const halfPi = Math.PI / 2;
+
+      // --- Arrow ---
       if (arrowRef.current) {
-        const angle = Math.atan2(s.r, s.p) * (180 / Math.PI);
+        const angle = Math.atan2(tiltX, -tiltY) * (180 / Math.PI);
         arrowRef.current.setAttribute("transform", `rotate(${angle})`);
       }
       if (tiltRingRef.current) {
-        const tiltMag = Math.min(Math.sqrt(s.p * s.p + s.r * s.r) / 90, 1);
+        const tiltMag = Math.min(Math.sqrt(tiltX * tiltX + tiltY * tiltY) / halfPi, 1);
         const circ = 2 * Math.PI * 85;
         tiltRingRef.current.setAttribute("stroke-dasharray", `${circ * tiltMag} ${circ}`);
         tiltRingRef.current.setAttribute(
@@ -125,10 +132,13 @@ export function IMUVisualizer() {
       ctx.fillStyle = `rgba(0,0,0,${FADE_RATE})`;
       ctx.fillRect(0, 0, w, h);
 
-      // Dot position: roll drives X, pitch drives Y (inverted for screen coords)
+      // Dot position from gravity-referenced tilt angles
+      // Clamp to ±90° range, normalize to ±1
       const scale = Math.min(w, h) * 0.4;
-      const dotX = cx + (s.r / 90) * scale;
-      const dotY = cy - (s.p / 90) * scale;
+      const normX = Math.max(-1, Math.min(1, tiltX / halfPi));
+      const normY = Math.max(-1, Math.min(1, tiltY / halfPi));
+      const dotX = cx + normX * scale;
+      const dotY = cy + normY * scale;
 
       if (receiving) {
         // Hue cycles slowly, shifts warmer when spinning fast
@@ -139,9 +149,20 @@ export function IMUVisualizer() {
         const lit = 55 + intensity * 20;
         const color = `hsl(${hue}, ${sat}%, ${lit}%)`;
 
-        // Stroke from last position to current (fills gaps)
         const prev = lastDot.current;
         if (prev) {
+          // Soft outer glow stroke
+          ctx.globalCompositeOperation = "lighter";
+          ctx.beginPath();
+          ctx.moveTo(prev.x, prev.y);
+          ctx.lineTo(dotX, dotY);
+          ctx.strokeStyle = `hsla(${hue}, ${sat}%, ${lit}%, 0.15)`;
+          ctx.lineWidth = 28;
+          ctx.lineCap = "round";
+          ctx.stroke();
+          ctx.globalCompositeOperation = "source-over";
+
+          // Main trail stroke
           ctx.beginPath();
           ctx.moveTo(prev.x, prev.y);
           ctx.lineTo(dotX, dotY);
@@ -149,30 +170,22 @@ export function IMUVisualizer() {
           ctx.lineWidth = 10;
           ctx.lineCap = "round";
           ctx.stroke();
+
+          // Bright core stroke
+          ctx.beginPath();
+          ctx.moveTo(prev.x, prev.y);
+          ctx.lineTo(dotX, dotY);
+          ctx.strokeStyle = `hsla(${hue}, ${sat - 20}%, ${Math.min(lit + 30, 95)}%, 0.9)`;
+          ctx.lineWidth = 4;
+          ctx.lineCap = "round";
+          ctx.stroke();
         }
 
-        // Additive glow — overlapping areas bloom brighter
-        ctx.globalCompositeOperation = "lighter";
-
-        // Wide soft aura
-        const grd = ctx.createRadialGradient(dotX, dotY, 0, dotX, dotY, 50);
-        grd.addColorStop(0, `hsla(${hue}, ${sat}%, ${lit}%, 0.5)`);
-        grd.addColorStop(0.3, `hsla(${hue}, ${sat}%, ${lit}%, 0.12)`);
-        grd.addColorStop(1, `hsla(${hue}, ${sat}%, ${lit}%, 0)`);
+        // Leading dot — white-hot tip
         ctx.beginPath();
-        ctx.arc(dotX, dotY, 50, 0, Math.PI * 2);
-        ctx.fillStyle = grd;
-        ctx.fill();
-
-        ctx.globalCompositeOperation = "source-over";
-
-        // Bright dot
-        ctx.beginPath();
-        ctx.arc(dotX, dotY, 10, 0, Math.PI * 2);
+        ctx.arc(dotX, dotY, 8, 0, Math.PI * 2);
         ctx.fillStyle = color;
         ctx.fill();
-
-        // White-hot center
         ctx.beginPath();
         ctx.arc(dotX, dotY, 4, 0, Math.PI * 2);
         ctx.fillStyle = "#fff";
