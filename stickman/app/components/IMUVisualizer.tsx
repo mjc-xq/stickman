@@ -24,14 +24,13 @@ interface TrailPoint {
   lit: number;
 }
 
-// --- Physics tuning ---
-const SMOOTHING = 0.10; // raw IMU smoothing
-const GRAV_LP = 0.05; // gravity estimator (fast convergence when still)
-const ACCEL_GAIN = 0.02; // how much a jerk pushes the dot
-const ACCEL_DEAD = 0.2; // ignore linear accel below this (g)
-const VEL_DEAD = 0.001; // kill velocity below this (prevents drift)
-const SPRING = 0.06; // pull toward tilt rest position
-const DAMPING = 0.82; // velocity friction per frame
+// --- Tuning ---
+const SMOOTHING = 0.18; // raw IMU smoothing (higher = more responsive)
+const GRAV_LP = 0.08; // gravity estimator convergence
+const POS_TRACK = 0.25; // how fast dot tracks tilt (higher = snappier)
+const JOLT_GAIN = 0.03; // how much a jerk pushes the dot
+const JOLT_DEAD = 0.12; // ignore linear accel below this (g)
+const JOLT_DECAY = 0.85; // jolt velocity friction per frame
 const TRAIL_LEN = 150; // ~2.5 seconds at 60fps
 
 export function IMUVisualizer() {
@@ -124,26 +123,19 @@ export function IMUVisualizer() {
       let linX = s.ax - accelDotG * gnx;
       let linY = s.ay - accelDotG * gny;
       const linMag = Math.sqrt(linX * linX + linY * linY);
-      if (linMag < ACCEL_DEAD) { linX = 0; linY = 0; }
+      if (linMag < JOLT_DEAD) { linX = 0; linY = 0; }
 
       // 5. Rest position = normalized gravity X,Y (orient to gravity each point)
       const restX = -gnx;
       const restY = -gny;
 
-      // 6. Physics: spring to rest + acceleration kicks + damping
-      vel.x += -linX * ACCEL_GAIN;
-      vel.y += -linY * ACCEL_GAIN;
-      vel.x += (restX - pos.x) * SPRING; // spring to tilt position
-      vel.y += (restY - pos.y) * SPRING;
-      vel.x *= DAMPING;
-      vel.y *= DAMPING;
-      if (Math.abs(vel.x) < VEL_DEAD) vel.x = 0;
-      if (Math.abs(vel.y) < VEL_DEAD) vel.y = 0;
-      pos.x += vel.x;
-      pos.y += vel.y;
-      // Soft clamp
-      pos.x = Math.max(-2.5, Math.min(2.5, pos.x));
-      pos.y = Math.max(-2.5, Math.min(2.5, pos.y));
+      // 6. Position directly tracks tilt (no spring indirection)
+      pos.x += (restX - pos.x) * POS_TRACK;
+      pos.y += (restY - pos.y) * POS_TRACK;
+
+      // 7. Jolts add a decaying velocity offset (for spatial movement)
+      vel.x = vel.x * JOLT_DECAY - linX * JOLT_GAIN;
+      vel.y = vel.y * JOLT_DECAY - linY * JOLT_GAIN;
 
       // --- Arrow (from normalized gravity, matches dot) ---
       if (arrowRef.current) {
@@ -171,11 +163,14 @@ export function IMUVisualizer() {
       const h = canvasCSS.current.h;
       const cx = w / 2;
       const cy = h / 2;
-      const scaleX = w * 0.4;
-      const scaleY = h * 0.4;
+      const scaleX = w * 0.45;
+      const scaleY = h * 0.45;
 
-      const dotX = cx + pos.x * scaleX;
-      const dotY = cy + pos.y * scaleY;
+      // Final position = direct tilt tracking + jolt offset
+      const finalX = Math.max(-2, Math.min(2, pos.x + vel.x));
+      const finalY = Math.max(-2, Math.min(2, pos.y + vel.y));
+      const dotX = cx + finalX * scaleX;
+      const dotY = cy + finalY * scaleY;
 
       // Hue: cycles faster when spinning
       const gyroMag = Math.sqrt(s.gx * s.gx + s.gy * s.gy + s.gz * s.gz);
