@@ -132,8 +132,7 @@ static void ablyEvent(WStype_t type, uint8_t* payload, size_t length) {
       if (ap) action = atoi(ap + 9);
 
       if (action == 0) {
-        // Heartbeat — must respond
-        webSocket.sendTXT("{\"action\":0}");
+        // Heartbeat — one-way liveness signal from server, no response needed
       }
       else if (action == 4) {
         // CONNECTED
@@ -548,7 +547,9 @@ void setup() {
   webSocket.beginSSL("realtime.ably.io", 443, wsPath);
   webSocket.onEvent(ablyEvent);
   webSocket.setReconnectInterval(3000);
-  webSocket.enableHeartbeat(15000, 3000, 2);
+  // No WebSocket-level ping — Ably has its own heartbeat (action 0).
+  // The old enableHeartbeat(15000, 3000, 2) was too aggressive and caused
+  // periodic disconnects when the server was slow to respond to WS PINGs.
 
   // Timers
   unsigned long now = millis();
