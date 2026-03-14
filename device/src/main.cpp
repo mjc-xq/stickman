@@ -170,6 +170,16 @@ static void ablyEvent(WStype_t type, uint8_t* payload, size_t length) {
   }
 }
 
+// Publish a named event with a simple JSON data string (no rate limit)
+static void publishEvent(const char* name, const char* data) {
+  if (ablyState != ABLY_ATTACHED) return;
+  char msg[384];
+  snprintf(msg, sizeof(msg),
+    "{\"action\":15,\"channel\":\"%s\",\"msgSerial\":%lu,\"messages\":[{\"name\":\"%s\",\"data\":\"%s\"}]}",
+    ABLY_CHANNEL, ablyMsgSerial++, name, data);
+  webSocket.sendTXT(msg);
+}
+
 static void publishIMU() {
   if (ablyState != ABLY_ATTACHED) return;
   unsigned long now = millis();
@@ -477,6 +487,9 @@ static void updateTossDetection(float accMag, unsigned long now) {
       if (accMag < 0.4f) {
         tossState = TOSS_FREEFALL; freefallStart = now; freefallSamples = 0;
         updateExpression("scared", "AAAH!");
+        char launchData[64];
+        snprintf(launchData, sizeof(launchData), "{\\\"state\\\":\\\"airborne\\\",\\\"launchG\\\":%.1f}", launchAccPeak);
+        publishEvent("toss", launchData);
       } else if (now - launchTime > 300) { tossState = TOSS_IDLE; }
       break;
     case TOSS_FREEFALL:
@@ -495,10 +508,17 @@ static void updateTossDetection(float accMag, unsigned long now) {
         else if (hi > 24) updateExpression("excited","Wow!",hs);
         else if (hi > 8) updateExpression("proud","Nice!",hs);
         else updateExpression("happy","Caught!",hs);
+        // Publish landed event with height
+        char catchData[96];
+        snprintf(catchData, sizeof(catchData),
+          "{\\\"state\\\":\\\"landed\\\",\\\"heightIn\\\":%.1f,\\\"heightM\\\":%.3f,\\\"freefallMs\\\":%.0f}",
+          hi, lastTossHeight, fs * 1000);
+        publishEvent("toss", catchData);
         tossResultTime = now;
       }
       if (tossState == TOSS_FREEFALL && now - freefallStart > 3000) {
         tossState = TOSS_IDLE; updateExpression("dizzy","Lost me?"); tossResultTime = now;
+        publishEvent("toss", "{\\\"state\\\":\\\"lost\\\"}");
       }
       break;
     case TOSS_CAUGHT:
@@ -617,17 +637,32 @@ void loop() {
   webSocket.loop();
   unsigned long now = millis();
 
-  // Buttons
-  if (M5.BtnA.wasPressed()) lastButtonPress = now;
+  // Buttons — track press and release for both
+  if (M5.BtnA.wasPressed()) {
+    lastButtonPress = now;
+    publishEvent("btn", "{\\\"button\\\":\\\"A\\\",\\\"state\\\":\\\"down\\\"}");
+  }
+  if (M5.BtnA.wasReleased()) {
+    publishEvent("btn", "{\\\"button\\\":\\\"A\\\",\\\"state\\\":\\\"up\\\"}");
+  }
   if (M5.BtnB.wasPressed()) {
     lastButtonPress = now;
+    publishEvent("btn", "{\\\"button\\\":\\\"B\\\",\\\"state\\\":\\\"down\\\"}");
+    // Switch mode
     mode = (mode == MODE_WAND) ? MODE_TOSS : (mode == MODE_TOSS) ? MODE_DEBUG : MODE_WAND;
+    const char* modeNames[] = {"wand", "toss", "debug"};
+    char modeData[64];
+    snprintf(modeData, sizeof(modeData), "{\\\"mode\\\":\\\"%s\\\"}", modeNames[mode]);
+    publishEvent("mode", modeData);
     gyroZAccum = 0; thrustAccum = 0; thrustSamples = 0;
     prevAccMag = 0; lastGyroTime = 0; isBlinking = false;
     tossState = TOSS_IDLE;
     state = STATE_READY;
     showReady();
     return;
+  }
+  if (M5.BtnB.wasReleased()) {
+    publishEvent("btn", "{\\\"button\\\":\\\"B\\\",\\\"state\\\":\\\"up\\\"}");
   }
 
   // Read IMU
@@ -668,6 +703,10 @@ void loop() {
         GestureType g = detectWandGesture();
         if (g != GESTURE_NONE) {
           lastGesture = g; state = STATE_RESULT; resultTime = now;
+          // Publish gesture event
+          char gestData[64];
+          snprintf(gestData, sizeof(gestData), "{\\\"gesture\\\":\\\"%s\\\"}", GESTURE_NAMES[g]);
+          publishEvent("gesture", gestData);
           switch (g) {
             case GESTURE_CIRCLE_LEFT:  updateExpression("dizzy","Circle","Left!"); break;
             case GESTURE_CIRCLE_RIGHT: updateExpression("dizzy","Circle","Right!"); break;
