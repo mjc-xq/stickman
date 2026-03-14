@@ -84,7 +84,7 @@ export function ConstellationViz({ pointerRef }: ConstellationVizProps) {
           },
           move: {
             enable: true,
-            speed: 0.2,
+            speed: 1.2,
             direction: "none",
             outModes: { default: "bounce" },
             random: true,
@@ -98,9 +98,9 @@ export function ConstellationViz({ pointerRef }: ConstellationVizProps) {
           },
           modes: {
             repulse: {
-              distance: 140,
-              duration: 0.6,
-              speed: 0.6,
+              distance: 200,
+              duration: 0.4,
+              speed: 2,
             },
           },
         },
