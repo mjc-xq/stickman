@@ -13,7 +13,22 @@ interface Model3DVizProps {
   }>;
 }
 
-// Smoothed quaternion representing device orientation
+// Maps device accelerometer gravity vector to 3D model orientation.
+//
+// Device axes (M5StickC Plus 2, portrait, USB at bottom):
+//   +X = right edge, +Y = down (USB), +Z = out of screen
+//
+// Calibration: device flat on back, screen up → gravity = (0, 0, -1) in device coords
+//   (gravity pulls through the back, so az ≈ -1g)
+//
+// Three.js: +X = right, +Y = up, +Z = toward camera
+// We map: device X → Three.js X, device Y → Three.js -Z, device Z → Three.js Y
+//
+// The model is built with its "screen" facing +Z and long axis along +Y.
+// At rest (device flat, screen up), model should lie flat with screen facing +Y.
+
+const REST_UP = new THREE.Vector3(0, 1, 0); // model's "up" = screen normal
+
 function DeviceModel({ imuRef }: Model3DVizProps) {
   const groupRef = useRef<THREE.Group>(null);
   const smoothQuat = useRef(new THREE.Quaternion());
@@ -21,52 +36,68 @@ function DeviceModel({ imuRef }: Model3DVizProps) {
   useFrame(() => {
     if (!groupRef.current || !imuRef.current) return;
 
-    const { ax, ay, az } = imuRef.current;
+    const { ax, ay, az, gz } = imuRef.current;
 
-    // Compute pitch and roll from accelerometer
-    const pitch = Math.atan2(ax, Math.sqrt(ay * ay + az * az));
-    const roll = Math.atan2(ay, Math.sqrt(ax * ax + az * az));
+    // Gravity vector in device coords (normalized)
+    const gLen = Math.sqrt(ax * ax + ay * ay + az * az) || 1;
+    const gnx = ax / gLen;
+    const gny = ay / gLen;
+    const gnz = az / gLen;
 
-    // Build target quaternion from euler angles
-    // Device orientation: pitch around X, roll around Z
-    const targetEuler = new THREE.Euler(roll, 0, -pitch, "XYZ");
-    const targetQuat = new THREE.Quaternion().setFromEuler(targetEuler);
+    // Screen normal = opposite of gravity (screen faces away from pull)
+    // Map device coords to Three.js: devX→X, devY→-Z, devZ→Y
+    const screenDir = new THREE.Vector3(-gnx, -gnz, gny);
+    screenDir.normalize();
+
+    // Build quaternion: rotate REST_UP to match screenDir
+    const targetQuat = new THREE.Quaternion().setFromUnitVectors(REST_UP, screenDir);
+
+    // Add yaw rotation from gyroscope Z (device Z → Three.js Y axis)
+    // Integrate gyro for smooth yaw tracking
+    const dt = 1 / 60; // approximate frame time
+    const yawDelta = -gz * dt * (Math.PI / 180); // degrees to radians
+    const yawQuat = new THREE.Quaternion().setFromAxisAngle(
+      screenDir, yawDelta
+    );
+
+    targetQuat.premultiply(yawQuat);
 
     // Smooth interpolation
-    smoothQuat.current.slerp(targetQuat, 0.15);
+    smoothQuat.current.slerp(targetQuat, 0.12);
     groupRef.current.quaternion.copy(smoothQuat.current);
   });
 
   return (
     <group ref={groupRef}>
-      {/* Simple stylized device representation */}
+      {/* Device model oriented so screen normal = +Y (up at rest)
+          Long axis (USB to top) = Z, width = X, thickness = Y */}
       {/* Main body */}
       <mesh castShadow>
-        <boxGeometry args={[1, 2.4, 0.35]} />
+        <boxGeometry args={[1, 0.35, 2.4]} />
         <meshStandardMaterial color="#1a1a2e" metalness={0.6} roughness={0.3} />
       </mesh>
-      {/* Screen */}
-      <mesh position={[0, 0.15, 0.18]}>
-        <boxGeometry args={[0.7, 1.5, 0.01]} />
+      {/* Screen face (on +Y side) */}
+      <mesh position={[0, 0.18, -0.15]}>
+        <boxGeometry args={[0.7, 0.01, 1.5]} />
         <meshStandardMaterial color="#2a4066" emissive="#1a3050" emissiveIntensity={0.5} metalness={0.1} roughness={0.2} />
       </mesh>
-      {/* Button A (front) */}
-      <mesh position={[0, -0.9, 0.19]}>
+      {/* Button A (on screen side) */}
+      <mesh position={[0, 0.19, 0.9]} rotation={[Math.PI / 2, 0, 0]}>
         <cylinderGeometry args={[0.15, 0.15, 0.04, 16]} />
         <meshStandardMaterial color="#333355" metalness={0.4} roughness={0.5} />
       </mesh>
-      {/* USB port (bottom) */}
-      <mesh position={[0, -1.22, 0]}>
-        <boxGeometry args={[0.3, 0.08, 0.15]} />
+      {/* USB port (at +Z end = "bottom" when held) */}
+      <mesh position={[0, 0, 1.22]}>
+        <boxGeometry args={[0.3, 0.15, 0.08]} />
         <meshStandardMaterial color="#222" metalness={0.8} roughness={0.2} />
       </mesh>
       {/* LED indicator */}
-      <mesh position={[0.25, 0.95, 0.19]}>
+      <mesh position={[0.25, 0.19, -0.95]}>
         <sphereGeometry args={[0.04, 8, 8]} />
         <meshStandardMaterial color="#00ff88" emissive="#00ff88" emissiveIntensity={2} />
       </mesh>
-      {/* Orientation indicator line (points "up" from screen) */}
-      <mesh position={[0, 0, 0.25]}>
+      {/* Orientation arrow (points away from screen = +Y) */}
+      <mesh position={[0, 0.35, 0]} rotation={[0, 0, 0]}>
         <coneGeometry args={[0.08, 0.3, 8]} />
         <meshStandardMaterial color="#00d4ff" emissive="#00d4ff" emissiveIntensity={0.5} />
       </mesh>
