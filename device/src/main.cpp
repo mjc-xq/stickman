@@ -239,16 +239,23 @@ static void drawFace(FaceType face) {
   const uint8_t* data = (const uint8_t*)pgm_read_ptr(&FACE_DATA[face]);
   int x = (135 - FACE_W) / 2;
   int y = 20;
-  // Clear face area to white, then draw black pixels
-  StickCP2.Display.fillRect(0, y, 135, FACE_H, WHITE);
+  // Row-buffered pushImage: WHITE background, BLACK face pixels
+  // LGFX pushImage uses same byte order as fillScreen/drawPixel
+  uint16_t lineBuf[FACE_W];
+  const uint16_t fg = (uint16_t)BLACK;
+  const uint16_t bg = (uint16_t)WHITE;
   for (int row = 0; row < FACE_H; row++) {
     for (int col = 0; col < FACE_W; col++) {
       int byteIdx = row * FACE_ROW_BYTES + (col >> 3);
       int bitIdx = 7 - (col & 7);
-      if (pgm_read_byte(&data[byteIdx]) & (1 << bitIdx)) {
-        StickCP2.Display.drawPixel(x + col, y + row, BLACK);
-      }
+      lineBuf[col] = (pgm_read_byte(&data[byteIdx]) & (1 << bitIdx)) ? fg : bg;
     }
+    StickCP2.Display.pushImage(x, y + row, FACE_W, 1, lineBuf);
+  }
+  // Fill side margins white (pushImage only covers FACE_W centered area)
+  if (x > 0) {
+    StickCP2.Display.fillRect(0, y, x, FACE_H, WHITE);
+    StickCP2.Display.fillRect(x + FACE_W, y, 135 - x - FACE_W, FACE_H, WHITE);
   }
 }
 
