@@ -16,7 +16,7 @@ import { useOrientation, useSmoothedIMU } from "@/app/hooks/stickman";
 // Axis mapping (device accel → Three.js "up" direction):
 //   Device +X → Three.js +X  (right stays right)
 //   Device +Z → Three.js +Y  (screen normal → up)
-//   Device +Y → Three.js -Z  (USB direction → away from camera)
+//   Device +Y → Three.js +Z  (USB direction → toward camera)
 //
 // Verified with live calibration readings:
 //   Flat on back (az=+1): → Three.js (0,1,0) = up    → pig upright ✓
@@ -70,7 +70,9 @@ function PigModel() {
     const imu = smoothedIMU.current;
 
     // Map device accelerometer to Three.js "up" direction
-    _upDir.set(o.gravityX, o.gravityZ, -o.gravityY);
+    // Device: +X=right, +Y=USB(down), +Z=screen(out)
+    // Three.js: devX→X, devZ→Y, devY→Z
+    _upDir.set(o.gravityX, o.gravityZ, o.gravityY);
 
     // Check BEFORE normalizing — freefall gives near-zero vector
     const lenSq = _upDir.lengthSq();
