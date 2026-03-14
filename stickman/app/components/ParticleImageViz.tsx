@@ -18,8 +18,8 @@ const IMAGE_SRC = "/images/bt4-clean.png";
 const DENSITY = 220;
 const PARTICLE_SIZE = 1.0;
 const PARTICLE_SPEED = 1;
-const REPULSE_DISTANCE = 70;
-const REPULSE_STRENGTH = 60;
+const ATTRACT_DISTANCE = 120;
+const ATTRACT_STRENGTH = 80;
 const CANVAS_PCT = 80;
 const RESTLESS = 5;
 
@@ -46,6 +46,7 @@ export const ParticleImageViz = memo(function ParticleImageViz({
   const animRef = useRef<number>(0);
   const imageRef = useRef<HTMLImageElement | null>(null);
   const imageLoadedRef = useRef(false);
+  const imgBounds = useRef({ x: 0, y: 0, w: 0, h: 0 });
 
   const loadParticlesFromImage = useCallback(() => {
     const canvas = canvasRef.current;
@@ -69,6 +70,7 @@ export const ParticleImageViz = memo(function ParticleImageViz({
     }
     const drawX = Math.round(w / 2 - drawW / 2);
     const drawY = Math.round(h / 2 - drawH / 2);
+    imgBounds.current = { x: drawX, y: drawY, w: drawW, h: drawH };
 
     ctx.clearRect(0, 0, w, h);
     ctx.drawImage(img, drawX, drawY, drawW, drawH);
@@ -202,9 +204,12 @@ export const ParticleImageViz = memo(function ParticleImageViz({
         ctx.clearRect(0, 0, w, h);
       }
 
+      // Constrain pointer to image bounds (with small padding)
+      const ib = imgBounds.current;
       const norm = pointerRef.current;
-      const mx = w / 2 + norm.x * w * 0.45;
-      const my = h / 2 + norm.y * h * 0.45;
+      const pad = Math.max(ib.w, ib.h) * 0.15;
+      const mx = ib.x + ib.w / 2 + norm.x * (ib.w / 2 + pad);
+      const my = ib.y + ib.h / 2 + norm.y * (ib.h / 2 + pad);
 
       for (const p of particlesRef.current) {
         const dx = p.destX - p.x;
@@ -219,13 +224,15 @@ export const ParticleImageViz = memo(function ParticleImageViz({
         p.vx = (p.vx + dx / 500) * p.friction;
         p.vy = (p.vy + dy / 500) * p.friction;
 
-        const dmx = p.x - mx;
-        const dmy = p.y - my;
+        // Attract (suck in) toward pointer
+        const dmx = mx - p.x;
+        const dmy = my - p.y;
         const mouseDist = Math.sqrt(dmx * dmx + dmy * dmy);
-        if (mouseDist < REPULSE_DISTANCE && mouseDist > 0) {
-          const invStr = Math.max(300 - REPULSE_STRENGTH, 10);
-          const angle = Math.atan2(dmy, dmx) + (Math.random() - 0.5) * 1.2;
-          const force = (REPULSE_DISTANCE - mouseDist) / invStr;
+        if (mouseDist < ATTRACT_DISTANCE && mouseDist > 1) {
+          const invStr = Math.max(300 - ATTRACT_STRENGTH, 10);
+          const force = (ATTRACT_DISTANCE - mouseDist) / invStr;
+          // Pull toward pointer (+ slight spiral via angular offset)
+          const angle = Math.atan2(dmy, dmx) + (Math.random() - 0.5) * 0.6;
           p.vx += Math.cos(angle) * force;
           p.vy += Math.sin(angle) * force;
         }
