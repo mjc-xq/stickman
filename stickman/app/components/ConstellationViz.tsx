@@ -1,15 +1,68 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
 import Particles, { initParticlesEngine } from "@tsparticles/react";
-import type { Container } from "@tsparticles/engine";
+import type { Container, ISourceOptions } from "@tsparticles/engine";
 import { loadSlim } from "@tsparticles/slim";
+
+const PARTICLE_OPTIONS: ISourceOptions = {
+  background: { color: "#050510" },
+  fpsLimit: 60,
+  fullScreen: false,
+  particles: {
+    number: { value: 160, density: { enable: true } },
+    color: {
+      value: ["#ffffff", "#b0c4ff", "#8fa8e6", "#c8b8ff", "#6688cc"],
+    },
+    shape: { type: "circle" },
+    opacity: {
+      value: { min: 0.1, max: 0.85 },
+      animation: {
+        enable: true,
+        speed: 0.4,
+        sync: false,
+        startValue: "random",
+      },
+    },
+    size: { value: { min: 0.3, max: 2.8 } },
+    links: {
+      enable: true,
+      distance: 130,
+      color: "#3a5599",
+      opacity: 0.1,
+      width: 0.5,
+    },
+    move: {
+      enable: true,
+      speed: 1.2,
+      direction: "none",
+      outModes: { default: "bounce" },
+      random: true,
+      straight: false,
+    },
+  },
+  interactivity: {
+    detectsOn: "canvas",
+    events: {
+      onHover: { enable: true, mode: "repulse" },
+    },
+    modes: {
+      repulse: {
+        distance: 200,
+        duration: 0.4,
+        speed: 2,
+      },
+    },
+  },
+};
 
 interface ConstellationVizProps {
   pointerRef: React.RefObject<{ x: number; y: number }>;
 }
 
-export function ConstellationViz({ pointerRef }: ConstellationVizProps) {
+export const ConstellationViz = memo(function ConstellationViz({
+  pointerRef,
+}: ConstellationVizProps) {
   const [ready, setReady] = useState(false);
   const containerRef = useRef<Container | null>(null);
 
@@ -55,56 +108,7 @@ export function ConstellationViz({ pointerRef }: ConstellationVizProps) {
       id="constellation"
       particlesLoaded={particlesLoaded}
       className="absolute inset-0 w-full h-full"
-      options={{
-        background: { color: "#050510" },
-        fpsLimit: 60,
-        fullScreen: false,
-        particles: {
-          number: { value: 160, density: { enable: true } },
-          color: {
-            value: ["#ffffff", "#b0c4ff", "#8fa8e6", "#c8b8ff", "#6688cc"],
-          },
-          shape: { type: "circle" },
-          opacity: {
-            value: { min: 0.1, max: 0.85 },
-            animation: {
-              enable: true,
-              speed: 0.4,
-              sync: false,
-              startValue: "random",
-            },
-          },
-          size: { value: { min: 0.3, max: 2.8 } },
-          links: {
-            enable: true,
-            distance: 130,
-            color: "#3a5599",
-            opacity: 0.1,
-            width: 0.5,
-          },
-          move: {
-            enable: true,
-            speed: 1.2,
-            direction: "none",
-            outModes: { default: "bounce" },
-            random: true,
-            straight: false,
-          },
-        },
-        interactivity: {
-          detectsOn: "canvas",
-          events: {
-            onHover: { enable: true, mode: "repulse" },
-          },
-          modes: {
-            repulse: {
-              distance: 200,
-              duration: 0.4,
-              speed: 2,
-            },
-          },
-        },
-      }}
+      options={PARTICLE_OPTIONS}
     />
   );
-}
+});
