@@ -425,6 +425,7 @@ stickman/app/
 │   ├── PaintViz.tsx              # Extracted paint mode (was inline in IMUVisualizer)
 │   ├── ConstellationViz.tsx      # Updated: uses usePointer() directly
 │   ├── ParticleImageViz.tsx      # Updated: uses usePointer() directly
+│   ├── Model3DViz.tsx            # Updated: uses useOrientation() + useSmoothedIMU()
 │   ├── CompassOverlay.tsx        # Extracted: uses useOrientation()
 │   ├── IMUHud.tsx                # Extracted: uses useSmoothedIMU() with rAF + imperative DOM
 │   ├── AblyProviderWrapper.tsx   # Unchanged
@@ -465,6 +466,7 @@ export function IMUVisualizer() {
         {mode === 'paint' && <PaintViz />}
         {mode === 'stars' && <ConstellationViz />}
         {mode === 'bingo' && <ParticleImageViz />}
+        {mode === '3d' && <Model3DViz />}
         {!receiving && <WaitingOverlay />}
         <CompassOverlay />
         <IMUHud />
@@ -477,6 +479,78 @@ export function IMUVisualizer() {
 ### IMUHud Approach
 
 IMUHud displays raw data at 60fps. Uses `useSmoothedIMU()` with a rAF loop and imperative DOM updates (via refs to span elements), matching the pattern used by the compass overlay today. No React re-renders for HUD updates.
+
+### Model3DViz Migration (Pig)
+
+Model3DViz currently takes an `imuRef` prop and does its own gravity normalization internally. In the new architecture, it consumes two hooks directly — no props needed:
+
+- **`useOrientation()`** — provides the pre-normalized gravity vector (`gravityX/Y/Z`), eliminating duplicate gravity math
+- **`useSmoothedIMU()`** — provides smoothed gyro Z for yaw rotation
+
+**Before** (current — duplicates gravity normalization, hardcodes dt):
+```tsx
+function PigModel({ imuRef }: Model3DVizProps) {
+  useFrame(() => {
+    const { ax, ay, az, gz } = imuRef.current;
+    const gLen = Math.sqrt(ax * ax + ay * ay + az * az) || 1;
+    const gnx = ax / gLen;  // ← duplicated gravity normalization
+    const gny = ay / gLen;
+    const gnz = az / gLen;
+    const screenDir = new THREE.Vector3(-gnx, -gnz, gny);
+    // ...
+    const dt = 1 / 60;  // ← frame-rate dependent
+    const yawDelta = -gz * dt * (Math.PI / 180);
+  });
+}
+```
+
+**After** (uses centralized orientation + smoothed IMU):
+```tsx
+function PigModel() {
+  const orientation = useOrientation();
+  const smoothedIMU = useSmoothedIMU();
+  const groupRef = useRef<THREE.Group>(null);
+  const smoothQuat = useRef(new THREE.Quaternion());
+
+  useFrame((_, delta) => {
+    if (!groupRef.current) return;
+    const o = orientation.current;
+    const imu = smoothedIMU.current;
+
+    // Device→Three.js axis mapping (viz-specific, stays here)
+    const screenDir = new THREE.Vector3(-o.gravityX, -o.gravityZ, o.gravityY);
+    screenDir.normalize();
+
+    const targetQuat = new THREE.Quaternion().setFromUnitVectors(REST_UP, screenDir);
+
+    // Yaw from smoothed gyro Z — uses R3F's delta instead of hardcoded 1/60
+    const yawDelta = -imu.gz * delta * (Math.PI / 180);
+    const yawQuat = new THREE.Quaternion().setFromAxisAngle(screenDir, yawDelta);
+    targetQuat.premultiply(yawQuat);
+
+    smoothQuat.current.slerp(targetQuat, 0.12);
+    groupRef.current.quaternion.copy(smoothQuat.current);
+  });
+
+  return (
+    <group ref={groupRef}>
+      <Center><primitive object={scene.clone()} scale={1.5} /></Center>
+    </group>
+  );
+}
+```
+
+**What changes:**
+- No more `imuRef` prop — reads hooks directly
+- Gravity normalization comes from `useOrientation()` (centralized, shared with compass)
+- Gyro Z comes from `useSmoothedIMU()`
+- Uses R3F's `delta` parameter from `useFrame` instead of hardcoded `1/60`
+- Device-to-Three.js axis mapping stays in the component (it's viz-specific)
+
+**What stays the same:**
+- Quaternion slerp smoothing
+- The visual rotation behavior
+- Scene setup (lights, grid, environment, orbit controls)
 
 ---
 
@@ -548,8 +622,9 @@ function MagicWandViz() {
 ## What Doesn't Change
 
 - **Ably setup** — AblyProviderWrapper, .env.local, channel name all stay
-- **Visual output** — all three viz modes render identically to today
+- **Visual output** — all four viz modes (paint, stars, bingo, 3d) render identically to today
 - **tsparticles** — ConstellationViz keeps its particle engine
+- **react-three-fiber** — Model3DViz keeps its R3F setup, scene, lighting
 - **Rendering approach** — canvas + rAF loops, ref-based animation state
 - **ConnectionState** — continues using Ably hooks directly (infrastructure-level component)
 
