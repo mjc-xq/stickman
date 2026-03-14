@@ -80,6 +80,11 @@ static unsigned long lastAblyPublish = 0;
 static unsigned long ablyMsgCount = 0;
 static unsigned long ablyMsgCountStart = 0;
 static float ablyRate = 0;
+static unsigned long ablyMsgSerial = 0;
+
+// Previous IMU values for change detection
+static float prevPitch = 0, prevRoll = 0;
+static float prevSentAx = 0, prevSentAy = 0, prevSentAz = 0;
 
 // ── Debug display ────────────────────────────────────────────────────
 static unsigned long lastDebugDraw = 0;
@@ -123,6 +128,7 @@ static void ablyEvent(WStype_t type, uint8_t* payload, size_t length) {
       // CONNECTED (action 4)
       else if (strstr(text, "\"action\":4")) {
         Serial.println("Ably: CONNECTED");
+        ablyMsgSerial = 0;
         char attach[128];
         snprintf(attach, sizeof(attach),
           "{\"action\":10,\"channel\":\"%s\"}", ABLY_CHANNEL);
@@ -142,13 +148,7 @@ static void ablyEvent(WStype_t type, uint8_t* payload, size_t length) {
       Serial.println("Ably: disconnected");
       ablyState = ABLY_DISCONNECTED;
       break;
-    case WStype_PING:
-      Serial.println("Ably: ping");
-      break;
-    case WStype_PONG:
-      break;
     default:
-      Serial.printf("Ably: event %d\n", type);
       break;
   }
 }
@@ -156,28 +156,46 @@ static void ablyEvent(WStype_t type, uint8_t* payload, size_t length) {
 static void publishIMU() {
   if (ablyState != ABLY_ATTACHED) return;
   unsigned long now = millis();
-  if (now - lastAblyPublish < 50) return; // 20Hz publish rate
+
+  // Minimum interval: 20ms (~50Hz max)
+  if (now - lastAblyPublish < 20) return;
+
+  // Compute pitch/roll from accel (degrees)
+  float pitch = atan2f(imuAx, sqrtf(imuAy*imuAy + imuAz*imuAz)) * 57.2958f;
+  float roll  = atan2f(imuAy, sqrtf(imuAx*imuAx + imuAz*imuAz)) * 57.2958f;
+
+  // Check orientation change (>= 1 degree)
+  bool orientChanged = fabsf(pitch - prevPitch) >= 1.0f || fabsf(roll - prevRoll) >= 1.0f;
+
+  // Check accel change (>= 5%)
+  float dax = (prevSentAx != 0) ? fabsf(imuAx - prevSentAx) / fabsf(prevSentAx) : 1.0f;
+  float day = (prevSentAy != 0) ? fabsf(imuAy - prevSentAy) / fabsf(prevSentAy) : 1.0f;
+  float daz = (prevSentAz != 0) ? fabsf(imuAz - prevSentAz) / fabsf(prevSentAz) : 1.0f;
+  bool accelChanged = dax >= 0.05f || day >= 0.05f || daz >= 0.05f;
+
+  if (!orientChanged && !accelChanged) return;
+
+  prevPitch = pitch; prevRoll = roll;
+  prevSentAx = imuAx; prevSentAy = imuAy; prevSentAz = imuAz;
   lastAblyPublish = now;
 
-  // Build data as a JSON string value (subscriber will JSON.parse it)
-  char data[128];
+  char data[160];
   snprintf(data, sizeof(data),
     "{\\\"ax\\\":%.3f,\\\"ay\\\":%.3f,\\\"az\\\":%.3f,"
-    "\\\"gx\\\":%.1f,\\\"gy\\\":%.1f,\\\"gz\\\":%.1f,\\\"t\\\":%lu}",
-    imuAx, imuAy, imuAz, imuGx, imuGy, imuGz, now);
+    "\\\"gx\\\":%.1f,\\\"gy\\\":%.1f,\\\"gz\\\":%.1f,"
+    "\\\"p\\\":%.1f,\\\"r\\\":%.1f,\\\"t\\\":%lu}",
+    imuAx, imuAy, imuAz, imuGx, imuGy, imuGz, pitch, roll, now);
 
-  char msg[320];
+  char msg[384];
   snprintf(msg, sizeof(msg),
-    "{\"action\":15,\"channel\":\"%s\",\"messages\":[{\"name\":\"imu\",\"data\":\"%s\"}]}",
-    ABLY_CHANNEL, data);
+    "{\"action\":15,\"channel\":\"%s\",\"msgSerial\":%lu,\"messages\":[{\"name\":\"imu\",\"data\":\"%s\"}]}",
+    ABLY_CHANNEL, ablyMsgSerial++, data);
   webSocket.sendTXT(msg);
   ablyMsgCount++;
 
-  // Update rate every second
   if (now - ablyMsgCountStart >= 1000) {
     ablyRate = ablyMsgCount * 1000.0f / (now - ablyMsgCountStart);
-    ablyMsgCount = 0;
-    ablyMsgCountStart = now;
+    ablyMsgCount = 0; ablyMsgCountStart = now;
   }
 }
 
