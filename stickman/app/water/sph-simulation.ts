@@ -75,7 +75,7 @@ export class SPHSimulation {
   initParticles(count: number) {
     this.particles = [];
     const g = this.glass;
-    const fillHeight = g.height * 0.65; // fill 65% of glass height
+    const fillHeight = g.height * 0.75; // fill 75% of glass height — spills easier
     const startY = -g.height / 2 + g.wallMargin;
 
     // Compute spacing from smoothing radius
@@ -313,11 +313,10 @@ export class SPHSimulation {
         }
       }
 
-      // Top / Escape detection
-      if (p.y >= halfH - g.wallMargin) {
-        // Check if near the rim edge (radial position > 70% of rim radius)
+      // Top / Escape detection — particles near the rim can spill out
+      if (p.y >= halfH - g.wallMargin * 3) {
         const rimR = g.radiusTop - g.wallMargin;
-        if (distXZ > rimR * 0.6) {
+        if (distXZ > rimR * 0.4 && p.y >= halfH - g.wallMargin) {
           // Escape! Transform position to world space
           p.escaped = true;
           const m = this.glassMatrix;

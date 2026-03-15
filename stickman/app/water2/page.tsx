@@ -234,12 +234,12 @@ function DropletsSystem({ rotationRef }: { rotationRef: React.RefObject<{ x: num
     if (!inst.current) return;
     const rot = rotationRef.current;
     const tiltMag = Math.max(Math.abs(rot.x), Math.abs(rot.z));
-    const shouldSpill = tiltMag > 0.35;
+    const shouldSpill = tiltMag > 0.2;
 
     if (shouldSpill) {
       const sideX = rot.z > 0 ? -1 : 1;
       const sideZ = rot.x > 0 ? -1 : 1;
-      const spawnCount = 3 + Math.floor((tiltMag - 0.35) * 22);
+      const spawnCount = 3 + Math.floor((tiltMag - 0.2) * 25);
       for (let n = 0; n < spawnCount; n++) {
         const d = DROPLET_DATA.find((x) => x.life <= 0);
         if (!d) break;
