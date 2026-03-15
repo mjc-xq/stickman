@@ -26,11 +26,12 @@ const _tiltQuat = new THREE.Quaternion();
 const _yawQuat = new THREE.Quaternion();
 const _targetQuat = new THREE.Quaternion();
 
-// Toss animation constants
-const TOSS_RISE_SPEED = 8;
-const TOSS_MAX_HEIGHT = 6;
-const TOSS_GRAVITY = 12;
-const TOSS_SPIN_SPEED = 4;
+// Toss animation — maps real device height to 3D scene units
+const HEIGHT_SCALE = 8; // meters to scene units
+const TUMBLE_SPEED = 5; // rotations/sec during airborne
+const _tumbleAxis = new THREE.Vector3(1, 0.2, 0.3).normalize();
+const _tumbleQuat = new THREE.Quaternion();
+const _landingQuat = new THREE.Quaternion(); // identity = upright
 
 function PigModel() {
   const orientation = useOrientation();
@@ -41,11 +42,15 @@ function PigModel() {
   const yawAngle = useRef(0);
   const { scene } = useGLTF("/3d/animal-pig.glb");
 
-  // Toss animation state
+  // Toss animation state — driven by real device events
+  const tossPhase = useRef<"idle" | "rising" | "falling" | "landing">("idle");
   const tossY = useRef(0);
-  const tossVelY = useRef(0);
+  const tossStartTime = useRef(0);
+  const tossApexHeight = useRef(3); // scene units, updated on landed
+  const tossRiseTime = useRef(0.3); // seconds to apex, updated on landed
+  const tossFallTime = useRef(0.3); // seconds from apex to ground
   const tossSpinAngle = useRef(0);
-  const isTossing = useRef(false);
+  const lastTossPhase = useRef<string>("idle");
 
   // Clone scene once and tint it pink
   const clonedScene = useMemo(() => {
@@ -71,18 +76,44 @@ function PigModel() {
     };
   }, [clonedScene]);
 
-  // Watch toss state via ref to trigger animation
+  // Watch toss state transitions via ref
   useEffect(() => {
     const checkToss = () => {
       const t = toss.ref.current;
-      if (t && t.phase === "airborne" && !isTossing.current) {
-        isTossing.current = true;
-        const launchForce = Math.min((t.launchG ?? 2) / 3, 1);
-        tossVelY.current = TOSS_RISE_SPEED * (0.5 + launchForce * 0.5);
-        tossSpinAngle.current = 0;
+      if (!t) return;
+
+      // Detect phase transitions
+      if (t.phase !== lastTossPhase.current) {
+        lastTossPhase.current = t.phase;
+
+        if (t.phase === "airborne") {
+          // Device just launched — start rising
+          tossPhase.current = "rising";
+          tossStartTime.current = performance.now() / 1000;
+          tossSpinAngle.current = 0;
+          tossY.current = 0;
+          // Estimate rise speed from launch G (higher throw = more height)
+          const launchForce = Math.min((t.launchG ?? 2) / 4, 1);
+          tossApexHeight.current = (1 + launchForce * 5) * HEIGHT_SCALE * 0.15;
+          tossRiseTime.current = 0.25 + launchForce * 0.3;
+        }
+
+        if (t.phase === "landed" && tossPhase.current === "rising") {
+          // Device caught — we now know real height and duration
+          const realHeight = (t.heightM ?? 0.3) * HEIGHT_SCALE * 0.5;
+          tossApexHeight.current = Math.max(realHeight, 1);
+          // Total freefall: half up, half down
+          const totalMs = t.freefallMs ?? 500;
+          tossRiseTime.current = (totalMs / 2) / 1000;
+          tossFallTime.current = (totalMs / 2) / 1000;
+          // Transition to falling
+          tossPhase.current = "falling";
+          tossStartTime.current = performance.now() / 1000;
+          tossY.current = tossApexHeight.current;
+        }
       }
     };
-    const interval = setInterval(checkToss, 50);
+    const interval = setInterval(checkToss, 30);
     return () => clearInterval(interval);
   }, [toss.ref]);
 
@@ -92,41 +123,66 @@ function PigModel() {
     const o = orientation.current;
     const imu = smoothedIMU.current;
 
-    // --- Toss fly animation ---
-    if (isTossing.current) {
-      tossVelY.current -= TOSS_GRAVITY * delta;
-      tossY.current += tossVelY.current * delta;
-      tossSpinAngle.current += TOSS_SPIN_SPEED * delta;
+    // --- Toss animation driven by real device events ---
+    const phase = tossPhase.current;
+    if (phase === "rising" || phase === "falling" || phase === "landing") {
+      const now = performance.now() / 1000;
+      const elapsed = now - tossStartTime.current;
 
-      // Clamp height
-      if (tossY.current > TOSS_MAX_HEIGHT) {
-        tossY.current = TOSS_MAX_HEIGHT;
-        tossVelY.current = 0;
-      }
+      if (phase === "rising") {
+        // Ease up toward estimated apex using smooth curve
+        const t = Math.min(elapsed / tossRiseTime.current, 1);
+        const eased = 1 - (1 - t) * (1 - t); // ease-out quad
+        tossY.current = eased * tossApexHeight.current;
 
-      // Landed
-      if (tossY.current <= 0 && tossVelY.current < 0) {
+        // Tumble spin while rising
+        tossSpinAngle.current += TUMBLE_SPEED * delta;
+        _tumbleQuat.setFromAxisAngle(_tumbleAxis, tossSpinAngle.current * Math.PI * 2);
+        groupRef.current.quaternion.copy(_tumbleQuat);
+
+        // If we've been rising longer than estimated without a landed event,
+        // keep hovering at apex (device still in the air)
+        if (t >= 1) {
+          tossY.current = tossApexHeight.current;
+        }
+      } else if (phase === "falling") {
+        // Descend from apex to ground
+        const t = Math.min(elapsed / tossFallTime.current, 1);
+        const eased = t * t; // ease-in quad — accelerating down
+        tossY.current = tossApexHeight.current * (1 - eased);
+
+        // Gradually orient feet-down (slerp from tumble toward upright)
+        _tumbleQuat.setFromAxisAngle(_tumbleAxis, tossSpinAngle.current * Math.PI * 2);
+        _landingQuat.identity(); // upright
+        _tumbleQuat.slerp(_landingQuat, t * t); // accelerate toward upright
+        groupRef.current.quaternion.copy(_tumbleQuat);
+
+        if (t >= 1) {
+          // Touchdown — brief landing phase
+          tossPhase.current = "landing";
+          tossStartTime.current = now;
+          tossY.current = 0;
+        }
+      } else if (phase === "landing") {
+        // Quick settle — ease back to normal orientation
+        const t = Math.min(elapsed / 0.3, 1);
         tossY.current = 0;
-        tossVelY.current = 0;
-        tossSpinAngle.current = 0;
-        isTossing.current = false;
+        // Slerp from current to device orientation
+        const settleAlpha = 1 - Math.exp(-15 * delta);
+        smoothQuat.current.slerp(_targetQuat, settleAlpha);
+        groupRef.current.quaternion.copy(smoothQuat.current);
+        if (t >= 1) {
+          tossPhase.current = "idle";
+        }
       }
 
       groupRef.current.position.y = tossY.current;
-
-      // Add a fun tumble spin during toss
-      const tumble = new THREE.Quaternion().setFromAxisAngle(
-        new THREE.Vector3(1, 0, 0.3).normalize(),
-        tossSpinAngle.current * Math.PI * 2,
-      );
-      smoothQuat.current.copy(tumble);
-      groupRef.current.quaternion.copy(smoothQuat.current);
-      return;
+      if (phase !== "landing") return;
     }
 
     // Ease position back to 0 after toss
-    if (Math.abs(groupRef.current.position.y) > 0.01) {
-      groupRef.current.position.y *= 0.9;
+    if (groupRef.current.position.y > 0.01) {
+      groupRef.current.position.y *= 1 - Math.min(5 * delta, 0.95);
     } else {
       groupRef.current.position.y = 0;
     }
