@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
-import { Canvas, useFrame } from "@react-three/fiber";
+import { Canvas, useFrame, extend } from "@react-three/fiber";
 import { Environment, OrbitControls } from "@react-three/drei";
 import * as THREE from "three";
 import {
@@ -11,7 +11,7 @@ import {
 } from "@/app/hooks/stickman";
 
 // ── Constants ──────────────────────────────────────────────────────────────────
-const GRAVITY = 9.8;
+const GRAVITY_ACCEL = 9.8;
 const GLASS_HEIGHT = 2.6;
 const GLASS_RADIUS_TOP = 0.72;
 const GLASS_RADIUS_BOTTOM = 0.5;
@@ -21,72 +21,117 @@ const INNER_RADIUS_TOP = GLASS_RADIUS_TOP - WALL_THICKNESS * 1.9;
 const INNER_RADIUS_BOTTOM = GLASS_RADIUS_BOTTOM - WALL_THICKNESS * 1.9;
 const GROUND_Y = 0;
 const GLASS_CENTER_Y = 1.55;
-// Stream constants
-const STREAM_SEGMENTS = 24;
-const STREAM_RADIUS = 0.035;
-const MAX_SPLASH_PARTICLES = 120;
-const PUDDLE_MAX_RADIUS = 1.8;
+const STREAM_SEGMENTS = 20;
+const STREAM_BASE_RADIUS = 0.03;
+const MAX_SPLASH = 100;
+const PUDDLE_MAX = 1.5;
 
-// ── Shared tilt ref type ───────────────────────────────────────────────────────
+// ── Types ──────────────────────────────────────────────────────────────────────
 interface TiltRef {
   pitch: number;
   roll: number;
 }
 
 // ── Utilities ──────────────────────────────────────────────────────────────────
-function clamp(value: number, min: number, max: number) {
-  return Math.max(min, Math.min(max, value));
+function clamp(v: number, lo: number, hi: number) {
+  return Math.max(lo, Math.min(hi, v));
 }
 
-function damp(current: number, target: number, lambda: number, dt: number) {
-  return THREE.MathUtils.lerp(current, target, 1 - Math.exp(-lambda * dt));
+function damp(cur: number, tgt: number, lambda: number, dt: number) {
+  return THREE.MathUtils.lerp(cur, tgt, 1 - Math.exp(-lambda * dt));
 }
 
-/**
- * Compute water surface geometry for a tilted cylindrical glass.
- */
-function computeWaterState(pitch: number, roll: number, fillRatio: number) {
-  const tiltMag = Math.sqrt(pitch * pitch + roll * roll);
+// ── Liquid Shader Material ─────────────────────────────────────────────────────
+// The core technique: vertices are converted to world space in the vertex shader.
+// The fragment shader discards fragments above (worldPos.y > fillLevel + wobble).
+// Since world Y is always gravity-aligned, the liquid surface stays level
+// regardless of how the container rotates. Front faces = body, back faces = top.
 
-  const waterCenterY = -GLASS_HEIGHT / 2 + fillRatio * GLASS_HEIGHT;
+class LiquidMaterial extends THREE.ShaderMaterial {
+  constructor() {
+    super({
+      uniforms: {
+        fillY: { value: 0 },
+        wobbleX: { value: 0 },
+        wobbleZ: { value: 0 },
+        bodyColor: { value: new THREE.Color("#3aaef5") },
+        topColor: { value: new THREE.Color("#7dd8ff") },
+        foamColor: { value: new THREE.Color("#b8eaff") },
+        foamWidth: { value: 0.06 },
+        rimPower: { value: 2.0 },
+        rimColor: { value: new THREE.Color("#a0dfff") },
+      },
+      vertexShader: /* glsl */ `
+        varying vec3 vWorldPos;
+        varying vec3 vObjNormal;
+        varying vec3 vViewDir;
 
-  const surfaceTiltAngle = tiltMag;
+        void main() {
+          vec4 worldPos = modelMatrix * vec4(position, 1.0);
+          vWorldPos = worldPos.xyz;
+          vObjNormal = normalize(normalMatrix * normal);
+          vViewDir = normalize(cameraPosition - worldPos.xyz);
+          gl_Position = projectionMatrix * viewMatrix * worldPos;
+        }
+      `,
+      fragmentShader: /* glsl */ `
+        uniform float fillY;
+        uniform float wobbleX;
+        uniform float wobbleZ;
+        uniform vec3 bodyColor;
+        uniform vec3 topColor;
+        uniform vec3 foamColor;
+        uniform float foamWidth;
+        uniform float rimPower;
+        uniform vec3 rimColor;
 
-  const t = clamp((waterCenterY + GLASS_HEIGHT / 2) / GLASS_HEIGHT, 0, 1);
-  const radiusAtCenter = THREE.MathUtils.lerp(
-    INNER_RADIUS_BOTTOM,
-    INNER_RADIUS_TOP,
-    t,
-  );
+        varying vec3 vWorldPos;
+        varying vec3 vObjNormal;
+        varying vec3 vViewDir;
 
-  const surfaceOffset = radiusAtCenter * Math.tan(surfaceTiltAngle);
-  const waterHighY = waterCenterY + surfaceOffset;
+        void main() {
+          // Fill edge: world Y threshold with wobble offset
+          float edge = fillY + wobbleX * vWorldPos.x + wobbleZ * vWorldPos.z;
 
-  const rimY = GLASS_HEIGHT / 2;
-  const overflowAmount = waterHighY - rimY;
-  const pourFraction = clamp(overflowAmount / 0.3, 0, 1);
+          // Discard above liquid surface
+          if (vWorldPos.y > edge) discard;
 
-  const pourDirX = tiltMag > 0.001 ? pitch / tiltMag : 0;
-  const pourDirZ = tiltMag > 0.001 ? -roll / tiltMag : 0;
+          // Foam band near the surface
+          float foam = smoothstep(edge - foamWidth, edge, vWorldPos.y);
 
-  const pourPointLocal = new THREE.Vector3(
-    pourDirX * GLASS_RADIUS_TOP,
-    rimY,
-    pourDirZ * GLASS_RADIUS_TOP,
-  );
+          // Rim light (fresnel)
+          float rim = pow(1.0 - max(dot(vObjNormal, vViewDir), 0.0), rimPower);
 
-  return {
-    waterCenterY,
-    surfaceTiltAngle,
-    tiltAxisAngle: Math.atan2(-roll, pitch),
-    pourFraction,
-    pourPointLocal,
-    pourDirX,
-    pourDirZ,
-    waterHighY,
-    waterLowY: waterCenterY - surfaceOffset,
-    radiusAtCenter,
-  };
+          // Front face = liquid body, back face = liquid surface top
+          vec3 col;
+          if (gl_FrontFacing) {
+            col = mix(bodyColor, foamColor, foam * 0.6);
+            col += rimColor * rim * 0.3;
+          } else {
+            col = mix(topColor, foamColor, foam * 0.4);
+            // Subtle radial gradient on top surface
+            col += rimColor * rim * 0.15;
+          }
+
+          gl_FragColor = vec4(col, gl_FrontFacing ? 0.7 : 0.85);
+        }
+      `,
+      transparent: true,
+      side: THREE.DoubleSide,
+      depthWrite: true,
+    });
+  }
+}
+
+extend({ LiquidMaterial });
+
+// Augment JSX for the custom material
+declare module "@react-three/fiber" {
+  interface ThreeElements {
+    liquidMaterial: React.DetailedHTMLProps<React.HTMLAttributes<LiquidMaterial>, LiquidMaterial> & {
+      ref?: React.Ref<LiquidMaterial>;
+    };
+  }
 }
 
 // ── Tilt from orientation hook ─────────────────────────────────────────────────
@@ -130,31 +175,17 @@ function useTiltFromOrientation() {
   return tiltRef;
 }
 
-// ── Glass components ───────────────────────────────────────────────────────────
+// ── Glass Shell ────────────────────────────────────────────────────────────────
 function GlassShell() {
-  const geometry = useMemo(() => {
-    return new THREE.CylinderGeometry(
-      GLASS_RADIUS_TOP,
-      GLASS_RADIUS_BOTTOM,
-      GLASS_HEIGHT,
-      64,
-      1,
-      true,
-    );
-  }, []);
-
+  const geo = useMemo(
+    () => new THREE.CylinderGeometry(GLASS_RADIUS_TOP, GLASS_RADIUS_BOTTOM, GLASS_HEIGHT, 64, 1, true),
+    [],
+  );
   return (
-    <mesh geometry={geometry} castShadow receiveShadow>
+    <mesh geometry={geo}>
       <meshPhysicalMaterial
-        color="#f8fbff"
-        transparent
-        opacity={0.24}
-        transmission={1}
-        roughness={0.03}
-        thickness={0.2}
-        ior={1.45}
-        envMapIntensity={1.1}
-        side={THREE.DoubleSide}
+        color="#f8fbff" transparent opacity={0.18} transmission={1}
+        roughness={0.02} thickness={0.2} ior={1.45} side={THREE.DoubleSide}
       />
     </mesh>
   );
@@ -162,157 +193,130 @@ function GlassShell() {
 
 function GlassBase() {
   return (
-    <mesh
-      position={[0, -GLASS_HEIGHT / 2 + 0.045, 0]}
-      receiveShadow
-      castShadow
-    >
-      <cylinderGeometry
-        args={[
-          GLASS_RADIUS_BOTTOM - 0.03,
-          GLASS_RADIUS_BOTTOM - 0.08,
-          0.08,
-          48,
-        ]}
-      />
+    <mesh position={[0, -GLASS_HEIGHT / 2 + 0.04, 0]}>
+      <cylinderGeometry args={[GLASS_RADIUS_BOTTOM - 0.03, GLASS_RADIUS_BOTTOM - 0.07, 0.07, 48]} />
       <meshPhysicalMaterial
-        color="#f8fbff"
-        transparent
-        opacity={0.3}
-        transmission={1}
-        roughness={0.04}
-        thickness={0.18}
+        color="#f8fbff" transparent opacity={0.22} transmission={1} roughness={0.03} thickness={0.15}
       />
     </mesh>
   );
 }
 
-function GlassRimRing() {
+function GlassRim() {
   return (
-    <mesh position={[0, GLASS_HEIGHT / 2 - 0.01, 0]}>
-      <torusGeometry args={[GLASS_RADIUS_TOP - 0.01, 0.02, 12, 64]} />
-      <meshPhysicalMaterial
-        color="#f8fbff"
-        transparent
-        opacity={0.15}
-        transmission={1}
-        roughness={0.05}
-        thickness={0.1}
-      />
+    <mesh position={[0, GLASS_HEIGHT / 2, 0]} rotation={[Math.PI / 2, 0, 0]}>
+      <torusGeometry args={[GLASS_RADIUS_TOP - 0.005, 0.018, 12, 64]} />
+      <meshPhysicalMaterial color="#eef4ff" transparent opacity={0.12} transmission={1} roughness={0.04} />
     </mesh>
   );
 }
 
-// ── Water body — uses clipping plane to create level surface ───────────────────
-function WaterInside({
+// ── Liquid Body (custom shader) ────────────────────────────────────────────────
+function LiquidBody({
   fillRef,
   tiltRef,
 }: {
   fillRef: React.RefObject<number>;
   tiltRef: React.RefObject<TiltRef>;
 }) {
-  const waterBodyRef = useRef<THREE.Mesh>(null);
-  const surfaceRef = useRef<THREE.Mesh>(null);
-  const surfaceGroupRef = useRef<THREE.Group>(null);
-  const wobbleRef = useRef(0);
+  const matRef = useRef<LiquidMaterial>(null);
+  const wobble = useRef({ x: 0, z: 0, vx: 0, vz: 0 });
+  const prevTilt = useRef({ pitch: 0, roll: 0 });
 
-  const waterGeometry = useMemo(() => {
-    return new THREE.CylinderGeometry(
-      INNER_RADIUS_TOP,
-      INNER_RADIUS_BOTTOM,
-      GLASS_HEIGHT,
-      48,
-      1,
-      false,
-    );
-  }, []);
+  const geo = useMemo(
+    () => new THREE.CylinderGeometry(INNER_RADIUS_TOP, INNER_RADIUS_BOTTOM, GLASS_HEIGHT, 48, 1, false),
+    [],
+  );
 
-  const clipPlaneRef = useRef<THREE.Plane | null>(null);
-
-  useEffect(() => {
-    const plane = new THREE.Plane(new THREE.Vector3(0, -1, 0), 0);
-    clipPlaneRef.current = plane;
-    const mat = new THREE.MeshPhysicalMaterial({
-      color: "#4ab8f0",
-      transparent: true,
-      opacity: 0.65,
-      roughness: 0.05,
-      transmission: 0.3,
-      thickness: 0.2,
-      clippingPlanes: [plane],
-      clipShadows: true,
-      side: THREE.DoubleSide,
-    });
-    if (waterBodyRef.current) {
-      waterBodyRef.current.material = mat;
-    }
-    return () => {
-      mat.dispose();
-    };
-  }, []);
-
-  useFrame((_state, dt) => {
-    const { pitch, roll } = tiltRef.current;
+  useFrame((_, dt) => {
+    if (!matRef.current) return;
+    const tilt = tiltRef.current;
     const fill = fillRef.current;
-    wobbleRef.current += dt * 3.3;
 
-    const ws = computeWaterState(pitch, roll, fill);
-    const ripple =
-      Math.sin(wobbleRef.current * 1.6) * 0.012 +
-      Math.cos(wobbleRef.current * 1.1) * 0.008;
+    // Spring-damper wobble from tilt velocity
+    const dpitch = tilt.pitch - prevTilt.current.pitch;
+    const droll = tilt.roll - prevTilt.current.roll;
+    prevTilt.current = { pitch: tilt.pitch, roll: tilt.roll };
 
-    const tiltMag = Math.sqrt(pitch * pitch + roll * roll);
-    const nx = -Math.sin(pitch);
-    const ny = -Math.cos(tiltMag);
-    const nz = Math.sin(roll);
-    const len = Math.sqrt(nx * nx + ny * ny + nz * nz);
+    const stiffness = 8;
+    const damping = 3;
+    wobble.current.vx += dpitch * 40 * dt;
+    wobble.current.vz += droll * 40 * dt;
+    wobble.current.vx += -wobble.current.x * stiffness * dt;
+    wobble.current.vz += -wobble.current.z * stiffness * dt;
+    wobble.current.vx *= Math.exp(-damping * dt);
+    wobble.current.vz *= Math.exp(-damping * dt);
+    wobble.current.x += wobble.current.vx * dt;
+    wobble.current.z += wobble.current.vz * dt;
 
-    const cp = clipPlaneRef.current;
-    if (cp) {
-      cp.normal.set(nx / len, ny / len, nz / len);
-      cp.constant =
-        ((ws.waterCenterY + ripple) * Math.cos(tiltMag)) / len;
-    }
+    // Fill Y in world space: glass center Y + fill offset from bottom
+    const fillWorldY = GLASS_CENTER_Y - GLASS_HEIGHT / 2 + fill * GLASS_HEIGHT;
 
-    if (waterBodyRef.current) {
-      waterBodyRef.current.visible = fill > 0.005;
-    }
-
-    if (surfaceGroupRef.current && surfaceRef.current) {
-      surfaceGroupRef.current.position.y = ws.waterCenterY + ripple;
-      surfaceGroupRef.current.rotation.x = -pitch;
-      surfaceGroupRef.current.rotation.z = roll;
-      surfaceRef.current.visible = fill > 0.005;
-
-      const surfaceRadius = ws.radiusAtCenter;
-      surfaceRef.current.scale.set(
-        surfaceRadius / INNER_RADIUS_TOP,
-        surfaceRadius / INNER_RADIUS_TOP,
-        1,
-      );
-    }
+    matRef.current.uniforms.fillY.value = fillWorldY;
+    matRef.current.uniforms.wobbleX.value = wobble.current.x;
+    matRef.current.uniforms.wobbleZ.value = wobble.current.z;
   });
 
   return (
-    <group>
-      <mesh ref={waterBodyRef} geometry={waterGeometry} />
-      <group ref={surfaceGroupRef} rotation={[-Math.PI / 2, 0, 0]}>
-        <mesh ref={surfaceRef} rotation={[Math.PI / 2, 0, 0]}>
-          <circleGeometry args={[INNER_RADIUS_TOP, 48]} />
-          <meshStandardMaterial
-            color="#8bdcff"
-            transparent
-            opacity={0.82}
-            side={THREE.DoubleSide}
-          />
-        </mesh>
-      </group>
-    </group>
+    <mesh geometry={geo} visible={true}>
+      <liquidMaterial ref={matRef} />
+    </mesh>
   );
 }
 
-// ── Water Stream — tube geometry from rim to ground ──────────────────────────
-interface WaterStreamProps {
+// ── Compute pour state ─────────────────────────────────────────────────────────
+function computePourState(
+  groupRef: React.RefObject<THREE.Group | null>,
+  fillRatio: number,
+  tilt: TiltRef,
+) {
+  if (!groupRef.current) return null;
+
+  const tiltMag = Math.sqrt(tilt.pitch * tilt.pitch + tilt.roll * tilt.roll);
+  if (tiltMag < 0.01) return null;
+
+  // Fill level in world Y
+  const fillWorldY = GLASS_CENTER_Y - GLASS_HEIGHT / 2 + fillRatio * GLASS_HEIGHT;
+
+  // Rim in world space — the lowest point of the rim when tilted
+  // Direction of tilt (where the glass tips toward)
+  const tdx = tilt.pitch / tiltMag;
+  const tdz = -tilt.roll / tiltMag;
+
+  // The lowest rim point in local space
+  const localRimPoint = new THREE.Vector3(
+    tdx * GLASS_RADIUS_TOP,
+    GLASS_HEIGHT / 2,
+    tdz * GLASS_RADIUS_TOP,
+  );
+
+  // Transform to world
+  groupRef.current.updateWorldMatrix(true, false);
+  const worldRimPoint = localRimPoint.applyMatrix4(groupRef.current.matrixWorld);
+
+  // Water level at the rim position (accounting for the flat world-space surface)
+  // The water surface in world space is at fillWorldY
+  // But it needs to account for the radius offset (water rises on the tilt side)
+  const rimSideOffset = GLASS_RADIUS_TOP * Math.sin(tiltMag);
+  const waterAtRim = fillWorldY + rimSideOffset;
+
+  const overflow = waterAtRim - worldRimPoint.y;
+  if (overflow <= 0) return null;
+
+  const pourFraction = clamp(overflow / 0.4, 0, 1);
+
+  return {
+    pourFraction,
+    worldRimPoint,
+    pourDirX: tdx,
+    pourDirZ: tdz,
+    pitch: tilt.pitch,
+    roll: tilt.roll,
+  };
+}
+
+// ── Water Stream (tube geometry) ───────────────────────────────────────────────
+interface StreamProps {
   sourceRef: React.RefObject<THREE.Group | null>;
   tiltRef: React.RefObject<TiltRef>;
   fillRef: React.RefObject<number>;
@@ -320,531 +324,222 @@ interface WaterStreamProps {
   resetToken: number;
 }
 
-function WaterStream({
-  sourceRef,
-  tiltRef,
-  fillRef,
-  onDrain,
-  resetToken,
-}: WaterStreamProps) {
-  const streamMeshRef = useRef<THREE.Mesh>(null);
-  const dripMeshRef = useRef<THREE.InstancedMesh>(null);
-  const splashPointsRef = useRef<THREE.Points>(null);
+function WaterStream({ sourceRef, tiltRef, fillRef, onDrain, resetToken }: StreamProps) {
+  const streamRef = useRef<THREE.Mesh>(null);
+  const splashRef = useRef<THREE.Points>(null);
   const splashGeoRef = useRef<THREE.BufferGeometry>(null);
   const puddleRef = useRef<THREE.Mesh>(null);
-  const pourActiveRef = useRef(false);
-  const totalDrainedRef = useRef(0);
-  const streamPhaseRef = useRef(0);
+  const totalDrained = useRef(0);
+  const phaseRef = useRef(0);
+  const splashPosRef = useRef(new Float32Array(MAX_SPLASH * 3));
 
-  // Reusable vectors
-  const _origin = useMemo(() => new THREE.Vector3(), []);
-  const _dir = useMemo(() => new THREE.Vector3(), []);
-  const _tmpMat = useMemo(() => new THREE.Matrix4(), []);
-  const _tmpQuat = useMemo(() => new THREE.Quaternion(), []);
-  const _tmpScale = useMemo(() => new THREE.Vector3(), []);
-  // Splash particle data
-  interface SplashParticle {
-    active: boolean;
-    x: number;
-    y: number;
-    z: number;
-    vx: number;
-    vy: number;
-    vz: number;
-    age: number;
-    life: number;
-  }
+  interface SplashP { active: boolean; x: number; y: number; z: number; vx: number; vy: number; vz: number; age: number; life: number; }
+  const splashData = useRef<SplashP[]>([]);
+  const splashCarry = useRef(0);
 
-  const splashParticlesRef = useRef<SplashParticle[]>([]);
-  const splashPositionsRef = useRef<Float32Array | null>(null);
-  const splashAlphasRef = useRef<Float32Array | null>(null);
-  const spawnCarryRef = useRef(0);
-
-  // Drip particles: small instanced spheres along the stream
-  const NUM_DRIPS = 20;
-  interface DripParticle {
-    active: boolean;
-    x: number;
-    y: number;
-    z: number;
-    vx: number;
-    vy: number;
-    vz: number;
-    age: number;
-    life: number;
-    size: number;
-  }
-  const dripParticlesRef = useRef<DripParticle[]>([]);
-  const dripSpawnRef = useRef(0);
-
-  // Initialize splash particles
   useEffect(() => {
-    const particles: SplashParticle[] = [];
-    for (let i = 0; i < MAX_SPLASH_PARTICLES; i++) {
-      particles.push({
-        active: false,
-        x: 0,
-        y: -100,
-        z: 0,
-        vx: 0,
-        vy: 0,
-        vz: 0,
-        age: 0,
-        life: 1,
-      });
+    const arr: SplashP[] = [];
+    for (let i = 0; i < MAX_SPLASH; i++) {
+      arr.push({ active: false, x: 0, y: -100, z: 0, vx: 0, vy: 0, vz: 0, age: 0, life: 0.5 });
     }
-    splashParticlesRef.current = particles;
-    splashPositionsRef.current = new Float32Array(MAX_SPLASH_PARTICLES * 3);
-    splashAlphasRef.current = new Float32Array(MAX_SPLASH_PARTICLES);
-
-    const drips: DripParticle[] = [];
-    for (let i = 0; i < NUM_DRIPS; i++) {
-      drips.push({
-        active: false,
-        x: 0,
-        y: -100,
-        z: 0,
-        vx: 0,
-        vy: 0,
-        vz: 0,
-        age: 0,
-        life: 1,
-        size: 0.03,
-      });
-    }
-    dripParticlesRef.current = drips;
+    splashData.current = arr;
   }, []);
 
-  // Set up splash geometry attributes
   useEffect(() => {
-    if (!splashGeoRef.current || !splashPositionsRef.current || !splashAlphasRef.current) return;
-    splashGeoRef.current.setAttribute(
-      "position",
-      new THREE.BufferAttribute(splashPositionsRef.current, 3),
-    );
-    splashGeoRef.current.setAttribute(
-      "alpha",
-      new THREE.BufferAttribute(splashAlphasRef.current, 1),
-    );
+    if (!splashGeoRef.current) return;
+    splashGeoRef.current.setAttribute("position", new THREE.BufferAttribute(splashPosRef.current, 3));
   }, []);
 
-  // Reset
   useEffect(() => {
-    totalDrainedRef.current = 0;
-    pourActiveRef.current = false;
-    spawnCarryRef.current = 0;
-    dripSpawnRef.current = 0;
-    const sp = splashParticlesRef.current;
-    for (let i = 0; i < sp.length; i++) {
-      sp[i].active = false;
-    }
-    const dp = dripParticlesRef.current;
-    for (let i = 0; i < dp.length; i++) {
-      dp[i].active = false;
-    }
-    if (puddleRef.current) {
-      puddleRef.current.scale.set(0, 1, 0);
-    }
+    totalDrained.current = 0;
+    splashCarry.current = 0;
+    splashData.current.forEach(p => { p.active = false; });
+    if (puddleRef.current) puddleRef.current.scale.set(0, 1, 0);
   }, [resetToken]);
 
-  // Sprite texture for splash
-  const splashSprite = useMemo(() => {
-    const canvas = document.createElement("canvas");
-    canvas.width = 64;
-    canvas.height = 64;
-    const ctx = canvas.getContext("2d")!;
-    const gradient = ctx.createRadialGradient(32, 32, 2, 32, 32, 28);
-    gradient.addColorStop(0, "rgba(180,230,255,1)");
-    gradient.addColorStop(0.5, "rgba(140,210,255,0.7)");
-    gradient.addColorStop(1, "rgba(100,190,255,0)");
-    ctx.fillStyle = gradient;
-    ctx.beginPath();
-    ctx.arc(32, 32, 28, 0, Math.PI * 2);
-    ctx.fill();
-    const texture = new THREE.CanvasTexture(canvas);
-    texture.needsUpdate = true;
-    return texture;
-  }, []);
+  const streamMat = useMemo(() => new THREE.MeshPhysicalMaterial({
+    color: "#58c0f0", transparent: true, opacity: 0.75,
+    roughness: 0.04, transmission: 0.35, thickness: 0.12, side: THREE.DoubleSide,
+  }), []);
 
-  // Stream material
-  const streamMaterial = useMemo(() => {
-    return new THREE.MeshPhysicalMaterial({
-      color: "#68c8f8",
-      transparent: true,
-      opacity: 0.7,
-      roughness: 0.05,
-      transmission: 0.4,
-      thickness: 0.15,
-      side: THREE.DoubleSide,
-    });
-  }, []);
-
-  // Drip sphere geometry
-  const dripGeo = useMemo(() => new THREE.SphereGeometry(1, 8, 6), []);
-  const dripMat = useMemo(
-    () =>
-      new THREE.MeshPhysicalMaterial({
-        color: "#78d0ff",
-        transparent: true,
-        opacity: 0.75,
-        roughness: 0.05,
-        transmission: 0.3,
-        thickness: 0.1,
-      }),
-    [],
-  );
-
-  // Splash point material using custom shader for per-particle alpha
-  const splashMaterial = useMemo(() => {
+  const splashMat = useMemo(() => {
+    const c = document.createElement("canvas");
+    c.width = 32; c.height = 32;
+    const ctx = c.getContext("2d")!;
+    const g = ctx.createRadialGradient(16, 16, 1, 16, 16, 14);
+    g.addColorStop(0, "rgba(180,230,255,1)");
+    g.addColorStop(1, "rgba(100,200,255,0)");
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(16, 16, 14, 0, Math.PI * 2); ctx.fill();
+    const tex = new THREE.CanvasTexture(c);
     return new THREE.PointsMaterial({
-      size: 0.12,
-      map: splashSprite,
-      transparent: true,
-      depthWrite: false,
-      color: new THREE.Color("#a0e0ff"),
-      opacity: 0.9,
-      sizeAttenuation: true,
-      blending: THREE.NormalBlending,
+      size: 0.08, map: tex, transparent: true, depthWrite: false,
+      color: "#90ddff", opacity: 0.8, sizeAttenuation: true,
     });
-  }, [splashSprite]);
+  }, []);
+
+  const dummyGeo = useMemo(() => new THREE.BufferGeometry(), []);
 
   useFrame((_, dt) => {
-    if (!sourceRef.current) return;
+    if (!streamRef.current) return;
+    phaseRef.current += dt;
 
-    const { pitch, roll } = tiltRef.current;
-    const fillRatio = fillRef.current;
+    const tilt = tiltRef.current;
+    const fill = fillRef.current;
+    const pour = computePourState(sourceRef, fill, tilt);
 
-    const ws = computeWaterState(pitch, roll, fillRatio);
-    const pouring = ws.pourFraction > 0.001 && fillRatio > 0.02;
-    pourActiveRef.current = pouring;
+    if (pour && fill > 0.01) {
+      streamRef.current.visible = true;
 
-    streamPhaseRef.current += dt;
+      // Build stream arc from rim to ground
+      const ox = pour.worldRimPoint.x;
+      const oy = pour.worldRimPoint.y;
+      const oz = pour.worldRimPoint.z;
 
-    // Compute pour origin in world space
-    _origin.copy(ws.pourPointLocal);
-    sourceRef.current.updateWorldMatrix(true, false);
-    _origin.applyMatrix4(sourceRef.current.matrixWorld);
+      const outSpeed = 0.6 + pour.pourFraction * 1.2;
+      const vx = pour.pourDirX * outSpeed;
+      const vz = pour.pourDirZ * outSpeed;
 
-    // Pour direction: outward + down
-    const outSpeed = 0.8 + ws.pourFraction * 1.5;
-    _dir.set(ws.pourDirX * outSpeed, -0.3, ws.pourDirZ * outSpeed);
-    const euler = new THREE.Euler(pitch, 0, -roll, "XYZ");
-    _dir.applyEuler(euler);
+      const fallH = Math.max(oy - GROUND_Y, 0.1);
+      const fallT = Math.sqrt(2 * fallH / GRAVITY_ACCEL);
 
-    // ── Update stream tube ──────────────────────────────────────────────
-    if (streamMeshRef.current) {
-      if (pouring) {
-        // Build a catmull-rom curve from pour point to ground
-        const points: THREE.Vector3[] = [];
-        const ox = _origin.x;
-        const oy = _origin.y;
-        const oz = _origin.z;
+      const pts: THREE.Vector3[] = [];
+      for (let i = 0; i <= STREAM_SEGMENTS; i++) {
+        const f = i / STREAM_SEGMENTS;
+        const t = f * fallT;
+        pts.push(new THREE.Vector3(
+          ox + vx * t,
+          Math.max(GROUND_Y + 0.01, oy - 0.5 * GRAVITY_ACCEL * t * t),
+          oz + vz * t,
+        ));
+      }
 
-        const fallHeight = oy - GROUND_Y;
-        const fallTime = Math.sqrt((2 * fallHeight) / GRAVITY);
+      const curve = new THREE.CatmullRomCurve3(pts, false, "catmullrom", 0.2);
 
-        const numPts = STREAM_SEGMENTS + 1;
-        for (let i = 0; i < numPts; i++) {
-          const frac = i / (numPts - 1);
-          const t = frac * fallTime;
-          const px = ox + _dir.x * t;
-          const py = oy + _dir.y * t - 0.5 * GRAVITY * t * t;
-          const pz = oz + _dir.z * t;
+      // Build tube with tapering radius
+      const tubeSeg = STREAM_SEGMENTS;
+      const radSeg = 6;
+      const frames = curve.computeFrenetFrames(tubeSeg, false);
+      const verts: number[] = [];
+      const norms: number[] = [];
+      const idxs: number[] = [];
 
-          // Clamp to ground
-          const finalY = Math.max(GROUND_Y + 0.01, py);
-          points.push(new THREE.Vector3(px, finalY, pz));
+      for (let i = 0; i <= tubeSeg; i++) {
+        const tf = i / tubeSeg;
+        const pos = curve.getPointAt(tf);
+        const N = frames.normals[i];
+        const B = frames.binormals[i];
+        // Taper: thick at top, thin at bottom, with wobble
+        const r = STREAM_BASE_RADIUS * pour.pourFraction * (1 - tf * 0.6) *
+          (1 + 0.1 * Math.sin(phaseRef.current * 10 + tf * 15));
+
+        for (let j = 0; j <= radSeg; j++) {
+          const a = (j / radSeg) * Math.PI * 2;
+          const s = Math.sin(a);
+          const c = -Math.cos(a);
+          const nx = c * N.x + s * B.x;
+          const ny = c * N.y + s * B.y;
+          const nz = c * N.z + s * B.z;
+          verts.push(pos.x + r * nx, pos.y + r * ny, pos.z + r * nz);
+          norms.push(nx, ny, nz);
         }
+      }
 
-        const curve = new THREE.CatmullRomCurve3(points, false, "catmullrom", 0.3);
-
-        // Vary radius along stream: thicker at top, thinner as it falls
-        const radiusFunc = (tParam: number) => {
-          const base = STREAM_RADIUS * ws.pourFraction;
-          const taper = 1 - tParam * 0.5;
-          const wobble =
-            1 +
-            0.08 *
-              Math.sin(
-                streamPhaseRef.current * 8 + tParam * 12,
-              );
-          return base * taper * wobble;
-        };
-
-        // Build tube geometry with varying radius
-        const tubularSegments = STREAM_SEGMENTS;
-        const radialSegments = 8;
-
-        const frames = curve.computeFrenetFrames(tubularSegments, false);
-        const vertices: number[] = [];
-        const normals: number[] = [];
-        const indices: number[] = [];
-
-        for (let i = 0; i <= tubularSegments; i++) {
-          const tParam = i / tubularSegments;
-          const pos = curve.getPointAt(tParam);
-          const N = frames.normals[i];
-          const B = frames.binormals[i];
-          const r = radiusFunc(tParam);
-
-          for (let j = 0; j <= radialSegments; j++) {
-            const v = (j / radialSegments) * Math.PI * 2;
-            const sin = Math.sin(v);
-            const cos = -Math.cos(v);
-
-            const nx = cos * N.x + sin * B.x;
-            const ny = cos * N.y + sin * B.y;
-            const nz = cos * N.z + sin * B.z;
-
-            vertices.push(
-              pos.x + r * nx,
-              pos.y + r * ny,
-              pos.z + r * nz,
-            );
-            normals.push(nx, ny, nz);
-          }
+      for (let i = 0; i < tubeSeg; i++) {
+        for (let j = 0; j < radSeg; j++) {
+          const a = i * (radSeg + 1) + j;
+          const b = (i + 1) * (radSeg + 1) + j;
+          const c2 = (i + 1) * (radSeg + 1) + (j + 1);
+          const d = i * (radSeg + 1) + (j + 1);
+          idxs.push(a, b, d, b, c2, d);
         }
+      }
 
-        for (let i = 0; i < tubularSegments; i++) {
-          for (let j = 0; j < radialSegments; j++) {
-            const a = i * (radialSegments + 1) + j;
-            const b = (i + 1) * (radialSegments + 1) + j;
-            const c = (i + 1) * (radialSegments + 1) + (j + 1);
-            const d = i * (radialSegments + 1) + (j + 1);
-            indices.push(a, b, d);
-            indices.push(b, c, d);
-          }
-        }
+      const newGeo = new THREE.BufferGeometry();
+      newGeo.setAttribute("position", new THREE.Float32BufferAttribute(verts, 3));
+      newGeo.setAttribute("normal", new THREE.Float32BufferAttribute(norms, 3));
+      newGeo.setIndex(idxs);
 
-        const geo = new THREE.BufferGeometry();
-        geo.setAttribute(
-          "position",
-          new THREE.Float32BufferAttribute(vertices, 3),
-        );
-        geo.setAttribute(
-          "normal",
-          new THREE.Float32BufferAttribute(normals, 3),
-        );
-        geo.setIndex(indices);
+      const old = streamRef.current.geometry;
+      streamRef.current.geometry = newGeo;
+      if (old !== dummyGeo) old.dispose();
 
-        const oldGeo = streamMeshRef.current.geometry;
-        streamMeshRef.current.geometry = geo;
-        oldGeo.dispose();
+      // Drain
+      const drain = pour.pourFraction * 0.14 * dt;
+      onDrain(drain);
+      totalDrained.current += drain;
 
-        streamMeshRef.current.visible = true;
+      // Splash at impact
+      const impactX = ox + vx * fallT;
+      const impactZ = oz + vz * fallT;
+      splashCarry.current += pour.pourFraction * 60 * dt;
+      const sc = Math.floor(splashCarry.current);
+      splashCarry.current -= sc;
+      const sp = splashData.current;
+      for (let s = 0; s < sc; s++) {
+        const p = sp.find(q => !q.active);
+        if (!p) break;
+        p.active = true;
+        p.x = impactX + (Math.random() - 0.5) * 0.12;
+        p.y = GROUND_Y + 0.02;
+        p.z = impactZ + (Math.random() - 0.5) * 0.12;
+        const ang = Math.random() * Math.PI * 2;
+        const spd = 0.3 + Math.random() * 1.2;
+        p.vx = Math.cos(ang) * spd;
+        p.vy = 0.8 + Math.random() * 2;
+        p.vz = Math.sin(ang) * spd;
+        p.age = 0;
+        p.life = 0.2 + Math.random() * 0.4;
+      }
+    } else {
+      streamRef.current.visible = false;
+    }
 
-        // Drain
-        const drain = ws.pourFraction * 0.16 * dt;
-        onDrain(drain);
-        totalDrainedRef.current += drain;
-
-        // ── Spawn drip particles near stream ────────────────────────
-        dripSpawnRef.current += ws.pourFraction * 40 * dt;
-        const dripSpawnCount = Math.floor(dripSpawnRef.current);
-        dripSpawnRef.current -= dripSpawnCount;
-
-        const drips = dripParticlesRef.current;
-        for (let s = 0; s < dripSpawnCount; s++) {
-          const p = drips.find((item) => !item.active);
-          if (!p) break;
-          p.active = true;
-          const tParam = Math.random() * 0.8;
-          const tFall = tParam * fallTime;
-          p.x = ox + _dir.x * tFall + (Math.random() - 0.5) * 0.08;
-          p.y =
-            oy +
-            _dir.y * tFall -
-            0.5 * GRAVITY * tFall * tFall +
-            (Math.random() - 0.5) * 0.05;
-          p.z = oz + _dir.z * tFall + (Math.random() - 0.5) * 0.08;
-          p.vx = _dir.x * 0.3 + (Math.random() - 0.5) * 0.4;
-          p.vy = -Math.random() * 1.5;
-          p.vz = _dir.z * 0.3 + (Math.random() - 0.5) * 0.4;
-          p.age = 0;
-          p.life = 0.5 + Math.random() * 0.7;
-          p.size = 0.02 + Math.random() * 0.03;
-        }
-
-        // ── Splash at ground impact ──────────────────────────────────
-        // Find where stream hits ground
-        const impactT = fallTime;
-        const impactX = ox + _dir.x * impactT;
-        const impactZ = oz + _dir.z * impactT;
-
-        spawnCarryRef.current += ws.pourFraction * 80 * dt;
-        const splashSpawnCount = Math.floor(spawnCarryRef.current);
-        spawnCarryRef.current -= splashSpawnCount;
-
-        const splashParts = splashParticlesRef.current;
-        for (let s = 0; s < splashSpawnCount; s++) {
-          const p = splashParts.find((item) => !item.active);
-          if (!p) break;
-          p.active = true;
-          p.x = impactX + (Math.random() - 0.5) * 0.15;
-          p.y = GROUND_Y + 0.02;
-          p.z = impactZ + (Math.random() - 0.5) * 0.15;
-          const angle = Math.random() * Math.PI * 2;
-          const speed = 0.5 + Math.random() * 1.5;
-          p.vx = Math.cos(angle) * speed;
-          p.vy = 1.0 + Math.random() * 2.5;
-          p.vz = Math.sin(angle) * speed;
-          p.age = 0;
-          p.life = 0.3 + Math.random() * 0.5;
-        }
+    // Update splash particles
+    const positions = splashPosRef.current;
+    for (let i = 0; i < splashData.current.length; i++) {
+      const p = splashData.current[i];
+      const i3 = i * 3;
+      if (p.active) {
+        p.age += dt;
+        p.vy -= GRAVITY_ACCEL * 0.6 * dt;
+        p.vx *= 1 - dt * 3;
+        p.vz *= 1 - dt * 3;
+        p.x += p.vx * dt;
+        p.y += p.vy * dt;
+        p.z += p.vz * dt;
+        if (p.y < GROUND_Y + 0.01) { p.y = GROUND_Y + 0.01; p.vy *= -0.1; }
+        if (p.age >= p.life) p.active = false;
+      }
+      if (p.active) {
+        positions[i3] = p.x; positions[i3 + 1] = p.y; positions[i3 + 2] = p.z;
       } else {
-        streamMeshRef.current.visible = false;
+        positions[i3] = 0; positions[i3 + 1] = -100; positions[i3 + 2] = 0;
       }
     }
-
-    // ── Update drip instances ──────────────────────────────────────────
-    if (dripMeshRef.current) {
-      const drips = dripParticlesRef.current;
-      for (let i = 0; i < drips.length; i++) {
-        const p = drips[i];
-        if (p.active) {
-          p.age += dt;
-          p.vy -= GRAVITY * dt;
-          p.x += p.vx * dt;
-          p.y += p.vy * dt;
-          p.z += p.vz * dt;
-
-          if (p.y < GROUND_Y + 0.01) {
-            p.active = false;
-          }
-          if (p.age >= p.life) {
-            p.active = false;
-          }
-
-          if (p.active) {
-            _tmpScale.set(p.size, p.size * 1.5, p.size);
-            _tmpMat.compose(
-              new THREE.Vector3(p.x, p.y, p.z),
-              _tmpQuat,
-              _tmpScale,
-            );
-            dripMeshRef.current.setMatrixAt(i, _tmpMat);
-          } else {
-            _tmpMat.makeScale(0, 0, 0);
-            _tmpMat.setPosition(0, -100, 0);
-            dripMeshRef.current.setMatrixAt(i, _tmpMat);
-          }
-        } else {
-          _tmpMat.makeScale(0, 0, 0);
-          _tmpMat.setPosition(0, -100, 0);
-          dripMeshRef.current.setMatrixAt(i, _tmpMat);
-        }
-      }
-      dripMeshRef.current.instanceMatrix.needsUpdate = true;
+    if (splashGeoRef.current?.attributes.position) {
+      (splashGeoRef.current.attributes.position as THREE.BufferAttribute).needsUpdate = true;
     }
 
-    // ── Update splash particles ──────────────────────────────────────
-    const positions = splashPositionsRef.current;
-    const alphas = splashAlphasRef.current;
-    if (positions && alphas && splashGeoRef.current) {
-      const splashParts = splashParticlesRef.current;
-      for (let i = 0; i < splashParts.length; i++) {
-        const p = splashParts[i];
-        const i3 = i * 3;
-        if (p.active) {
-          p.age += dt;
-          p.vy -= GRAVITY * 0.8 * dt;
-          p.vx *= 1 - dt * 2;
-          p.vz *= 1 - dt * 2;
-          p.x += p.vx * dt;
-          p.y += p.vy * dt;
-          p.z += p.vz * dt;
-
-          if (p.y < GROUND_Y + 0.01) {
-            p.y = GROUND_Y + 0.01;
-            p.vy *= -0.15;
-            if (Math.abs(p.vy) < 0.1) p.active = false;
-          }
-
-          if (p.age >= p.life) {
-            p.active = false;
-          }
-
-          if (p.active) {
-            positions[i3] = p.x;
-            positions[i3 + 1] = p.y;
-            positions[i3 + 2] = p.z;
-            alphas[i] = 1 - p.age / p.life;
-          } else {
-            positions[i3] = 0;
-            positions[i3 + 1] = -100;
-            positions[i3 + 2] = 0;
-            alphas[i] = 0;
-          }
-        } else {
-          positions[i3] = 0;
-          positions[i3 + 1] = -100;
-          positions[i3 + 2] = 0;
-          alphas[i] = 0;
-        }
-      }
-      const posAttr = splashGeoRef.current.attributes
-        .position as THREE.BufferAttribute;
-      if (posAttr) posAttr.needsUpdate = true;
-    }
-
-    // ── Update puddle ──────────────────────────────────────────────────
+    // Puddle
     if (puddleRef.current) {
-      const targetRadius = clamp(
-        totalDrainedRef.current * 2.5,
-        0,
-        PUDDLE_MAX_RADIUS,
-      );
-      const current = puddleRef.current.scale.x;
-      const newScale = damp(current, targetRadius, 2, dt);
-      puddleRef.current.scale.set(newScale, 1, newScale);
-      puddleRef.current.visible = totalDrainedRef.current > 0.001;
+      const target = clamp(totalDrained.current * 2, 0, PUDDLE_MAX);
+      const cur = puddleRef.current.scale.x;
+      puddleRef.current.scale.set(damp(cur, target, 2, dt), 1, damp(cur, target, 2, dt));
+      puddleRef.current.visible = totalDrained.current > 0.001;
     }
   });
 
-  // Dummy geometry for stream initially (will be replaced in useFrame)
-  const dummyGeo = useMemo(() => {
-    return new THREE.BufferGeometry();
-  }, []);
-
   return (
     <group>
-      {/* Main water stream tube */}
-      <mesh
-        ref={streamMeshRef}
-        geometry={dummyGeo}
-        material={streamMaterial}
-        visible={false}
-        frustumCulled={false}
-      />
-
-      {/* Drip droplets near stream */}
-      <instancedMesh
-        ref={dripMeshRef}
-        args={[dripGeo, dripMat, NUM_DRIPS]}
-        frustumCulled={false}
-      />
-
-      {/* Splash particles at ground */}
-      <points ref={splashPointsRef} frustumCulled={false}>
+      <mesh ref={streamRef} geometry={dummyGeo} material={streamMat} visible={false} frustumCulled={false} />
+      <points ref={splashRef} frustumCulled={false}>
         <bufferGeometry ref={splashGeoRef} />
-        <primitive object={splashMaterial} attach="material" />
+        <primitive object={splashMat} attach="material" />
       </points>
-
-      {/* Puddle on ground */}
-      <mesh
-        ref={puddleRef}
-        rotation={[-Math.PI / 2, 0, 0]}
-        position={[0, GROUND_Y + 0.003, 0]}
-        visible={false}
-      >
+      <mesh ref={puddleRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, GROUND_Y + 0.003, 0]} visible={false}>
         <circleGeometry args={[1, 48]} />
-        <meshStandardMaterial
-          color="#3a9fd8"
-          transparent
-          opacity={0.35}
-          roughness={0.1}
-          metalness={0.3}
-        />
+        <meshStandardMaterial color="#3a9fd8" transparent opacity={0.3} roughness={0.1} metalness={0.3} />
       </mesh>
     </group>
   );
@@ -854,23 +549,11 @@ function WaterStream({
 function Ground() {
   return (
     <>
-      <mesh
-        receiveShadow
-        rotation={[-Math.PI / 2, 0, 0]}
-        position={[0, 0, 0]}
-      >
+      <mesh receiveShadow rotation={[-Math.PI / 2, 0, 0]}>
         <planeGeometry args={[40, 40]} />
-        <meshStandardMaterial
-          color="#1c2430"
-          roughness={0.98}
-          metalness={0.02}
-        />
+        <meshStandardMaterial color="#1c2430" roughness={0.98} metalness={0.02} />
       </mesh>
-      <mesh
-        receiveShadow
-        rotation={[-Math.PI / 2, 0, 0]}
-        position={[0, 0.002, 0]}
-      >
+      <mesh receiveShadow rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.002, 0]}>
         <circleGeometry args={[4.75, 64]} />
         <meshStandardMaterial color="#202b37" roughness={1} />
       </mesh>
@@ -878,24 +561,24 @@ function Ground() {
   );
 }
 
-// ── Glass assembly ────────────────────────────────────────────────────────────
-interface GlassOfWaterProps {
+// ── Glass Assembly ─────────────────────────────────────────────────────────────
+interface GlassProps {
   fillRef: React.RefObject<number>;
   onDrain: (amount: number) => void;
   resetToken: number;
 }
 
-function GlassOfWater({ fillRef, onDrain, resetToken }: GlassOfWaterProps) {
+function GlassOfWater({ fillRef, onDrain, resetToken }: GlassProps) {
   const tiltRef = useTiltFromOrientation();
   const groupRef = useRef<THREE.Group>(null);
   const smoothTiltRef = useRef<TiltRef>({ pitch: 0.15, roll: 0 });
 
   useFrame((_, dt) => {
     if (!groupRef.current) return;
-    const tilt = tiltRef.current;
+    const t = tiltRef.current;
     smoothTiltRef.current = {
-      pitch: damp(smoothTiltRef.current.pitch, tilt.pitch, 7, dt),
-      roll: damp(smoothTiltRef.current.roll, -tilt.roll, 7, dt),
+      pitch: damp(smoothTiltRef.current.pitch, t.pitch, 7, dt),
+      roll: damp(smoothTiltRef.current.roll, -t.roll, 7, dt),
     };
     groupRef.current.rotation.x = smoothTiltRef.current.pitch;
     groupRef.current.rotation.z = smoothTiltRef.current.roll;
@@ -906,10 +589,9 @@ function GlassOfWater({ fillRef, onDrain, resetToken }: GlassOfWaterProps) {
       <group ref={groupRef} position={[0, GLASS_CENTER_Y, 0]}>
         <GlassShell />
         <GlassBase />
-        <GlassRimRing />
-        <WaterInside fillRef={fillRef} tiltRef={smoothTiltRef} />
+        <GlassRim />
+        <LiquidBody fillRef={fillRef} tiltRef={smoothTiltRef} />
       </group>
-
       <WaterStream
         sourceRef={groupRef}
         tiltRef={smoothTiltRef}
@@ -921,19 +603,12 @@ function GlassOfWater({ fillRef, onDrain, resetToken }: GlassOfWaterProps) {
   );
 }
 
-// ── HUD (HTML overlay, outside Canvas) ──────────────────────────────────────
-function HUD({
-  fillRatio,
-  onReset,
-}: {
-  fillRatio: number;
-  onReset: () => void;
-}) {
-  const pct = Math.round(fillRatio * 100);
+// ── HUD ────────────────────────────────────────────────────────────────────────
+function HUD({ fillRatio, onReset }: { fillRatio: number; onReset: () => void }) {
   return (
     <div className="pointer-events-none fixed inset-0 z-50">
       <div className="pointer-events-auto absolute bottom-6 right-6 flex items-center gap-3 rounded-xl border border-white/10 bg-black/40 px-4 py-2.5 text-white backdrop-blur-md">
-        <span className="text-xs font-medium text-cyan-200">{pct}%</span>
+        <span className="text-xs font-medium text-cyan-200">{Math.round(fillRatio * 100)}%</span>
         <button
           className="rounded-md bg-white/10 px-2.5 py-1 text-xs font-medium transition hover:bg-white/20"
           onClick={onReset}
@@ -946,60 +621,37 @@ function HUD({
 }
 
 // ── Scene ──────────────────────────────────────────────────────────────────────
-function WaterScene({ fillRef, onDrain, resetToken }: GlassOfWaterProps) {
+function WaterScene({ fillRef, onDrain, resetToken }: GlassProps) {
   return (
     <>
       <color attach="background" args={["#0b1118"]} />
-      <fog attach="fog" args={["#0b1118", 8, 20]} />
-      <ambientLight intensity={0.7} />
-      <directionalLight
-        position={[4, 8, 3]}
-        intensity={1.9}
-        castShadow
-        shadow-mapSize-width={2048}
-        shadow-mapSize-height={2048}
-      />
-      <spotLight
-        position={[-5, 7, 5]}
-        angle={0.35}
-        penumbra={0.7}
-        intensity={45}
-        color="#7dd3fc"
-      />
+      <fog attach="fog" args={["#0b1118", 8, 22]} />
+      <ambientLight intensity={0.6} />
+      <directionalLight position={[4, 8, 3]} intensity={1.8} castShadow shadow-mapSize-width={2048} shadow-mapSize-height={2048} />
+      <spotLight position={[-5, 7, 5]} angle={0.35} penumbra={0.7} intensity={40} color="#7dd3fc" />
       <Ground />
-      <GlassOfWater
-        fillRef={fillRef}
-        onDrain={onDrain}
-        resetToken={resetToken}
-      />
+      <GlassOfWater fillRef={fillRef} onDrain={onDrain} resetToken={resetToken} />
       <Environment preset="city" />
-      <OrbitControls
-        enablePan={false}
-        maxPolarAngle={Math.PI * 0.48}
-        minDistance={5}
-        maxDistance={9}
-      />
+      <OrbitControls enablePan={false} maxPolarAngle={Math.PI * 0.48} minDistance={4} maxDistance={10} />
     </>
   );
 }
 
-// ── Page — state lives here so HUD is outside Canvas ─────────────────────────
+// ── Page ────────────────────────────────────────────────────────────────────────
 function WaterContent() {
   const [fillRatio, setFillRatio] = useState(DEFAULT_FILL);
   const [resetToken, setResetToken] = useState(0);
   const fillRef = useRef(DEFAULT_FILL);
 
-  useEffect(() => {
-    fillRef.current = fillRatio;
-  }, [fillRatio]);
+  useEffect(() => { fillRef.current = fillRatio; }, [fillRatio]);
 
   const handleDrain = useCallback((amount: number) => {
-    setFillRatio((prev) => Math.max(0, prev - amount));
+    setFillRatio(prev => Math.max(0, prev - amount));
   }, []);
 
   const handleReset = useCallback(() => {
     setFillRatio(DEFAULT_FILL);
-    setResetToken((v) => v + 1);
+    setResetToken(v => v + 1);
   }, []);
 
   return (
@@ -1007,13 +659,9 @@ function WaterContent() {
       <Canvas
         shadows
         camera={{ position: [0, 2.4, 6.6], fov: 42 }}
-        gl={{ antialias: true, localClippingEnabled: true }}
+        gl={{ antialias: true }}
       >
-        <WaterScene
-          fillRef={fillRef}
-          onDrain={handleDrain}
-          resetToken={resetToken}
-        />
+        <WaterScene fillRef={fillRef} onDrain={handleDrain} resetToken={resetToken} />
       </Canvas>
       <HUD fillRatio={fillRatio} onReset={handleReset} />
     </div>
