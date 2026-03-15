@@ -20,7 +20,7 @@ const INNER_RADIUS_TOP = GLASS_RADIUS_TOP - WALL_THICKNESS * 1.9;
 const INNER_RADIUS_BOTTOM = GLASS_RADIUS_BOTTOM - WALL_THICKNESS * 1.9;
 const GLASS_CENTER_Y = 1.55;
 const PARTICLE_COUNT = 500;
-const PARTICLE_SPRITE_SIZE = 0.55;
+const PARTICLE_SPHERE_RADIUS = 0.1; // close to smoothing radius for heavy overlap
 
 const GLASS_CONFIG: GlassConfig = {
   radiusTop: INNER_RADIUS_TOP,
@@ -168,131 +168,127 @@ function Ground() {
   );
 }
 
-// ── Soft sprite texture for fluid rendering ──────────────────────────────────
-// Pre-built at module scope (no Math.random, no render-time side effects)
-let _fluidSprite: THREE.Texture | null = null;
-function getFluidSprite(): THREE.Texture {
-  if (_fluidSprite) return _fluidSprite;
-  const size = 64;
-  const canvas = document.createElement("canvas");
-  canvas.width = size;
-  canvas.height = size;
-  const ctx = canvas.getContext("2d")!;
-  const gradient = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
-  gradient.addColorStop(0, "rgba(120, 200, 255, 1.0)");
-  gradient.addColorStop(0.25, "rgba(90, 180, 255, 0.8)");
-  gradient.addColorStop(0.5, "rgba(60, 160, 255, 0.4)");
-  gradient.addColorStop(0.75, "rgba(40, 140, 255, 0.1)");
-  gradient.addColorStop(1, "rgba(30, 120, 255, 0)");
-  ctx.fillStyle = gradient;
-  ctx.fillRect(0, 0, size, size);
-  const tex = new THREE.CanvasTexture(canvas);
-  tex.needsUpdate = true;
-  _fluidSprite = tex;
-  return tex;
-}
-
-// ── Contained Particles (Points inside glass group) ────────────────────────────
+// ── Contained Particles (InstancedMesh inside glass group) ─────────────────────
 function ContainedParticles({ simRef }: { simRef: React.RefObject<SPHSimulation | null> }) {
-  const pointsRef = useRef<THREE.Points>(null);
-  const geoRef = useRef<THREE.BufferGeometry>(null);
-  const posBuffer = useRef(new Float32Array(PARTICLE_COUNT * 3));
-
-  useEffect(() => {
-    if (!geoRef.current) return;
-    geoRef.current.setAttribute("position", new THREE.BufferAttribute(posBuffer.current, 3));
-  }, []);
-
-  const material = useMemo(() => {
-    return new THREE.PointsMaterial({
-      size: PARTICLE_SPRITE_SIZE,
-      map: getFluidSprite(),
-      transparent: true,
-      depthWrite: false,
-      blending: THREE.AdditiveBlending,
-      sizeAttenuation: true,
-      color: new THREE.Color("#4ab8f8"),
-    });
-  }, []);
+  const meshRef = useRef<THREE.InstancedMesh>(null);
+  const dummy = useMemo(() => new THREE.Object3D(), []);
 
   useFrame(() => {
-    if (!pointsRef.current || !simRef.current || !geoRef.current) return;
-    const simPositions = simRef.current.getContainedPositions();
+    if (!meshRef.current || !simRef.current) return;
+    const positions = simRef.current.getContainedPositions();
     const count = simRef.current.getContainedCount();
-    const buf = posBuffer.current;
-
-    // Copy contained particle positions
-    for (let i = 0; i < count * 3; i++) {
-      buf[i] = simPositions[i];
+    for (let i = 0; i < count; i++) {
+      dummy.position.set(positions[i * 3], positions[i * 3 + 1], positions[i * 3 + 2]);
+      dummy.scale.setScalar(1);
+      dummy.updateMatrix();
+      meshRef.current.setMatrixAt(i, dummy.matrix);
     }
-    // Move remaining off-screen
-    for (let i = count * 3; i < PARTICLE_COUNT * 3; i += 3) {
-      buf[i] = 0;
-      buf[i + 1] = -100;
-      buf[i + 2] = 0;
+    for (let i = count; i < PARTICLE_COUNT; i++) {
+      dummy.position.set(0, -100, 0);
+      dummy.scale.setScalar(0);
+      dummy.updateMatrix();
+      meshRef.current.setMatrixAt(i, dummy.matrix);
     }
-
-    const attr = geoRef.current.attributes.position as THREE.BufferAttribute;
-    if (attr) attr.needsUpdate = true;
+    meshRef.current.instanceMatrix.needsUpdate = true;
   });
 
   return (
-    <points ref={pointsRef} frustumCulled={false} renderOrder={-1}>
-      <bufferGeometry ref={geoRef} />
-      <primitive object={material} attach="material" />
-    </points>
+    <instancedMesh ref={meshRef} args={[undefined, undefined, PARTICLE_COUNT]} frustumCulled={false} renderOrder={-1}>
+      <sphereGeometry args={[PARTICLE_SPHERE_RADIUS, 8, 6]} />
+      <meshPhysicalMaterial
+        color="#2898d8"
+        transparent
+        opacity={0.55}
+        roughness={0.1}
+        metalness={0.05}
+        transmission={0.2}
+        thickness={0.15}
+        depthWrite={false}
+      />
+    </instancedMesh>
   );
 }
 
-// ── Escaped Particles (Points at scene root, world coords) ─────────────────────
+// ── Escaped Particles (InstancedMesh at scene root, world coords) ──────────────
 function EscapedParticles({ simRef }: { simRef: React.RefObject<SPHSimulation | null> }) {
-  const pointsRef = useRef<THREE.Points>(null);
-  const geoRef = useRef<THREE.BufferGeometry>(null);
-  const posBuffer = useRef(new Float32Array(PARTICLE_COUNT * 3));
-
-  useEffect(() => {
-    if (!geoRef.current) return;
-    geoRef.current.setAttribute("position", new THREE.BufferAttribute(posBuffer.current, 3));
-  }, []);
-
-  const material = useMemo(() => {
-    return new THREE.PointsMaterial({
-      size: PARTICLE_SPRITE_SIZE * 0.8,
-      map: getFluidSprite(),
-      transparent: true,
-      depthWrite: false,
-      blending: THREE.AdditiveBlending,
-      sizeAttenuation: true,
-      color: new THREE.Color("#4ab8f8"),
-    });
-  }, []);
+  const meshRef = useRef<THREE.InstancedMesh>(null);
+  const dummy = useMemo(() => new THREE.Object3D(), []);
 
   useFrame(() => {
-    if (!pointsRef.current || !simRef.current || !geoRef.current) return;
+    if (!meshRef.current || !simRef.current) return;
     const escaped = simRef.current.getEscapedParticles();
-    const buf = posBuffer.current;
-
     for (let i = 0; i < escaped.length && i < PARTICLE_COUNT; i++) {
       const p = escaped[i];
-      buf[i * 3] = p.x;
-      buf[i * 3 + 1] = p.y;
-      buf[i * 3 + 2] = p.z;
+      dummy.position.set(p.x, p.y, p.z);
+      dummy.scale.setScalar(0.8);
+      dummy.updateMatrix();
+      meshRef.current.setMatrixAt(i, dummy.matrix);
     }
     for (let i = escaped.length; i < PARTICLE_COUNT; i++) {
-      buf[i * 3] = 0;
-      buf[i * 3 + 1] = -100;
-      buf[i * 3 + 2] = 0;
+      dummy.position.set(0, -100, 0);
+      dummy.scale.setScalar(0);
+      dummy.updateMatrix();
+      meshRef.current.setMatrixAt(i, dummy.matrix);
     }
-
-    const attr = geoRef.current.attributes.position as THREE.BufferAttribute;
-    if (attr) attr.needsUpdate = true;
+    meshRef.current.instanceMatrix.needsUpdate = true;
   });
 
   return (
-    <points ref={pointsRef} frustumCulled={false}>
-      <bufferGeometry ref={geoRef} />
-      <primitive object={material} attach="material" />
-    </points>
+    <instancedMesh ref={meshRef} args={[undefined, undefined, PARTICLE_COUNT]} frustumCulled={false}>
+      <sphereGeometry args={[PARTICLE_SPHERE_RADIUS, 8, 6]} />
+      <meshPhysicalMaterial
+        color="#2898d8"
+        transparent
+        opacity={0.55}
+        roughness={0.1}
+        metalness={0.05}
+        transmission={0.2}
+        thickness={0.15}
+        depthWrite={false}
+      />
+    </instancedMesh>
+  );
+}
+
+// ── Puddle (grows as water escapes) ────────────────────────────────────────────
+function Puddle({ simRef }: { simRef: React.RefObject<SPHSimulation | null> }) {
+  const meshRef = useRef<THREE.Mesh>(null);
+  const puddleSize = useRef(0);
+
+  useFrame((_, dt) => {
+    if (!meshRef.current || !simRef.current) return;
+    const escaped = simRef.current.getEscapedParticles();
+    // Count particles on the ground (y near 0)
+    let groundCount = 0;
+    let cx = 0, cz = 0;
+    for (const p of escaped) {
+      if (p.y < 0.15) {
+        groundCount++;
+        cx += p.x;
+        cz += p.z;
+      }
+    }
+    if (groundCount > 0) {
+      cx /= groundCount;
+      cz /= groundCount;
+      const targetSize = Math.min(Math.sqrt(groundCount) * 0.15, 2.5);
+      puddleSize.current += (targetSize - puddleSize.current) * Math.min(3 * dt, 0.95);
+      meshRef.current.position.set(cx, 0.004, cz);
+      meshRef.current.scale.set(puddleSize.current, 1, puddleSize.current);
+      meshRef.current.visible = true;
+    } else if (puddleSize.current > 0.01) {
+      // Slowly shrink puddle when no ground particles
+      puddleSize.current *= 1 - Math.min(0.5 * dt, 0.95);
+      meshRef.current.scale.set(puddleSize.current, 1, puddleSize.current);
+      if (puddleSize.current < 0.01) meshRef.current.visible = false;
+    }
+  });
+
+  return (
+    <mesh ref={meshRef} rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.004, 0]} visible={false}>
+      <circleGeometry args={[1, 48]} />
+      <meshStandardMaterial color="#1a6a9a" transparent opacity={0.4} roughness={0.05} metalness={0.4} />
+    </mesh>
   );
 }
 
@@ -354,6 +350,7 @@ function GlassAssembly({ resetToken }: { resetToken: number }) {
         <ContainedParticles simRef={simRef} />
       </group>
       <EscapedParticles simRef={simRef} />
+      <Puddle simRef={simRef} />
     </>
   );
 }
