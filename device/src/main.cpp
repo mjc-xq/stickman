@@ -199,24 +199,94 @@ static void publishIMU() {
 static FaceType currentFace = FACE_IDX_HAPPY;
 static unsigned long lastRandomFaceChange = 0;
 
-// Pick a random face from a list
-static FaceType pickRandom(const FaceType* list, int count) {
-  return list[random(count)];
-}
+static FaceType pick(const FaceType* list, int n) { return list[random(n)]; }
+static const char* pick(const char* const* list, int n) { return list[random(n)]; }
 
-// Idle faces — shown randomly when nothing is happening
+// ── Face + text pools for every context ──────────────────────────────
+
 static const FaceType IDLE_FACES[] = {
-  FACE_IDX_HAPPY, FACE_IDX_HOPEFUL, FACE_IDX_WINK,
-  FACE_IDX_CHEEKY, FACE_IDX_SMIRK, FACE_IDX_SINGING
+  FACE_IDX_HAPPY, FACE_IDX_HOPEFUL, FACE_IDX_WINK, FACE_IDX_CHEEKY,
+  FACE_IDX_SMIRK, FACE_IDX_SINGING, FACE_IDX_CONTENT, FACE_IDX_CALM,
+  FACE_IDX_CHEERFUL, FACE_IDX_PLEASED, FACE_IDX_FRIENDLY,
+  FACE_IDX_GRATEFUL, FACE_IDX_AMUSED, FACE_IDX_CURIOUS,
+  FACE_IDX_ATTENTIVE, FACE_IDX_INTRIGUED, FACE_IDX_MISCHIEVOUS
 };
-static const int IDLE_FACE_COUNT = 6;
+#define IDLE_N 17
 
-// Movement faces — shown briefly when device is being moved around
+static const char* const IDLE_TEXTS[] = {
+  "La la la~", "Hmm hmm~", "Hi!", "*vibes*", "Hehe", ":)",
+  "Comfy~", "Nice day!", "*hums*", "Oh hey!", "Teehee",
+  "Sup!", "Boop!", "*wiggles*", "*sparkle*", "Yay~", "Meow?"
+};
+#define IDLE_TEXT_N 17
+
 static const FaceType MOVE_FACES[] = {
   FACE_IDX_EXCITED, FACE_IDX_SURPRISED, FACE_IDX_NERVOUS,
-  FACE_IDX_CONFUSED, FACE_IDX_THINKING
+  FACE_IDX_CONFUSED, FACE_IDX_THINKING, FACE_IDX_CURIOUS,
+  FACE_IDX_INTRIGUED, FACE_IDX_ATTENTIVE, FACE_IDX_AMUSED
 };
-static const int MOVE_FACE_COUNT = 5;
+#define MOVE_N 9
+
+static const char* const MOVE_TEXTS[] = {
+  "Whoa!", "Ooh!", "Huh?", "Hmm?", "Where we", "going?",
+  "Wee!", "Wobbly!", "Adventure!", "Zoom!", "Wait up!"
+};
+#define MOVE_TEXT_N 11
+
+static const char* const TAP_TEXTS[] = {
+  "Oww!", "Hey!", "Oof!", "Rude!", "Bonk!", "Ouch!",
+  "Ack!", "Stop it!", "Meanie!", "Bap!", "Not cool!", "Eeek!"
+};
+#define TAP_TEXT_N 12
+
+static const FaceType TAP_FACES[] = {
+  FACE_IDX_ANNOYED, FACE_IDX_ANGRY, FACE_IDX_DISGUSTED,
+  FACE_IDX_SHOCKED, FACE_IDX_EMBARRASSED
+};
+#define TAP_FACE_N 5
+
+static const char* const CIRCLE_TEXTS[] = {
+  "So dizzy!", "Wheee!", "Spinning!", "Round n", "round!",
+  "My head!", "Woozy~", "Again!", "Whirlpool!", "*spirals*"
+};
+#define CIRCLE_TEXT_N 10
+
+static const FaceType CIRCLE_FACES[] = {
+  FACE_IDX_CONFUSED, FACE_IDX_SURPRISED, FACE_IDX_NERVOUS, FACE_IDX_SHOCKED
+};
+#define CIRCLE_FACE_N 4
+
+static const char* const THRUST_TEXTS[] = {
+  "Woosh!", "Zoom!", "Nyoom!", "Fast!", "Yikes!",
+  "So quick!", "Speedy!", "Vroom!", "Wheee!"
+};
+#define THRUST_TEXT_N 9
+
+static const char* const TOSS_AIR_TEXTS[] = {
+  "AAAH!", "Wheeee!", "Flying!", "I'm up!", "Woooo!",
+  "So high!", "Weee!", "Oh wow!", "Airborne!"
+};
+#define TOSS_AIR_N 9
+
+static const char* const TOSS_CATCH_HIGH[] = {
+  "Wooow!", "Epic!", "Sky high!", "Insane!", "Unreal!"
+};
+#define TOSS_CATCH_HIGH_N 5
+
+static const char* const TOSS_CATCH_MED[] = {
+  "So fun!", "Nice one!", "Great!", "Awesome!", "Woohoo!"
+};
+#define TOSS_CATCH_MED_N 5
+
+static const char* const TOSS_CATCH_LOW[] = {
+  "Yay!", "Hehe!", "Caught!", "Whew!", "Got me!", "Safe!"
+};
+#define TOSS_CATCH_LOW_N 6
+
+static const char* const TOSS_LOST_TEXTS[] = {
+  "Oh no!", "Where am", "I?!", "*crying*", "Come back!", "Help!"
+};
+#define TOSS_LOST_N 6
 
 static void drawFace(FaceType face) {
   currentFace = face;
@@ -383,7 +453,7 @@ static void updateToss(float accMag, unsigned long now) {
       if (accMag > launchAccPeak) launchAccPeak = accMag;
       if (accMag < 0.4f) {
         tossState = TOSS_FREEFALL; freefallStart = now; freefallSamples = 0;
-        showFace(FACE_IDX_SHOCKED, "Wheeee!");
+        showFace(FACE_IDX_SHOCKED, pick(TOSS_AIR_TEXTS, TOSS_AIR_N));
         char ld[64];
         snprintf(ld, sizeof(ld), "{\\\"state\\\":\\\"airborne\\\",\\\"launchG\\\":%.1f}", launchAccPeak);
         publishEvent("toss", ld);
@@ -400,10 +470,10 @@ static void updateToss(float accMag, unsigned long now) {
         char hs[20];
         if (hi >= 12.0f) snprintf(hs, sizeof(hs), "%d'%d\"", (int)(hi/12), (int)(hi)%12);
         else snprintf(hs, sizeof(hs), "%.0f in", hi);
-        if (hi > 48) showFace(FACE_IDX_SHOCKED,"Wooow!",hs);
-        else if (hi > 24) showFace(FACE_IDX_EXCITED,"So fun!",hs);
-        else if (hi > 8) showFace(FACE_IDX_PROUD,"Yay!",hs);
-        else showFace(FACE_IDX_HAPPY,"Hehe!",hs);
+        if (hi > 48) showFace(FACE_IDX_SHOCKED, pick(TOSS_CATCH_HIGH, TOSS_CATCH_HIGH_N), hs);
+        else if (hi > 24) showFace(FACE_IDX_EXCITED, pick(TOSS_CATCH_MED, TOSS_CATCH_MED_N), hs);
+        else if (hi > 8) showFace(FACE_IDX_PROUD, pick(TOSS_CATCH_LOW, TOSS_CATCH_LOW_N), hs);
+        else showFace(FACE_IDX_HAPPY, pick(TOSS_CATCH_LOW, TOSS_CATCH_LOW_N), hs);
         char cd[96];
         snprintf(cd, sizeof(cd), "{\\\"state\\\":\\\"landed\\\",\\\"heightIn\\\":%.1f,\\\"freefallMs\\\":%.0f}", hi, fs*1000);
         publishEvent("toss", cd);
@@ -412,7 +482,7 @@ static void updateToss(float accMag, unsigned long now) {
       }
       if (tossState == TOSS_FREEFALL && now - freefallStart > 3000) {
         tossState = TOSS_IDLE;
-        showFace(FACE_IDX_CRYING, "Oh no!");
+        showFace(FACE_IDX_CRYING, pick(TOSS_LOST_TEXTS, TOSS_LOST_N));
         publishEvent("toss", "{\\\"state\\\":\\\"lost\\\"}");
         tossResultTime = now; resultTime = now; state = STATE_RESULT;
       }
@@ -454,7 +524,7 @@ static void enterSleep() {
 static void showReady() {
   StickCP2.Display.fillScreen(COLOR_BG);
   drawModeIndicator();
-  if (mode == MODE_ACTIVE) showFace(pickRandom(IDLE_FACES, IDLE_FACE_COUNT), "Ready!");
+  if (mode == MODE_ACTIVE) showFace(pick(IDLE_FACES, IDLE_N), pick(IDLE_TEXTS, IDLE_TEXT_N));
   else drawDebugScreen();
 }
 
@@ -541,16 +611,16 @@ void loop() {
 
       // Idle face animation (skip during active toss)
       if (tossState == TOSS_IDLE) {
-        // Occasionally swap to a random idle face (not a flash — stays)
+        // Swap idle face + text periodically
         if (now - lastBlink > blinkInterval) {
-          drawFace(pickRandom(IDLE_FACES, IDLE_FACE_COUNT));
+          showFace(pick(IDLE_FACES, IDLE_N), pick(IDLE_TEXTS, IDLE_TEXT_N));
           lastBlink = now;
-          blinkInterval = random(6000, 15000);
+          blinkInterval = random(5000, 12000);
         }
-        // Show a movement face when device is being moved gently
+        // React to gentle movement with a different face
         float gyroMag = sqrtf(imuGx*imuGx + imuGy*imuGy + imuGz*imuGz);
-        if (gyroMag > 20.0f && now - lastRandomFaceChange > 2000) {
-          drawFace(pickRandom(MOVE_FACES, MOVE_FACE_COUNT));
+        if (gyroMag > 20.0f && now - lastRandomFaceChange > 2500) {
+          showFace(pick(MOVE_FACES, MOVE_N), pick(MOVE_TEXTS, MOVE_TEXT_N));
           lastRandomFaceChange = now;
         }
       }
@@ -563,10 +633,10 @@ void loop() {
         snprintf(gd, sizeof(gd), "{\\\"gesture\\\":\\\"%s\\\"}", GESTURE_NAMES[g]);
         publishEvent("gesture", gd);
         switch (g) {
-          case GESTURE_CIRCLE_LEFT:  showFace(FACE_IDX_CONFUSED,"Woah!","So dizzy!"); break;
-          case GESTURE_CIRCLE_RIGHT: showFace(FACE_IDX_CONFUSED,"Wheee!","Spinning!"); break;
-          case GESTURE_TAP:          showFace(FACE_IDX_ANNOYED,"Oww!","Hey!"); break;
-          case GESTURE_THRUST:       showFace(FACE_IDX_NERVOUS,"Woosh!"); break;
+          case GESTURE_CIRCLE_LEFT:  showFace(pick(CIRCLE_FACES, CIRCLE_FACE_N), pick(CIRCLE_TEXTS, CIRCLE_TEXT_N)); break;
+          case GESTURE_CIRCLE_RIGHT: showFace(pick(CIRCLE_FACES, CIRCLE_FACE_N), pick(CIRCLE_TEXTS, CIRCLE_TEXT_N)); break;
+          case GESTURE_TAP:          showFace(pick(TAP_FACES, TAP_FACE_N), pick(TAP_TEXTS, TAP_TEXT_N)); break;
+          case GESTURE_THRUST:       showFace(FACE_IDX_NERVOUS, pick(THRUST_TEXTS, THRUST_TEXT_N)); break;
           default: break;
         }
       }
