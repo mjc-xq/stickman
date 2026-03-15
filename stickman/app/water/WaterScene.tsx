@@ -136,90 +136,354 @@ function Ground() {
   );
 }
 
-// ── Water Particles (two-layer InstancedMesh) ───────────────────────────────
-// Layer 1: Core spheres — slightly opaque, medium size, gives the body
-// Layer 2: Halo spheres — large, very transparent, softens edges into a blob
-function WaterParticles({
+// ── GLSL Shaders ─────────────────────────────────────────────────────────────
+
+const DEPTH_VERT = /* glsl */ `
+uniform float uPointScale;
+uniform float uParticleRadius;
+varying float vViewZ;
+void main() {
+  vec4 mvPos = modelViewMatrix * vec4(position, 1.0);
+  vViewZ = -mvPos.z;
+  gl_Position = projectionMatrix * mvPos;
+  gl_PointSize = uParticleRadius * uPointScale / max(vViewZ, 0.01);
+}
+`;
+
+const DEPTH_FRAG = /* glsl */ `
+uniform float uParticleRadius;
+uniform float uNear;
+uniform float uFar;
+varying float vViewZ;
+void main() {
+  vec2 coord = gl_PointCoord * 2.0 - 1.0;
+  float r2 = dot(coord, coord);
+  if (r2 > 1.0) discard;
+  float sphereZ = vViewZ - sqrt(1.0 - r2) * uParticleRadius;
+  float depth = (sphereZ - uNear) / (uFar - uNear);
+  depth = clamp(depth, 0.0, 0.999);
+  gl_FragColor = vec4(depth, depth, depth, 1.0);
+}
+`;
+
+const FULLSCREEN_VERT = /* glsl */ `
+varying vec2 vUv;
+void main() {
+  vUv = uv;
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+}
+`;
+
+const BLUR_FRAG = /* glsl */ `
+uniform sampler2D uDepthTex;
+uniform vec2 uTexelSize;
+uniform vec2 uDirection;
+uniform float uFilterRadius;
+uniform float uBlurDepthFalloff;
+varying vec2 vUv;
+void main() {
+  float centerDepth = texture2D(uDepthTex, vUv).r;
+  if (centerDepth > 0.999) { gl_FragColor = vec4(1.0); return; }
+  float sum = 0.0;
+  float wsum = 0.0;
+  for (float x = -20.0; x <= 20.0; x += 1.0) {
+    if (abs(x) > uFilterRadius) continue;
+    vec2 sampleUV = vUv + uDirection * uTexelSize * x;
+    float sampleDepth = texture2D(uDepthTex, sampleUV).r;
+    if (sampleDepth > 0.999) continue;
+    float r = x / (uFilterRadius * 0.5);
+    float w = exp(-0.5 * r * r);
+    float dz = (sampleDepth - centerDepth) * uBlurDepthFalloff;
+    float w2 = exp(-0.5 * dz * dz);
+    sum += sampleDepth * w * w2;
+    wsum += w * w2;
+  }
+  gl_FragColor = vec4(wsum > 0.0 ? sum / wsum : centerDepth, 0.0, 0.0, 1.0);
+}
+`;
+
+const COMPOSITE_FRAG = /* glsl */ `
+uniform sampler2D uDepthTex;
+uniform sampler2D uSceneTex;
+uniform vec2 uTexelSize;
+uniform vec3 uLightDir;
+varying vec2 vUv;
+void main() {
+  float depth = texture2D(uDepthTex, vUv).r;
+  vec4 sceneColor = texture2D(uSceneTex, vUv);
+  if (depth > 0.999) { gl_FragColor = sceneColor; return; }
+  float dxp = texture2D(uDepthTex, vUv + vec2(uTexelSize.x, 0.0)).r;
+  float dxn = texture2D(uDepthTex, vUv - vec2(uTexelSize.x, 0.0)).r;
+  float dyp = texture2D(uDepthTex, vUv + vec2(0.0, uTexelSize.y)).r;
+  float dyn = texture2D(uDepthTex, vUv - vec2(0.0, uTexelSize.y)).r;
+  if (dxp > 0.999) dxp = depth;
+  if (dxn > 0.999) dxn = depth;
+  if (dyp > 0.999) dyp = depth;
+  if (dyn > 0.999) dyn = depth;
+  float dx = dxp - dxn;
+  float dy = dyp - dyn;
+  vec3 normal = normalize(vec3(-dx * 400.0, -dy * 400.0, 1.0));
+  vec3 viewDir = vec3(0.0, 0.0, 1.0);
+  float NdotV = max(dot(normal, viewDir), 0.0);
+  float fresnel = 0.04 + 0.96 * pow(1.0 - NdotV, 5.0);
+  vec3 lightDir = normalize(uLightDir);
+  vec3 halfVec = normalize(lightDir + viewDir);
+  float spec = pow(max(dot(normal, halfVec), 0.0), 128.0);
+  float diffuse = max(dot(normal, lightDir), 0.0) * 0.6 + 0.4;
+  vec3 waterColor = vec3(0.1, 0.4, 0.7) * diffuse;
+  vec3 envColor = mix(vec3(0.05, 0.1, 0.2), vec3(0.3, 0.5, 0.8), normal.y * 0.5 + 0.5);
+  vec2 refractUV = clamp(vUv + normal.xy * 0.02, 0.0, 1.0);
+  vec3 refracted = texture2D(uSceneTex, refractUV).rgb;
+  vec3 color = mix(waterColor, envColor, fresnel * 0.5);
+  color += spec * vec3(1.0);
+  color = mix(color, refracted * vec3(0.7, 0.85, 1.0), 0.25);
+  float alpha = smoothstep(0.999, 0.98, depth);
+  gl_FragColor = vec4(mix(sceneColor.rgb, color, alpha * 0.9), 1.0);
+}
+`;
+
+// ── Screen-space Fluid Renderer ─────────────────────────────────────────────
+function FluidRenderer({
   simRef,
   glassGroupRef,
-  isEscaped,
 }: {
   simRef: React.RefObject<SPHSimulation | null>;
   glassGroupRef: React.RefObject<THREE.Group | null>;
-  isEscaped: boolean;
 }) {
-  const coreRef = useRef<THREE.InstancedMesh>(null);
-  const haloRef = useRef<THREE.InstancedMesh>(null);
-  const dummy = useMemo(() => new THREE.Object3D(), []);
+  const prevSize = useRef({ w: 0, h: 0 });
+  const resourcesRef = useRef<{
+    particleScene: THREE.Scene;
+    points: THREE.Points;
+    posAttr: THREE.BufferAttribute;
+    depthMat: THREE.ShaderMaterial;
+    blurMat: THREE.ShaderMaterial;
+    compositeMat: THREE.ShaderMaterial;
+    depthFbo: THREE.WebGLRenderTarget;
+    blurFboA: THREE.WebGLRenderTarget;
+    blurFboB: THREE.WebGLRenderTarget;
+    sceneFbo: THREE.WebGLRenderTarget;
+    fsScene: THREE.Scene;
+    fsCamera: THREE.OrthographicCamera;
+    fsQuad: THREE.Mesh;
+  } | null>(null);
 
-  useFrame(() => {
-    if (!coreRef.current || !haloRef.current || !simRef.current) return;
+  // Initialize GPU resources once on mount
+  useEffect(() => {
+    const maxParticles = PARTICLE_COUNT * 2;
+    const fboOpts: THREE.RenderTargetOptions = {
+      minFilter: THREE.LinearFilter,
+      magFilter: THREE.LinearFilter,
+      type: THREE.HalfFloatType,
+      format: THREE.RGBAFormat,
+    };
 
-    let positions: Float32Array | null = null;
-    let count = 0;
+    const depthFbo = new THREE.WebGLRenderTarget(1, 1, fboOpts);
+    const blurFboA = new THREE.WebGLRenderTarget(1, 1, fboOpts);
+    const blurFboB = new THREE.WebGLRenderTarget(1, 1, fboOpts);
+    const sceneFbo = new THREE.WebGLRenderTarget(1, 1, {
+      minFilter: THREE.LinearFilter,
+      magFilter: THREE.LinearFilter,
+    });
 
-    if (isEscaped) {
-      const escaped = simRef.current.getEscapedParticles();
-      count = Math.min(escaped.length, PARTICLE_COUNT);
-      for (let i = 0; i < count; i++) {
-        const p = escaped[i];
-        dummy.position.set(p.x, p.y, p.z);
-        dummy.scale.setScalar(1);
-        dummy.updateMatrix();
-        coreRef.current.setMatrixAt(i, dummy.matrix);
-        // Halo slightly larger
-        dummy.scale.setScalar(2.2);
-        dummy.updateMatrix();
-        haloRef.current.setMatrixAt(i, dummy.matrix);
-      }
-    } else {
-      positions = simRef.current.getContainedPositions();
-      count = simRef.current.getContainedCount();
+    const depthMat = new THREE.ShaderMaterial({
+      vertexShader: DEPTH_VERT,
+      fragmentShader: DEPTH_FRAG,
+      uniforms: {
+        uPointScale: { value: 400 },
+        uParticleRadius: { value: 0.13 },
+        uNear: { value: 0.1 },
+        uFar: { value: 100 },
+      },
+      depthTest: true,
+      depthWrite: true,
+      transparent: false,
+    });
 
-      // Transform contained particles from glass-local to world space
-      const glassGroup = glassGroupRef.current;
-      const mat = glassGroup ? glassGroup.matrixWorld : new THREE.Matrix4();
-      const v = new THREE.Vector3();
+    const blurMat = new THREE.ShaderMaterial({
+      vertexShader: FULLSCREEN_VERT,
+      fragmentShader: BLUR_FRAG,
+      uniforms: {
+        uDepthTex: { value: null },
+        uTexelSize: { value: new THREE.Vector2(1, 1) },
+        uDirection: { value: new THREE.Vector2(1, 0) },
+        uFilterRadius: { value: 12.0 },
+        uBlurDepthFalloff: { value: 10.0 },
+      },
+      depthTest: false,
+      depthWrite: false,
+    });
 
-      for (let i = 0; i < count; i++) {
-        v.set(positions[i * 3], positions[i * 3 + 1], positions[i * 3 + 2]);
-        v.applyMatrix4(mat);
-        dummy.position.copy(v);
-        dummy.scale.setScalar(1);
-        dummy.updateMatrix();
-        coreRef.current.setMatrixAt(i, dummy.matrix);
-        dummy.scale.setScalar(2.2);
-        dummy.updateMatrix();
-        haloRef.current.setMatrixAt(i, dummy.matrix);
-      }
+    const compositeMat = new THREE.ShaderMaterial({
+      vertexShader: FULLSCREEN_VERT,
+      fragmentShader: COMPOSITE_FRAG,
+      uniforms: {
+        uDepthTex: { value: null },
+        uSceneTex: { value: null },
+        uTexelSize: { value: new THREE.Vector2(1, 1) },
+        uLightDir: { value: new THREE.Vector3(0.4, 0.8, 0.3).normalize() },
+      },
+      depthTest: false,
+      depthWrite: false,
+    });
+
+    const posArray = new Float32Array(maxParticles * 3);
+    const posAttr = new THREE.BufferAttribute(posArray, 3);
+    posAttr.setUsage(THREE.DynamicDrawUsage);
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute("position", posAttr);
+    geo.setDrawRange(0, 0);
+    const points = new THREE.Points(geo, depthMat);
+    points.frustumCulled = false;
+    const particleScene = new THREE.Scene();
+    particleScene.add(points);
+
+    const fsCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+    const fsGeo = new THREE.PlaneGeometry(2, 2);
+    const fsQuad = new THREE.Mesh(fsGeo, blurMat);
+    const fsScene = new THREE.Scene();
+    fsScene.add(fsQuad);
+
+    resourcesRef.current = {
+      particleScene, points, posAttr, depthMat, blurMat, compositeMat,
+      depthFbo, blurFboA, blurFboB, sceneFbo,
+      fsScene, fsCamera, fsQuad,
+    };
+
+    return () => {
+      depthFbo.dispose();
+      blurFboA.dispose();
+      blurFboB.dispose();
+      sceneFbo.dispose();
+      depthMat.dispose();
+      blurMat.dispose();
+      compositeMat.dispose();
+      geo.dispose();
+      fsGeo.dispose();
+      resourcesRef.current = null;
+    };
+  }, []);
+
+  useFrame((state) => {
+    const r = resourcesRef.current;
+    if (!r || !simRef.current) return;
+
+    const renderer = state.gl;
+    const cam = state.camera;
+    const mainScene = state.scene;
+    const { width: w, height: h } = state.size;
+
+    // Resize FBOs if needed
+    if (prevSize.current.w !== w || prevSize.current.h !== h) {
+      const pw = Math.max(w, 1);
+      const ph = Math.max(h, 1);
+      r.depthFbo.setSize(pw, ph);
+      r.blurFboA.setSize(pw, ph);
+      r.blurFboB.setSize(pw, ph);
+      r.sceneFbo.setSize(pw, ph);
+      r.blurMat.uniforms.uTexelSize.value.set(1 / pw, 1 / ph);
+      r.compositeMat.uniforms.uTexelSize.value.set(1 / pw, 1 / ph);
+      prevSize.current = { w, h };
     }
 
-    // Hide remaining
-    for (let i = count; i < PARTICLE_COUNT; i++) {
-      dummy.position.set(0, -100, 0);
-      dummy.scale.setScalar(0);
-      dummy.updateMatrix();
-      coreRef.current.setMatrixAt(i, dummy.matrix);
-      haloRef.current.setMatrixAt(i, dummy.matrix);
-    }
-    coreRef.current.instanceMatrix.needsUpdate = true;
-    haloRef.current.instanceMatrix.needsUpdate = true;
-  });
+    // Update depth shader camera uniforms
+    const projCam = cam as THREE.PerspectiveCamera;
+    r.depthMat.uniforms.uNear.value = projCam.near;
+    r.depthMat.uniforms.uFar.value = projCam.far;
+    r.depthMat.uniforms.uPointScale.value = h * 0.8;
 
-  return (
-    <>
-      {/* Core layer: gives body and opacity where particles cluster */}
-      <instancedMesh ref={coreRef} args={[undefined, undefined, PARTICLE_COUNT]} frustumCulled={false} renderOrder={0}>
-        <sphereGeometry args={[0.08, 8, 6]} />
-        <meshBasicMaterial color="#2888c8" transparent opacity={0.35} depthWrite={false} />
-      </instancedMesh>
-      {/* Halo layer: softens edges, makes particles blur together */}
-      <instancedMesh ref={haloRef} args={[undefined, undefined, PARTICLE_COUNT]} frustumCulled={false} renderOrder={-1}>
-        <sphereGeometry args={[0.08, 6, 4]} />
-        <meshBasicMaterial color="#3498d8" transparent opacity={0.08} depthWrite={false} />
-      </instancedMesh>
-    </>
-  );
+    // Update particle positions from simulation
+    const sim = simRef.current;
+    const contained = sim.getContainedPositions();
+    const containedCount = sim.getContainedCount();
+    const escaped = sim.getEscapedParticles();
+    const glassGroup = glassGroupRef.current;
+    const glassMat = glassGroup ? glassGroup.matrixWorld : new THREE.Matrix4();
+    const v = new THREE.Vector3();
+    const arr = r.posAttr.array as Float32Array;
+
+    let total = 0;
+    // Contained particles: local -> world
+    for (let i = 0; i < containedCount; i++) {
+      v.set(contained[i * 3], contained[i * 3 + 1], contained[i * 3 + 2]);
+      v.applyMatrix4(glassMat);
+      arr[total * 3] = v.x;
+      arr[total * 3 + 1] = v.y;
+      arr[total * 3 + 2] = v.z;
+      total++;
+    }
+    // Escaped particles: already world-space
+    for (let i = 0; i < escaped.length; i++) {
+      const p = escaped[i];
+      arr[total * 3] = p.x;
+      arr[total * 3 + 1] = p.y;
+      arr[total * 3 + 2] = p.z;
+      total++;
+    }
+    r.posAttr.needsUpdate = true;
+    r.points.geometry.setDrawRange(0, total);
+
+    // Save renderer state
+    const savedAutoClear = renderer.autoClear;
+    const savedClearColor = renderer.getClearColor(new THREE.Color());
+    const savedClearAlpha = renderer.getClearAlpha();
+    const savedRenderTarget = renderer.getRenderTarget();
+    renderer.autoClear = false;
+
+    // PASS 0: Render main scene (glass, ground, lights) to sceneFBO
+    renderer.setRenderTarget(r.sceneFbo);
+    renderer.setClearColor(0x0b1118, 1);
+    renderer.clear();
+    renderer.render(mainScene, cam);
+
+    // PASS 1: Render particle depth to depthFBO
+    renderer.setRenderTarget(r.depthFbo);
+    renderer.setClearColor(0xffffff, 1);
+    renderer.clear();
+    renderer.render(r.particleScene, cam);
+
+    // PASS 2: Bilateral blur (ping-pong between A and B, 3 iterations)
+    // Each iteration: horizontal reads src -> writes A, vertical reads A -> writes B
+    // Then B becomes the src for the next iteration
+    let srcFbo = r.depthFbo;
+
+    for (let iter = 0; iter < 3; iter++) {
+      // Horizontal: src -> A
+      r.blurMat.uniforms.uDepthTex.value = srcFbo.texture;
+      r.blurMat.uniforms.uDirection.value.set(1, 0);
+      r.fsQuad.material = r.blurMat;
+      renderer.setRenderTarget(r.blurFboA);
+      renderer.setClearColor(0xffffff, 1);
+      renderer.clear();
+      renderer.render(r.fsScene, r.fsCamera);
+
+      // Vertical: A -> B
+      r.blurMat.uniforms.uDepthTex.value = r.blurFboA.texture;
+      r.blurMat.uniforms.uDirection.value.set(0, 1);
+      renderer.setRenderTarget(r.blurFboB);
+      renderer.setClearColor(0xffffff, 1);
+      renderer.clear();
+      renderer.render(r.fsScene, r.fsCamera);
+
+      srcFbo = r.blurFboB;
+    }
+    // Final blurred result is in blurFboB
+
+    // PASS 3: Composite to screen
+    r.compositeMat.uniforms.uDepthTex.value = r.blurFboB.texture;
+    r.compositeMat.uniforms.uSceneTex.value = r.sceneFbo.texture;
+    r.fsQuad.material = r.compositeMat;
+    renderer.setRenderTarget(null);
+    renderer.setClearColor(0x000000, 1);
+    renderer.clear();
+    renderer.render(r.fsScene, r.fsCamera);
+
+    // Restore
+    renderer.autoClear = savedAutoClear;
+    renderer.setClearColor(savedClearColor, savedClearAlpha);
+    renderer.setRenderTarget(savedRenderTarget);
+  }, 1);
+
+  return null;
 }
 
 // ── Puddle ──────────────────────────────────────────────────────────────────
@@ -306,9 +570,7 @@ function GlassAssembly({ resetToken }: { resetToken: number }) {
         <GlassBase />
         <GlassRim />
       </group>
-      {/* Water particles rendered in world space (both layers) */}
-      <WaterParticles simRef={simRef} glassGroupRef={groupRef} isEscaped={false} />
-      <WaterParticles simRef={simRef} glassGroupRef={groupRef} isEscaped={true} />
+      <FluidRenderer simRef={simRef} glassGroupRef={groupRef} />
       <Puddle simRef={simRef} />
     </>
   );
