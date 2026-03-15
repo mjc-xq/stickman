@@ -1,14 +1,14 @@
-# Stickman Device - Sloth Wand, Toss & Debug
+# Stickman Device
 
-Cute sloth-faced companion for M5StickC Plus 2. Three modes: Wand, Toss, Debug. Streams IMU data to Ably for real-time web visualization.
+M5StickC Plus 2 companion device. Always-on gesture + toss detection with Ably streaming. BtnB toggles Active/Debug mode.
 
 ## Hardware
 
 - **Board**: M5StickC Plus 2 (ESP32-PICO-V3-02)
 - **USB-Serial**: CH9102 at `/dev/cu.usbserial-5B1E0467791`
 - **Display**: 1.14" TFT LCD (135x240), portrait (rotation 0)
-- **IMU**: MPU6886 (6-axis), direct 14-byte burst register reads
-- **Buttons**: BtnA (GPIO 37), BtnB (GPIO 39), Power (GPIO 35)
+- **IMU**: MPU6886 (6-axis), direct 14-byte burst register reads at ~100Hz
+- **Buttons**: BtnA (GPIO 37, front), BtnB (GPIO 39, side), Power (GPIO 35)
 
 ## Build & Upload
 
@@ -18,84 +18,92 @@ pio run --target upload
 pio device monitor   # 115200 baud
 ```
 
-## Modes (BtnB cycles: Wand → Toss → Debug)
+## IMU Axis Convention
 
-### Wand Mode
-Algorithmic gesture detection (no ML):
-- **Tap**: accel magnitude delta > 2G, 500ms debounce
-- **Thrust**: sustained Y-axis accel > 2.5G for 4+ samples
-- **Circle Left/Right**: gyro Z accumulation > 180 degrees
+```
+        +Z (out of screen)
+         ↑
+         |
+    +---------+
+    |         |
+    | SCREEN  | → +X (right edge)
+    |         |
+    +---------+
+         |
+         ↓ +Y (toward USB)
+```
 
-### Toss Mode
-Throw height from freefall duration (h = 0.5*g*(t/2)^2):
-- Launch: accel > 2G
-- Freefall: accel < 0.4G
+**Accelerometer reads reaction force** (opposite gravity). The axis pointing UP reads +1g:
+
+| Orientation | ax | ay | az |
+|---|---|---|---|
+| Flat on back, screen up | ~0 | ~0 | **+1.0** |
+| Standing portrait, USB down | ~0 | **+1.0** | ~0 |
+| Landscape, tilted right | **+1.0** | ~0 | ~0 |
+
+**Pitch** = `atan2(ax, sqrt(ay² + az²))` — tilt left/right
+**Roll** = `atan2(ay, sqrt(ax² + az²))` — tilt forward/back
+
+**3D viz axis mapping** (device → Three.js): `devX→X, devZ→Y(up), devY→Z`
+
+## Modes (BtnB toggles: Active ↔ Debug)
+
+### Active Mode
+Simultaneously detects wand gestures AND toss events (no separate mode needed).
+
+**Gestures** (algorithmic, no ML):
+- **Circle Left/Right**: total gyro magnitude (all 3 axes) > 30 dps, accumulates to 120°. Direction from dominant gyro axis sign.
+- **Thrust**: total accel magnitude > 1.8G sustained for 3+ samples at 2.0G avg. Only fires when toss is idle.
+- **Tap**: accel magnitude delta > 1.8G, 400ms debounce. Only fires when thrust isn't accumulating.
+
+Detection priority: Circle → Thrust → Tap (prevents tap from stealing thrust).
+Gestures suppressed during active toss (LAUNCHED/FREEFALL).
+600ms cooldown between gestures.
+
+**Toss** (runs alongside gestures):
+- Launch: accel magnitude > 2.5G
+- Freefall: accel < 0.4G (weightless)
 - Catch: accel > 1.3G after freefall
-- Height displayed in inches/feet
+- Height: `h = 0.5 * g * (t/2)²` displayed in inches/feet
+- 1.5s result display, then auto-reset
 
 ### Debug Mode
-Shows WiFi, signal strength (dBm + bars), IP, battery %, voltage, Ably status, and message rate. Refreshes every 500ms.
+WiFi status, SSID, signal (dBm + bars), IP, battery %, Ably status, message rate. Refreshes every 500ms.
 
-## WiFi & Ably Streaming
+## Ably Streaming
 
-Connects to WiFi on boot. Streams IMU data to Ably WebSocket pubsub.
+Connects to WiFi on boot, streams to Ably channel `stickman` (clientId: `stickman`).
 
-### Connection Details
-- **WiFi**: SSID `Flapjack`
-- **Ably channel**: `stickman`
-- **Client ID**: `stickman`
-- **Protocol**: Ably realtime over WSS to `realtime.ably.io`
-
-### Data Format (published as `imu` event on channel `stickman`)
+### IMU Data (event: `imu`)
+Published at max 10Hz, only when orientation changes ≥2° or accel changes ≥0.05g:
 ```json
 {
-  "ax": 0.123,   // Accelerometer X (g, ±8G range)
-  "ay": -0.456,  // Accelerometer Y (g)
-  "az": 0.987,   // Accelerometer Z (g)
-  "gx": 12.3,    // Gyroscope X (degrees/sec, ±2000dps range)
-  "gy": -4.5,    // Gyroscope Y (dps)
-  "gz": 0.8,     // Gyroscope Z (dps)
-  "p": 7.2,      // Pitch (degrees, computed from accel)
-  "r": -26.4,    // Roll (degrees, computed from accel)
-  "t": 12345     // Device timestamp (millis since boot)
+  "ax": 0.12, "ay": -0.45, "az": 0.98,
+  "gx": 12.3, "gy": -4.5, "gz": 0.8,
+  "p": 7.2, "r": -26.4, "t": 12345
 }
 ```
 
-### Publishing Rules
-- **Change-based**: only publishes when orientation changes ≥1° OR acceleration changes ≥5%
-- **Max rate**: 25Hz (40ms minimum interval) — stays under Ably's 50 msg/s limit
-- **Burst-tolerant**: when device is moving, publishes at high rate; when still, publishes rarely
-- Accel change uses min denominator (0.1g) to avoid false triggers near zero
+### Other Events
+- `btn`: `{button: "A"/"B", state: "down"/"up"}`
+- `gesture`: `{gesture: "Circle Left"/"Circle Right"/"Tap"/"Thrust"}`
+- `toss`: `{state: "airborne"/"landed"/"lost", heightIn, freefallMs, launchG}`
+- `mode`: `{mode: "active"/"debug"}`
 
-### Ably Protocol Details
-- Uses Ably realtime protocol action 15 (MESSAGE) with `msgSerial` counter
-- Responds to action 0 (HEARTBEAT) to keep connection alive
-- Logs NACK (action 2) and ERROR (action 9/14) for diagnostics
-- Resets change-tracking state on disconnect so first message after reconnect always publishes
-- WebSocket keepalive: ping every 15s
-- Auto-reconnects every 3s on disconnect
-- BtnA (GPIO 37) wakes from deep sleep via ext1, power button via ext0
+### Ably Protocol
+- Action parsing via `atoi` (not fragile `strstr`)
+- `msgSerial` counter on every publish
+- Heartbeat (action 0) handled as one-way server signal (no response)
+- No WS-level ping/pong (caused disconnects — Ably's own heartbeat suffices)
+- Auto-reconnect every 3s, re-attach channel on DETACHED/ERROR
 
 ## Power Management
-- No motion 1 min → deep sleep
+- No motion 1 min → sleep animation → deep sleep
 - No button 3 min → deep sleep
-- Deep sleep via `StickCP2.Power.deepSleep(0, true)` (GPIO 35 wake)
+- Wake: BtnA (ext1 GPIO 37) or power button (ext0 GPIO 35)
 - WiFi + WebSocket disconnected before sleep
 
 ## Known Issues
 - Use `M5.BtnA`/`M5.BtnB` not `StickCP2.BtnA` (static init order fiasco)
-- `DFRobot_GP8XXX` in lib_ignore (compile error)
-- SensiML library in `lib/sensiml/` unused (can delete)
-- DNS resolution can fail on first boot; WebSocket auto-retries
-
-## Subscribing to IMU Data (Web Side)
-
-```javascript
-import Ably from 'ably';
-const ably = new Ably.Realtime('API_KEY');
-const channel = ably.channels.get('stickman');
-channel.subscribe('imu', (msg) => {
-  const data = JSON.parse(msg.data);
-  console.log(data.p, data.r); // pitch, roll in degrees
-});
-```
+- `DFRobot_GP8XXX` in lib_ignore (compile error in M5Unified dep)
+- SensiML library in `lib/sensiml/` unused — can delete

@@ -12,6 +12,23 @@
 #define ABLY_KEY "9X6hPw.YFBkcQ:vRU9-1-MuwTSteM4YXv5cnmtByZpNHlyvMvoL-xdy0c"
 #define ABLY_CHANNEL "stickman"
 
+// ── IMU Axis Convention ───────────────────────────────────────────────
+// M5StickC Plus 2, portrait, USB at bottom:
+//   +X = right edge,  +Y = toward USB (down),  +Z = out of screen
+//
+// Accelerometer reads REACTION force (opposite gravity):
+//   Flat on back, screen up:  ax≈0  ay≈0  az≈+1  (Z points up = +1g)
+//   Standing portrait:        ax≈0  ay≈+1 az≈0   (Y points up = +1g)
+//   Landscape, tilted right:  ax≈+1 ay≈0  az≈0   (X points up = +1g)
+//
+// Gyroscope: degrees/sec, ±2000 dps range. Right-hand rule.
+//
+// Pitch = atan2(ax, sqrt(ay² + az²)) — tilt left/right
+// Roll  = atan2(ay, sqrt(ax² + az²)) — tilt forward/back
+//
+// 3D viz axis mapping (device → Three.js):
+//   devX → threeX,  devZ → threeY (up),  devY → threeZ
+
 // ── Colors ───────────────────────────────────────────────────────────
 #define COLOR_BG    0xF79E
 #define COLOR_FACE  0x4228
@@ -281,24 +298,27 @@ static GestureType detectGesture(float accMag) {
   if (dt > 0.1f) dt = 0.02f;
 
   float gyroMag = sqrtf(imuGx*imuGx + imuGy*imuGy + imuGz*imuGz);
-  if (gyroMag > 30.0f) {
-    if (gyroDir == 0) {
-      gyroDir = (fabsf(imuGz) > fabsf(imuGx) && fabsf(imuGz) > fabsf(imuGy))
-        ? (imuGz > 0 ? 1 : -1)
-        : (fabsf(imuGx) > fabsf(imuGy) ? (imuGx > 0 ? 1 : -1) : (imuGy > 0 ? 1 : -1));
-    }
+  // Accumulate when any rotation detected (low 15 dps threshold)
+  if (gyroMag > 15.0f) {
     gyroAccum += gyroMag * dt;
+    // Continuously track direction from the dominant signed gyro axis
+    // (averaged over the motion, not just first sample)
+    float maxAbs = fabsf(imuGx);
+    float sign = imuGx;
+    if (fabsf(imuGy) > maxAbs) { maxAbs = fabsf(imuGy); sign = imuGy; }
+    if (fabsf(imuGz) > maxAbs) { maxAbs = fabsf(imuGz); sign = imuGz; }
+    gyroDir += (sign > 0) ? 1 : -1; // vote-based direction
   } else {
-    gyroAccum *= 0.93f;
-    if (gyroAccum < 10.0f) { gyroAccum = 0; gyroDir = 0; }
+    gyroAccum *= 0.96f; // gentle decay
+    if (gyroAccum < 5.0f) { gyroAccum = 0; gyroDir = 0; }
   }
 
   // Don't fire gestures during cooldown or active toss
   if (now - lastGestureTime < GESTURE_COOLDOWN_MS) return GESTURE_NONE;
   if (tossState != TOSS_IDLE) return GESTURE_NONE;
 
-  // CIRCLE: fires when rotation stops after accumulating enough
-  if (gyroMag < 30.0f && gyroAccum > 120.0f) {
+  // CIRCLE: fires when enough rotation accumulated (even during motion)
+  if (gyroAccum > 80.0f) {
     GestureType g = (gyroDir > 0) ? GESTURE_CIRCLE_RIGHT : GESTURE_CIRCLE_LEFT;
     gyroAccum = 0; gyroDir = 0;
     lastGestureTime = now;
