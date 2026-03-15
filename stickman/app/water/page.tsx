@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
-import { Canvas, useFrame, extend } from "@react-three/fiber";
+import { Canvas, useFrame } from "@react-three/fiber";
 import { Environment, OrbitControls } from "@react-three/drei";
 import * as THREE from "three";
 import {
@@ -25,6 +25,7 @@ const STREAM_SEGMENTS = 20;
 const STREAM_BASE_RADIUS = 0.03;
 const MAX_SPLASH = 100;
 const PUDDLE_MAX = 1.5;
+const LIQUID_HEIGHT_SEGMENTS = 24;
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 interface TiltRef {
@@ -41,97 +42,101 @@ function damp(cur: number, tgt: number, lambda: number, dt: number) {
   return THREE.MathUtils.lerp(cur, tgt, 1 - Math.exp(-lambda * dt));
 }
 
-// ── Liquid Shader Material ─────────────────────────────────────────────────────
-// The core technique: vertices are converted to world space in the vertex shader.
-// The fragment shader discards fragments above (worldPos.y > fillLevel + wobble).
-// Since world Y is always gravity-aligned, the liquid surface stays level
-// regardless of how the container rotates. Front faces = body, back faces = top.
+// ── Liquid Shader (GLSL) ───────────────────────────────────────────────────────
+const LIQUID_VERTEX = /* glsl */ `
+  varying vec3 vWorldPos;
+  varying vec3 vWorldNormal;
+  varying vec3 vViewDir;
 
-class LiquidMaterial extends THREE.ShaderMaterial {
-  constructor() {
-    super({
-      uniforms: {
-        fillY: { value: 0 },
-        wobbleX: { value: 0 },
-        wobbleZ: { value: 0 },
-        bodyColor: { value: new THREE.Color("#3aaef5") },
-        topColor: { value: new THREE.Color("#7dd8ff") },
-        foamColor: { value: new THREE.Color("#b8eaff") },
-        foamWidth: { value: 0.06 },
-        rimPower: { value: 2.0 },
-        rimColor: { value: new THREE.Color("#a0dfff") },
-      },
-      vertexShader: /* glsl */ `
-        varying vec3 vWorldPos;
-        varying vec3 vObjNormal;
-        varying vec3 vViewDir;
-
-        void main() {
-          vec4 worldPos = modelMatrix * vec4(position, 1.0);
-          vWorldPos = worldPos.xyz;
-          vObjNormal = normalize(normalMatrix * normal);
-          vViewDir = normalize(cameraPosition - worldPos.xyz);
-          gl_Position = projectionMatrix * viewMatrix * worldPos;
-        }
-      `,
-      fragmentShader: /* glsl */ `
-        uniform float fillY;
-        uniform float wobbleX;
-        uniform float wobbleZ;
-        uniform vec3 bodyColor;
-        uniform vec3 topColor;
-        uniform vec3 foamColor;
-        uniform float foamWidth;
-        uniform float rimPower;
-        uniform vec3 rimColor;
-
-        varying vec3 vWorldPos;
-        varying vec3 vObjNormal;
-        varying vec3 vViewDir;
-
-        void main() {
-          // Fill edge: world Y threshold with wobble offset
-          float edge = fillY + wobbleX * vWorldPos.x + wobbleZ * vWorldPos.z;
-
-          // Discard above liquid surface
-          if (vWorldPos.y > edge) discard;
-
-          // Foam band near the surface
-          float foam = smoothstep(edge - foamWidth, edge, vWorldPos.y);
-
-          // Rim light (fresnel)
-          float rim = pow(1.0 - max(dot(vObjNormal, vViewDir), 0.0), rimPower);
-
-          // Front face = liquid body, back face = liquid surface top
-          vec3 col;
-          if (gl_FrontFacing) {
-            col = mix(bodyColor, foamColor, foam * 0.6);
-            col += rimColor * rim * 0.3;
-          } else {
-            col = mix(topColor, foamColor, foam * 0.4);
-            // Subtle radial gradient on top surface
-            col += rimColor * rim * 0.15;
-          }
-
-          gl_FragColor = vec4(col, gl_FrontFacing ? 0.7 : 0.85);
-        }
-      `,
-      transparent: true,
-      side: THREE.DoubleSide,
-      depthWrite: true,
-    });
+  void main() {
+    vec4 worldPos = modelMatrix * vec4(position, 1.0);
+    vWorldPos = worldPos.xyz;
+    vWorldNormal = normalize(mat3(modelMatrix) * normal);
+    vViewDir = normalize(cameraPosition - worldPos.xyz);
+    gl_Position = projectionMatrix * viewMatrix * worldPos;
   }
-}
+`;
 
-extend({ LiquidMaterial });
+const LIQUID_FRAGMENT = /* glsl */ `
+  uniform float fillY;
+  uniform float wobbleX;
+  uniform float wobbleZ;
+  uniform vec3 bodyColor;
+  uniform vec3 topColor;
+  uniform vec3 foamColor;
+  uniform float foamWidth;
+  uniform float rimPower;
+  uniform vec3 rimColor;
+  uniform vec3 lightDir;
+  uniform vec3 lightColor;
+  uniform float ambientIntensity;
 
-// Augment JSX for the custom material
-declare module "@react-three/fiber" {
-  interface ThreeElements {
-    liquidMaterial: React.DetailedHTMLProps<React.HTMLAttributes<LiquidMaterial>, LiquidMaterial> & {
-      ref?: React.Ref<LiquidMaterial>;
-    };
+  varying vec3 vWorldPos;
+  varying vec3 vWorldNormal;
+  varying vec3 vViewDir;
+
+  void main() {
+    // Fill edge: world Y threshold with wobble offset
+    float edge = fillY + wobbleX * vWorldPos.x + wobbleZ * vWorldPos.z;
+
+    // Discard above liquid surface
+    if (vWorldPos.y > edge) discard;
+
+    // Foam band near the surface
+    float foam = smoothstep(edge - foamWidth, edge, vWorldPos.y);
+
+    // Fresnel rim
+    float rim = pow(1.0 - max(dot(vWorldNormal, vViewDir), 0.0), rimPower);
+
+    // Lambertian diffuse lighting
+    vec3 N = gl_FrontFacing ? vWorldNormal : -vWorldNormal;
+    float NdotL = max(dot(N, lightDir), 0.0);
+    vec3 diffuse = lightColor * NdotL;
+    vec3 ambient = vec3(ambientIntensity);
+
+    // Front face = liquid body, back face = liquid surface top
+    vec3 col;
+    float alpha;
+    if (gl_FrontFacing) {
+      col = mix(bodyColor, foamColor, foam * 0.6);
+      col += rimColor * rim * 0.3;
+      alpha = 0.75;
+    } else {
+      col = mix(topColor, foamColor, foam * 0.4);
+      col += rimColor * rim * 0.15;
+      alpha = 0.88;
+    }
+
+    // Apply lighting
+    col *= (ambient + diffuse);
+
+    gl_FragColor = vec4(col, alpha);
   }
+`;
+
+// ── Create liquid ShaderMaterial instance ────────────────────────────────────
+function createLiquidMaterial(): THREE.ShaderMaterial {
+  return new THREE.ShaderMaterial({
+    uniforms: {
+      fillY: { value: 0 },
+      wobbleX: { value: 0 },
+      wobbleZ: { value: 0 },
+      bodyColor: { value: new THREE.Color("#3aaef5") },
+      topColor: { value: new THREE.Color("#7dd8ff") },
+      foamColor: { value: new THREE.Color("#b8eaff") },
+      foamWidth: { value: 0.06 },
+      rimPower: { value: 2.0 },
+      rimColor: { value: new THREE.Color("#a0dfff") },
+      lightDir: { value: new THREE.Vector3(0.4, 0.8, 0.3).normalize() },
+      lightColor: { value: new THREE.Color("#ffffff").multiplyScalar(1.2) },
+      ambientIntensity: { value: 0.45 },
+    },
+    vertexShader: LIQUID_VERTEX,
+    fragmentShader: LIQUID_FRAGMENT,
+    transparent: true,
+    side: THREE.DoubleSide,
+    depthWrite: true,
+  });
 }
 
 // ── Tilt from orientation hook ─────────────────────────────────────────────────
@@ -182,10 +187,15 @@ function GlassShell() {
     [],
   );
   return (
-    <mesh geometry={geo}>
-      <meshPhysicalMaterial
-        color="#f8fbff" transparent opacity={0.18} transmission={1}
-        roughness={0.02} thickness={0.2} ior={1.45} side={THREE.DoubleSide}
+    <mesh geometry={geo} renderOrder={1}>
+      <meshStandardMaterial
+        color="#f8fbff"
+        transparent
+        opacity={0.15}
+        roughness={0.02}
+        metalness={0.1}
+        side={THREE.DoubleSide}
+        depthWrite={false}
       />
     </mesh>
   );
@@ -193,10 +203,16 @@ function GlassShell() {
 
 function GlassBase() {
   return (
-    <mesh position={[0, -GLASS_HEIGHT / 2 + 0.04, 0]}>
+    <mesh position={[0, -GLASS_HEIGHT / 2 + 0.04, 0]} renderOrder={1}>
       <cylinderGeometry args={[GLASS_RADIUS_BOTTOM - 0.03, GLASS_RADIUS_BOTTOM - 0.07, 0.07, 48]} />
-      <meshPhysicalMaterial
-        color="#f8fbff" transparent opacity={0.22} transmission={1} roughness={0.03} thickness={0.15}
+      <meshStandardMaterial
+        color="#f8fbff"
+        transparent
+        opacity={0.18}
+        roughness={0.03}
+        metalness={0.1}
+        side={THREE.DoubleSide}
+        depthWrite={false}
       />
     </mesh>
   );
@@ -204,62 +220,16 @@ function GlassBase() {
 
 function GlassRim() {
   return (
-    <mesh position={[0, GLASS_HEIGHT / 2, 0]} rotation={[Math.PI / 2, 0, 0]}>
+    <mesh position={[0, GLASS_HEIGHT / 2, 0]} rotation={[Math.PI / 2, 0, 0]} renderOrder={1}>
       <torusGeometry args={[GLASS_RADIUS_TOP - 0.005, 0.018, 12, 64]} />
-      <meshPhysicalMaterial color="#eef4ff" transparent opacity={0.12} transmission={1} roughness={0.04} />
-    </mesh>
-  );
-}
-
-// ── Liquid Body (custom shader) ────────────────────────────────────────────────
-function LiquidBody({
-  fillRef,
-  tiltRef,
-}: {
-  fillRef: React.RefObject<number>;
-  tiltRef: React.RefObject<TiltRef>;
-}) {
-  const matRef = useRef<LiquidMaterial>(null);
-  const wobble = useRef({ x: 0, z: 0, vx: 0, vz: 0 });
-  const prevTilt = useRef({ pitch: 0, roll: 0 });
-
-  const geo = useMemo(
-    () => new THREE.CylinderGeometry(INNER_RADIUS_TOP, INNER_RADIUS_BOTTOM, GLASS_HEIGHT, 48, 1, false),
-    [],
-  );
-
-  useFrame((_, dt) => {
-    if (!matRef.current) return;
-    const tilt = tiltRef.current;
-    const fill = fillRef.current;
-
-    // Spring-damper wobble from tilt velocity
-    const dpitch = tilt.pitch - prevTilt.current.pitch;
-    const droll = tilt.roll - prevTilt.current.roll;
-    prevTilt.current = { pitch: tilt.pitch, roll: tilt.roll };
-
-    const stiffness = 8;
-    const damping = 3;
-    wobble.current.vx += dpitch * 40 * dt;
-    wobble.current.vz += droll * 40 * dt;
-    wobble.current.vx += -wobble.current.x * stiffness * dt;
-    wobble.current.vz += -wobble.current.z * stiffness * dt;
-    wobble.current.vx *= Math.exp(-damping * dt);
-    wobble.current.vz *= Math.exp(-damping * dt);
-    wobble.current.x += wobble.current.vx * dt;
-    wobble.current.z += wobble.current.vz * dt;
-
-    // Fill Y in world space: glass center Y + fill offset from bottom
-    const fillWorldY = GLASS_CENTER_Y - GLASS_HEIGHT / 2 + fill * GLASS_HEIGHT;
-
-    matRef.current.uniforms.fillY.value = fillWorldY;
-    matRef.current.uniforms.wobbleX.value = wobble.current.x;
-    matRef.current.uniforms.wobbleZ.value = wobble.current.z;
-  });
-
-  return (
-    <mesh geometry={geo} visible={true}>
-      <liquidMaterial ref={matRef} />
+      <meshStandardMaterial
+        color="#eef4ff"
+        transparent
+        opacity={0.12}
+        roughness={0.04}
+        metalness={0.1}
+        depthWrite={false}
+      />
     </mesh>
   );
 }
@@ -269,21 +239,22 @@ function computePourState(
   groupRef: React.RefObject<THREE.Group | null>,
   fillRatio: number,
   tilt: TiltRef,
+  wobbleX: number,
+  wobbleZ: number,
 ) {
   if (!groupRef.current) return null;
 
   const tiltMag = Math.sqrt(tilt.pitch * tilt.pitch + tilt.roll * tilt.roll);
   if (tiltMag < 0.01) return null;
 
-  // Fill level in world Y
-  const fillWorldY = GLASS_CENTER_Y - GLASS_HEIGHT / 2 + fillRatio * GLASS_HEIGHT;
-
-  // Rim in world space — the lowest point of the rim when tilted
   // Direction of tilt (where the glass tips toward)
   const tdx = tilt.pitch / tiltMag;
   const tdz = -tilt.roll / tiltMag;
 
-  // The lowest rim point in local space
+  // Fill level in world Y
+  const fillWorldY = GLASS_CENTER_Y - GLASS_HEIGHT / 2 + fillRatio * GLASS_HEIGHT;
+
+  // The lowest rim point in local space (direction of tilt)
   const localRimPoint = new THREE.Vector3(
     tdx * GLASS_RADIUS_TOP,
     GLASS_HEIGHT / 2,
@@ -292,13 +263,10 @@ function computePourState(
 
   // Transform to world
   groupRef.current.updateWorldMatrix(true, false);
-  const worldRimPoint = localRimPoint.applyMatrix4(groupRef.current.matrixWorld);
+  const worldRimPoint = localRimPoint.clone().applyMatrix4(groupRef.current.matrixWorld);
 
-  // Water level at the rim position (accounting for the flat world-space surface)
-  // The water surface in world space is at fillWorldY
-  // But it needs to account for the radius offset (water rises on the tilt side)
-  const rimSideOffset = GLASS_RADIUS_TOP * Math.sin(tiltMag);
-  const waterAtRim = fillWorldY + rimSideOffset;
+  // Water surface height at the rim's world XZ position, including wobble
+  const waterAtRim = fillWorldY + wobbleX * worldRimPoint.x + wobbleZ * worldRimPoint.z;
 
   const overflow = waterAtRim - worldRimPoint.y;
   if (overflow <= 0) return null;
@@ -308,10 +276,9 @@ function computePourState(
   return {
     pourFraction,
     worldRimPoint,
+    waterAtRim,
     pourDirX: tdx,
     pourDirZ: tdz,
-    pitch: tilt.pitch,
-    roll: tilt.roll,
   };
 }
 
@@ -320,11 +287,12 @@ interface StreamProps {
   sourceRef: React.RefObject<THREE.Group | null>;
   tiltRef: React.RefObject<TiltRef>;
   fillRef: React.RefObject<number>;
+  wobbleRef: React.RefObject<{ x: number; z: number }>;
   onDrain: (amount: number) => void;
   resetToken: number;
 }
 
-function WaterStream({ sourceRef, tiltRef, fillRef, onDrain, resetToken }: StreamProps) {
+function WaterStream({ sourceRef, tiltRef, fillRef, wobbleRef, onDrain, resetToken }: StreamProps) {
   const streamRef = useRef<THREE.Mesh>(null);
   const splashRef = useRef<THREE.Points>(null);
   const splashGeoRef = useRef<THREE.BufferGeometry>(null);
@@ -333,7 +301,7 @@ function WaterStream({ sourceRef, tiltRef, fillRef, onDrain, resetToken }: Strea
   const phaseRef = useRef(0);
   const splashPosRef = useRef(new Float32Array(MAX_SPLASH * 3));
 
-  interface SplashP { active: boolean; x: number; y: number; z: number; vx: number; vy: number; vz: number; age: number; life: number; }
+  interface SplashP { active: boolean; x: number; y: number; z: number; vx: number; vy: number; vz: number; age: number; life: number }
   const splashData = useRef<SplashP[]>([]);
   const splashCarry = useRef(0);
 
@@ -357,9 +325,13 @@ function WaterStream({ sourceRef, tiltRef, fillRef, onDrain, resetToken }: Strea
     if (puddleRef.current) puddleRef.current.scale.set(0, 1, 0);
   }, [resetToken]);
 
-  const streamMat = useMemo(() => new THREE.MeshPhysicalMaterial({
-    color: "#58c0f0", transparent: true, opacity: 0.75,
-    roughness: 0.04, transmission: 0.35, thickness: 0.12, side: THREE.DoubleSide,
+  const streamMat = useMemo(() => new THREE.MeshStandardMaterial({
+    color: "#58c0f0",
+    transparent: true,
+    opacity: 0.75,
+    roughness: 0.04,
+    metalness: 0.1,
+    side: THREE.DoubleSide,
   }), []);
 
   const splashMat = useMemo(() => {
@@ -386,14 +358,17 @@ function WaterStream({ sourceRef, tiltRef, fillRef, onDrain, resetToken }: Strea
 
     const tilt = tiltRef.current;
     const fill = fillRef.current;
-    const pour = computePourState(sourceRef, fill, tilt);
+    const wob = wobbleRef.current;
+    const pour = computePourState(sourceRef, fill, tilt, wob.x, wob.z);
 
     if (pour && fill > 0.01) {
       streamRef.current.visible = true;
 
-      // Build stream arc from rim to ground
+      // Stream origin: the exact world-space point where water surface meets rim
+      // The pour point is at the rim, but the stream visually starts at the water
+      // surface height at that XZ location (clamped to rim height max)
       const ox = pour.worldRimPoint.x;
-      const oy = pour.worldRimPoint.y;
+      const oy = Math.min(pour.worldRimPoint.y, pour.waterAtRim);
       const oz = pour.worldRimPoint.z;
 
       const outSpeed = 0.6 + pour.pourFraction * 1.2;
@@ -429,17 +404,17 @@ function WaterStream({ sourceRef, tiltRef, fillRef, onDrain, resetToken }: Strea
         const pos = curve.getPointAt(tf);
         const N = frames.normals[i];
         const B = frames.binormals[i];
-        // Taper: thick at top, thin at bottom, with wobble
-        const r = STREAM_BASE_RADIUS * pour.pourFraction * (1 - tf * 0.6) *
+        // Taper: thick at top (starts at pour width), thin at bottom, with wobble
+        const r = STREAM_BASE_RADIUS * pour.pourFraction * (1.5 - tf * 0.9) *
           (1 + 0.1 * Math.sin(phaseRef.current * 10 + tf * 15));
 
         for (let j = 0; j <= radSeg; j++) {
           const a = (j / radSeg) * Math.PI * 2;
           const s = Math.sin(a);
-          const c = -Math.cos(a);
-          const nx = c * N.x + s * B.x;
-          const ny = c * N.y + s * B.y;
-          const nz = c * N.z + s * B.z;
+          const c2 = -Math.cos(a);
+          const nx = c2 * N.x + s * B.x;
+          const ny = c2 * N.y + s * B.y;
+          const nz = c2 * N.z + s * B.z;
           verts.push(pos.x + r * nx, pos.y + r * ny, pos.z + r * nz);
           norms.push(nx, ny, nz);
         }
@@ -572,6 +547,9 @@ function GlassOfWater({ fillRef, onDrain, resetToken }: GlassProps) {
   const tiltRef = useTiltFromOrientation();
   const groupRef = useRef<THREE.Group>(null);
   const smoothTiltRef = useRef<TiltRef>({ pitch: 0.15, roll: 0 });
+  const wobbleRef = useRef({ x: 0, z: 0 });
+  const wobbleState = useRef({ x: 0, z: 0, vx: 0, vz: 0 });
+  const prevTiltForWobble = useRef({ pitch: 0, roll: 0 });
 
   useFrame((_, dt) => {
     if (!groupRef.current) return;
@@ -582,6 +560,27 @@ function GlassOfWater({ fillRef, onDrain, resetToken }: GlassProps) {
     };
     groupRef.current.rotation.x = smoothTiltRef.current.pitch;
     groupRef.current.rotation.z = smoothTiltRef.current.roll;
+
+    // Spring-damper wobble physics (owned here, shared via wobbleRef)
+    const st = smoothTiltRef.current;
+    const dpitch = st.pitch - prevTiltForWobble.current.pitch;
+    const droll = st.roll - prevTiltForWobble.current.roll;
+    prevTiltForWobble.current = { pitch: st.pitch, roll: st.roll };
+
+    const stiffness = 8;
+    const damping = 3;
+    const ws = wobbleState.current;
+    ws.vx += dpitch * 40 * dt;
+    ws.vz += droll * 40 * dt;
+    ws.vx += -ws.x * stiffness * dt;
+    ws.vz += -ws.z * stiffness * dt;
+    ws.vx *= Math.exp(-damping * dt);
+    ws.vz *= Math.exp(-damping * dt);
+    ws.x += ws.vx * dt;
+    ws.z += ws.vz * dt;
+
+    wobbleRef.current.x = ws.x;
+    wobbleRef.current.z = ws.z;
   });
 
   return (
@@ -590,16 +589,70 @@ function GlassOfWater({ fillRef, onDrain, resetToken }: GlassProps) {
         <GlassShell />
         <GlassBase />
         <GlassRim />
-        <LiquidBody fillRef={fillRef} tiltRef={smoothTiltRef} />
+        <LiquidBodyWithWobble fillRef={fillRef} wobbleRef={wobbleRef} />
       </group>
       <WaterStream
         sourceRef={groupRef}
         tiltRef={smoothTiltRef}
         fillRef={fillRef}
+        wobbleRef={wobbleRef}
         onDrain={onDrain}
         resetToken={resetToken}
       />
     </group>
+  );
+}
+
+// ── Liquid Body (reads wobble from parent-owned ref) ────────────────────────
+function LiquidBodyWithWobble({
+  fillRef,
+  wobbleRef,
+}: {
+  fillRef: React.RefObject<number>;
+  wobbleRef: React.RefObject<{ x: number; z: number }>;
+}) {
+  const meshRef = useRef<THREE.Mesh>(null);
+  const matRef = useRef<THREE.ShaderMaterial | null>(null);
+
+  const geo = useMemo(
+    () => new THREE.CylinderGeometry(
+      INNER_RADIUS_TOP,
+      INNER_RADIUS_BOTTOM,
+      GLASS_HEIGHT,
+      48,
+      LIQUID_HEIGHT_SEGMENTS,
+      false,
+    ),
+    [],
+  );
+
+  useEffect(() => {
+    if (!meshRef.current) return;
+    const mat = createLiquidMaterial();
+    meshRef.current.material = mat;
+    matRef.current = mat;
+    return () => {
+      mat.dispose();
+    };
+  }, []);
+
+  useFrame(() => {
+    if (!matRef.current) return;
+    const fill = fillRef.current;
+    const wob = wobbleRef.current;
+
+    // Fill Y in world space: glass center Y + fill offset from bottom
+    const fillWorldY = GLASS_CENTER_Y - GLASS_HEIGHT / 2 + fill * GLASS_HEIGHT;
+
+    matRef.current.uniforms.fillY.value = fillWorldY;
+    matRef.current.uniforms.wobbleX.value = wob.x;
+    matRef.current.uniforms.wobbleZ.value = wob.z;
+  });
+
+  return (
+    <mesh ref={meshRef} geometry={geo} renderOrder={-1}>
+      <meshBasicMaterial transparent opacity={0} />
+    </mesh>
   );
 }
 
