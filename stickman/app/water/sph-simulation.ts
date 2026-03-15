@@ -354,12 +354,15 @@ export class SPHSimulation {
       p.y += p.vy * dt;
       p.z += p.vz * dt;
 
-      // Ground bounce
+      // Ground: settle into puddle (no bouncing)
       if (p.y < 0.03) {
         p.y = 0.03;
-        p.vy *= -0.15;
+        p.vy = 0;
+        // Spread outward slowly then stop
         p.vx *= 0.85;
         p.vz *= 0.85;
+        if (Math.abs(p.vx) < 0.05) p.vx = 0;
+        if (Math.abs(p.vz) < 0.05) p.vz = 0;
       }
 
       // Remove if too far
