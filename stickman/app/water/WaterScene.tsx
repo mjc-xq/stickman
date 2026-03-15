@@ -20,7 +20,7 @@ const INNER_RADIUS_TOP = GLASS_RADIUS_TOP - WALL_THICKNESS * 1.9;
 const INNER_RADIUS_BOTTOM = GLASS_RADIUS_BOTTOM - WALL_THICKNESS * 1.9;
 const GLASS_CENTER_Y = 1.55;
 const PARTICLE_COUNT = 500;
-const PARTICLE_SPHERE_RADIUS = 0.1; // close to smoothing radius for heavy overlap
+const PARTICLE_SPHERE_RADIUS = 0.13; // larger than spacing for deep overlap
 
 const GLASS_CONFIG: GlassConfig = {
   radiusTop: INNER_RADIUS_TOP,
@@ -195,14 +195,10 @@ function ContainedParticles({ simRef }: { simRef: React.RefObject<SPHSimulation 
   return (
     <instancedMesh ref={meshRef} args={[undefined, undefined, PARTICLE_COUNT]} frustumCulled={false} renderOrder={-1}>
       <sphereGeometry args={[PARTICLE_SPHERE_RADIUS, 8, 6]} />
-      <meshPhysicalMaterial
-        color="#2898d8"
+      <meshBasicMaterial
+        color="#3090d0"
         transparent
-        opacity={0.55}
-        roughness={0.1}
-        metalness={0.05}
-        transmission={0.2}
-        thickness={0.15}
+        opacity={0.18}
         depthWrite={false}
       />
     </instancedMesh>
@@ -236,14 +232,10 @@ function EscapedParticles({ simRef }: { simRef: React.RefObject<SPHSimulation | 
   return (
     <instancedMesh ref={meshRef} args={[undefined, undefined, PARTICLE_COUNT]} frustumCulled={false}>
       <sphereGeometry args={[PARTICLE_SPHERE_RADIUS, 8, 6]} />
-      <meshPhysicalMaterial
-        color="#2898d8"
+      <meshBasicMaterial
+        color="#3090d0"
         transparent
-        opacity={0.55}
-        roughness={0.1}
-        metalness={0.05}
-        transmission={0.2}
-        thickness={0.15}
+        opacity={0.18}
         depthWrite={false}
       />
     </instancedMesh>
