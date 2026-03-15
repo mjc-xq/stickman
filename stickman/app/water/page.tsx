@@ -1,10 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
-import { Environment, Html, OrbitControls } from "@react-three/drei";
+import { Environment, OrbitControls } from "@react-three/drei";
 import * as THREE from "three";
-import { StickmanProvider, useOrientation, useStickmanStatus } from "@/app/hooks/stickman";
+import {
+  StickmanProvider,
+  useOrientation,
+  useStickmanStatus,
+} from "@/app/hooks/stickman";
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 const GRAVITY = 9.8;
@@ -14,9 +18,9 @@ const GLASS_RADIUS_TOP = 0.72;
 const GLASS_RADIUS_BOTTOM = 0.5;
 const WALL_THICKNESS = 0.06;
 const DEFAULT_FILL = 0.72;
-const POUR_START = 0.5;
-const POUR_FULL = 1.1;
 const MAX_EMIT_PER_SECOND = 180;
+const INNER_RADIUS_TOP = GLASS_RADIUS_TOP - WALL_THICKNESS * 1.9;
+const INNER_RADIUS_BOTTOM = GLASS_RADIUS_BOTTOM - WALL_THICKNESS * 1.9;
 
 // ── Shared tilt ref type ───────────────────────────────────────────────────────
 interface TiltRef {
@@ -33,9 +37,94 @@ function damp(current: number, target: number, lambda: number, dt: number) {
   return THREE.MathUtils.lerp(current, target, 1 - Math.exp(-lambda * dt));
 }
 
-function smoothstep(edge0: number, edge1: number, x: number) {
-  const t = clamp((x - edge0) / (edge1 - edge0), 0, 1);
-  return t * t * (3 - 2 * t);
+/**
+ * Compute water surface geometry for a tilted cylindrical glass.
+ *
+ * The glass is a truncated cone (frustum) with its local Y axis along the
+ * cylinder. When the glass tilts by angle `tiltAngle` (radians) relative to
+ * world-up, the water surface remains level relative to gravity.
+ *
+ * In the glass's local frame the water surface is a plane whose normal is
+ * the world-up vector transformed into local space. For a tilt about an
+ * arbitrary axis, the surface normal in local space is simply (sin(tilt) along
+ * the tilt direction, cos(tilt) along Y). The plane intersects the cylinder
+ * and we need to know the min / max Y of the water on opposite sides of the
+ * rim to decide whether water spills.
+ *
+ * Returns: { waterCenterY, surfaceTiltAngle, tiltAxisAngle, pourFraction,
+ *            pourPointLocal, overflowDir }
+ */
+function computeWaterState(
+  pitch: number,
+  roll: number,
+  fillRatio: number,
+) {
+  // Total tilt of the glass away from vertical
+  const tiltMag = Math.sqrt(pitch * pitch + roll * roll);
+  // Angle of tilt axis in the XZ plane of the glass
+  const tiltAxisAngle = Math.atan2(-roll, pitch);
+
+  // The volume of water stays constant. In an upright glass at fillRatio f,
+  // the water height is f * GLASS_HEIGHT measured from the bottom.
+  // When tilted, the water surface plane tilts in the glass's local frame.
+  // The center of the water surface (at the cylinder axis) stays at the same
+  // height as if upright (conservation of volume for small tilts in a cylinder
+  // — exact for a true cylinder, good approximation for a near-cylinder).
+  const waterCenterY = -GLASS_HEIGHT / 2 + fillRatio * GLASS_HEIGHT;
+
+  // The water surface tilts by -tiltMag relative to the glass's local Y axis.
+  // (It stays level in world space, so in local space it tilts opposite.)
+  const surfaceTiltAngle = tiltMag;
+
+  // Half-width of the glass at the water center height
+  const t = clamp((waterCenterY + GLASS_HEIGHT / 2) / GLASS_HEIGHT, 0, 1);
+  const radiusAtCenter = THREE.MathUtils.lerp(
+    INNER_RADIUS_BOTTOM,
+    INNER_RADIUS_TOP,
+    t,
+  );
+
+  // The water rises on the "low" side and drops on the "high" side.
+  // At the rim (radius R from center), the offset is R * tan(tiltAngle).
+  const surfaceOffset = radiusAtCenter * Math.tan(surfaceTiltAngle);
+
+  // Water level at the highest point (low side of glass when tilted)
+  const waterHighY = waterCenterY + surfaceOffset;
+  // Water level at the lowest point (high side)
+  const waterLowY = waterCenterY - surfaceOffset;
+
+  // The glass rim is at Y = GLASS_HEIGHT / 2
+  const rimY = GLASS_HEIGHT / 2;
+
+  // Pour fraction: how much the water overflows the rim
+  const overflowAmount = waterHighY - rimY;
+  const pourFraction = clamp(overflowAmount / 0.3, 0, 1);
+
+  // Direction from glass center to the lowest rim point (where water pours)
+  // In the glass local frame, tilt about X means the glass tips forward,
+  // so the lowest rim point is in the direction of the tilt.
+  const pourDirX = tiltMag > 0.001 ? pitch / tiltMag : 0;
+  const pourDirZ = tiltMag > 0.001 ? -roll / tiltMag : 0;
+
+  // Pour point in local glass space — at the rim, on the low side
+  const pourPointLocal = new THREE.Vector3(
+    pourDirX * GLASS_RADIUS_TOP,
+    rimY,
+    pourDirZ * GLASS_RADIUS_TOP,
+  );
+
+  return {
+    waterCenterY,
+    surfaceTiltAngle,
+    tiltAxisAngle,
+    pourFraction,
+    pourPointLocal,
+    pourDirX,
+    pourDirZ,
+    waterHighY,
+    waterLowY,
+    radiusAtCenter,
+  };
 }
 
 // ── Tilt from orientation hook ─────────────────────────────────────────────────
@@ -82,7 +171,14 @@ function useTiltFromOrientation() {
 // ── Glass components ───────────────────────────────────────────────────────────
 function GlassShell() {
   const geometry = useMemo(() => {
-    return new THREE.CylinderGeometry(GLASS_RADIUS_TOP, GLASS_RADIUS_BOTTOM, GLASS_HEIGHT, 64, 1, true);
+    return new THREE.CylinderGeometry(
+      GLASS_RADIUS_TOP,
+      GLASS_RADIUS_BOTTOM,
+      GLASS_HEIGHT,
+      64,
+      1,
+      true,
+    );
   }, []);
 
   return (
@@ -104,8 +200,19 @@ function GlassShell() {
 
 function GlassBase() {
   return (
-    <mesh position={[0, -GLASS_HEIGHT / 2 + 0.045, 0]} receiveShadow castShadow>
-      <cylinderGeometry args={[GLASS_RADIUS_BOTTOM - 0.03, GLASS_RADIUS_BOTTOM - 0.08, 0.08, 48]} />
+    <mesh
+      position={[0, -GLASS_HEIGHT / 2 + 0.045, 0]}
+      receiveShadow
+      castShadow
+    >
+      <cylinderGeometry
+        args={[
+          GLASS_RADIUS_BOTTOM - 0.03,
+          GLASS_RADIUS_BOTTOM - 0.08,
+          0.08,
+          48,
+        ]}
+      />
       <meshPhysicalMaterial
         color="#f8fbff"
         transparent
@@ -118,77 +225,174 @@ function GlassBase() {
   );
 }
 
-// WaterInside reads tilt from a shared ref in useFrame (no props for pitch/roll)
-function WaterInside({ fillRatio, tiltRef }: { fillRatio: number; tiltRef: React.RefObject<TiltRef> }) {
-  const waterRef = useRef<THREE.Mesh>(null);
+function GlassRimRing() {
+  return (
+    <mesh position={[0, GLASS_HEIGHT / 2 - 0.01, 0]}>
+      <torusGeometry args={[GLASS_RADIUS_TOP - 0.01, 0.02, 12, 64]} />
+      <meshPhysicalMaterial
+        color="#f8fbff"
+        transparent
+        opacity={0.15}
+        transmission={1}
+        roughness={0.05}
+        thickness={0.1}
+      />
+    </mesh>
+  );
+}
+
+// ── Water body — uses clipping plane to create level surface ───────────────────
+function WaterInside({
+  fillRef,
+  tiltRef,
+}: {
+  fillRef: React.RefObject<number>;
+  tiltRef: React.RefObject<TiltRef>;
+}) {
+  const waterBodyRef = useRef<THREE.Mesh>(null);
   const surfaceRef = useRef<THREE.Mesh>(null);
+  const surfaceGroupRef = useRef<THREE.Group>(null);
   const wobbleRef = useRef(0);
 
+  // Create water body geometry — a cylinder for the full glass interior
   const waterGeometry = useMemo(() => {
     return new THREE.CylinderGeometry(
-      GLASS_RADIUS_TOP - WALL_THICKNESS * 1.9,
-      GLASS_RADIUS_BOTTOM - WALL_THICKNESS * 1.9,
-      GLASS_HEIGHT, 48, 20, false,
+      INNER_RADIUS_TOP,
+      INNER_RADIUS_BOTTOM,
+      GLASS_HEIGHT,
+      48,
+      1,
+      false,
     );
   }, []);
 
-  useFrame((_, dt) => {
-    const { pitch, roll } = tiltRef.current;
-    wobbleRef.current += dt * 3.3;
-    const levelHeight = -GLASS_HEIGHT / 2 + fillRatio * GLASS_HEIGHT;
-    const ripple = Math.sin(wobbleRef.current * 1.6) * 0.018 + Math.cos(wobbleRef.current * 1.1) * 0.01;
+  // Clipping plane + material stored in refs, initialized in effect
+  const clipPlaneRef = useRef<THREE.Plane | null>(null);
 
-    if (waterRef.current) {
-      waterRef.current.position.y = levelHeight * 0.5 - GLASS_HEIGHT * 0.25;
-      waterRef.current.scale.y = Math.max(0.001, fillRatio);
-      waterRef.current.rotation.x = pitch * 0.18;
-      waterRef.current.rotation.z = -roll * 0.18;
+  useEffect(() => {
+    const plane = new THREE.Plane(new THREE.Vector3(0, -1, 0), 0);
+    clipPlaneRef.current = plane;
+    const mat = new THREE.MeshPhysicalMaterial({
+      color: "#5fc3ff",
+      transparent: true,
+      opacity: 0.62,
+      roughness: 0.08,
+      transmission: 0.25,
+      thickness: 0.18,
+      clippingPlanes: [plane],
+      clipShadows: true,
+      side: THREE.DoubleSide,
+    });
+    if (waterBodyRef.current) {
+      waterBodyRef.current.material = mat;
     }
-    if (surfaceRef.current) {
-      surfaceRef.current.position.y = levelHeight - 0.01 + ripple;
-      surfaceRef.current.rotation.x = pitch * 0.45;
-      surfaceRef.current.rotation.z = -roll * 0.45;
+    return () => {
+      mat.dispose();
+    };
+  }, []);
+
+  useFrame((_state, dt) => {
+    const { pitch, roll } = tiltRef.current;
+    const fill = fillRef.current;
+    wobbleRef.current += dt * 3.3;
+
+    const ws = computeWaterState(pitch, roll, fill);
+    const ripple =
+      Math.sin(wobbleRef.current * 1.6) * 0.012 +
+      Math.cos(wobbleRef.current * 1.1) * 0.008;
+
+    const tiltMag = Math.sqrt(pitch * pitch + roll * roll);
+    // Normal pointing "down" in world space, transformed to local space
+    const nx = -Math.sin(pitch);
+    const ny = -Math.cos(tiltMag);
+    const nz = Math.sin(roll);
+    const len = Math.sqrt(nx * nx + ny * ny + nz * nz);
+
+    const cp = clipPlaneRef.current;
+    if (cp) {
+      cp.normal.set(nx / len, ny / len, nz / len);
+      cp.constant =
+        ((ws.waterCenterY + ripple) * Math.cos(tiltMag)) / len;
+    }
+
+    if (waterBodyRef.current) {
+      waterBodyRef.current.visible = fill > 0.005;
+    }
+
+    if (surfaceGroupRef.current && surfaceRef.current) {
+      surfaceGroupRef.current.position.y = ws.waterCenterY + ripple;
+      surfaceGroupRef.current.rotation.x = -pitch;
+      surfaceGroupRef.current.rotation.z = roll;
+      surfaceRef.current.visible = fill > 0.005;
+
+      const surfaceRadius = ws.radiusAtCenter;
+      surfaceRef.current.scale.set(
+        surfaceRadius / INNER_RADIUS_TOP,
+        surfaceRadius / INNER_RADIUS_TOP,
+        1,
+      );
     }
   });
 
-  const topRadius = THREE.MathUtils.lerp(GLASS_RADIUS_BOTTOM, GLASS_RADIUS_TOP, fillRatio) - WALL_THICKNESS * 1.4;
-
   return (
     <group>
-      <mesh ref={waterRef} geometry={waterGeometry} castShadow>
-        <meshPhysicalMaterial color="#5fc3ff" transparent opacity={0.62} roughness={0.08} transmission={0.25} thickness={0.18} />
-      </mesh>
-      <mesh ref={surfaceRef} position={[0, 0, 0]} rotation={[-0.02, 0, 0]}>
-        <circleGeometry args={[Math.max(0.001, topRadius), 48]} />
-        <meshStandardMaterial color="#8bdcff" transparent opacity={0.82} />
-      </mesh>
+      <mesh ref={waterBodyRef} geometry={waterGeometry} />
+      <group ref={surfaceGroupRef} rotation={[-Math.PI / 2, 0, 0]}>
+        <mesh ref={surfaceRef} rotation={[Math.PI / 2, 0, 0]}>
+          <circleGeometry args={[INNER_RADIUS_TOP, 48]} />
+          <meshStandardMaterial
+            color="#8bdcff"
+            transparent
+            opacity={0.82}
+            side={THREE.DoubleSide}
+          />
+        </mesh>
+      </group>
     </group>
   );
 }
 
-// ── Droplets — reads tilt from ref, mutates positions via ref ──────────────────
+// ── Droplets ────────────────────────────────────────────────────────────────────
 interface DropletsProps {
   sourceRef: React.RefObject<THREE.Group | null>;
   tiltRef: React.RefObject<TiltRef>;
-  fillRatio: number;
-  setFillRatio: React.Dispatch<React.SetStateAction<number>>;
+  fillRef: React.RefObject<number>;
+  onDrain: (amount: number) => void;
   resetToken: number;
 }
 
 interface Particle {
   active: boolean;
-  x: number; y: number; z: number;
-  vx: number; vy: number; vz: number;
-  age: number; life: number;
+  x: number;
+  y: number;
+  z: number;
+  vx: number;
+  vy: number;
+  vz: number;
+  age: number;
+  life: number;
 }
 
-function Droplets({ sourceRef, tiltRef, fillRatio, setFillRatio, resetToken }: DropletsProps) {
+function Droplets({
+  sourceRef,
+  tiltRef,
+  fillRef,
+  onDrain,
+  resetToken,
+}: DropletsProps) {
   const pointsRef = useRef<THREE.Points>(null);
-  // Keep positions in a ref so mutations don't trigger lint warnings about useMemo immutability
   const posRef = useRef(new Float32Array(MAX_DROPLETS * 3));
   const particlesRef = useRef<Particle[]>(
     Array.from({ length: MAX_DROPLETS }, () => ({
-      active: false, x: 0, y: -100, z: 0, vx: 0, vy: 0, vz: 0, age: 0, life: 1,
+      active: false,
+      x: 0,
+      y: -100,
+      z: 0,
+      vx: 0,
+      vy: 0,
+      vz: 0,
+      age: 0,
+      life: 1,
     })),
   );
   const spawnCarry = useRef(0);
@@ -214,15 +418,23 @@ function Droplets({ sourceRef, tiltRef, fillRatio, setFillRatio, resetToken }: D
 
   const material = useMemo(() => {
     return new THREE.PointsMaterial({
-      size: 0.085, map: sprite, transparent: true, depthWrite: false,
-      color: new THREE.Color("#90ddff"), opacity: 0.95, sizeAttenuation: true, blending: THREE.NormalBlending,
+      size: 0.085,
+      map: sprite,
+      transparent: true,
+      depthWrite: false,
+      color: new THREE.Color("#90ddff"),
+      opacity: 0.95,
+      sizeAttenuation: true,
+      blending: THREE.NormalBlending,
     });
   }, [sprite]);
 
-  // Set up buffer geometry imperatively via ref
   useEffect(() => {
     if (!geoRef.current) return;
-    geoRef.current.setAttribute("position", new THREE.BufferAttribute(posRef.current, 3));
+    geoRef.current.setAttribute(
+      "position",
+      new THREE.BufferAttribute(posRef.current, 3),
+    );
   }, []);
 
   useEffect(() => {
@@ -236,46 +448,63 @@ function Droplets({ sourceRef, tiltRef, fillRatio, setFillRatio, resetToken }: D
       positions[i * 3 + 2] = 0;
     }
     if (geoRef.current?.attributes.position) {
-      (geoRef.current.attributes.position as THREE.BufferAttribute).needsUpdate = true;
+      (
+        geoRef.current.attributes.position as THREE.BufferAttribute
+      ).needsUpdate = true;
     }
     spawnCarry.current = 0;
   }, [resetToken]);
+
+  // Reusable vectors to avoid GC pressure
+  const _origin = useMemo(() => new THREE.Vector3(), []);
+  const _dir = useMemo(() => new THREE.Vector3(), []);
 
   useFrame((_, dt) => {
     if (!pointsRef.current || !sourceRef.current || !geoRef.current) return;
 
     const positions = posRef.current;
     const { pitch, roll } = tiltRef.current;
-    const tiltMagnitude = Math.sqrt(pitch * pitch + roll * roll);
-    const pourStrength = smoothstep(POUR_START, POUR_FULL, tiltMagnitude);
+    const fillRatio = fillRef.current;
 
-    if (pourStrength > 0.001 && fillRatio > 0.02) {
-      const emitRate = MAX_EMIT_PER_SECOND * pourStrength * clamp(fillRatio * 1.2, 0.1, 1);
+    // Compute physics-based pour state
+    const ws = computeWaterState(pitch, roll, fillRatio);
+
+    if (ws.pourFraction > 0.001 && fillRatio > 0.02) {
+      const emitRate =
+        MAX_EMIT_PER_SECOND *
+        ws.pourFraction *
+        clamp(fillRatio * 1.2, 0.1, 1);
       spawnCarry.current += emitRate * dt;
       const spawnCount = Math.floor(spawnCarry.current);
       spawnCarry.current -= spawnCount;
 
-      const drain = pourStrength * 0.16 * dt;
-      setFillRatio((prev) => Math.max(0, prev - drain));
+      // Drain water
+      const drain = ws.pourFraction * 0.16 * dt;
+      onDrain(drain);
 
-      const origin = new THREE.Vector3(GLASS_RADIUS_TOP - 0.05, GLASS_HEIGHT / 2 - 0.05, 0);
+      // Pour origin: the lowest point of the rim in world space
+      _origin.copy(ws.pourPointLocal);
       sourceRef.current.updateWorldMatrix(true, false);
-      origin.applyMatrix4(sourceRef.current.matrixWorld);
+      _origin.applyMatrix4(sourceRef.current.matrixWorld);
 
-      const dir = new THREE.Vector3(1, 0.12, 0);
-      dir.applyEuler(new THREE.Euler(pitch, 0, -roll, "XYZ")).normalize();
+      // Pour direction: outward from the pour point + slight downward
+      _dir.set(ws.pourDirX, -0.15, ws.pourDirZ).normalize();
+      // Rotate direction by glass tilt to get world-space direction
+      const euler = new THREE.Euler(pitch, 0, -roll, "XYZ");
+      _dir.applyEuler(euler);
 
       const particles = particlesRef.current;
       for (let s = 0; s < spawnCount; s++) {
         const p = particles.find((item) => !item.active);
         if (!p) break;
         p.active = true;
-        p.x = origin.x + (Math.random() - 0.5) * 0.05;
-        p.y = origin.y + (Math.random() - 0.5) * 0.05;
-        p.z = origin.z + (Math.random() - 0.5) * 0.1;
-        p.vx = dir.x * (2 + Math.random() * 1.5) + (Math.random() - 0.5) * 0.18;
-        p.vy = dir.y * (2 + Math.random() * 1.2) + 0.1;
-        p.vz = dir.z * (2 + Math.random() * 1.4) + (Math.random() - 0.5) * 0.45;
+        p.x = _origin.x + (Math.random() - 0.5) * 0.06;
+        p.y = _origin.y + (Math.random() - 0.5) * 0.04;
+        p.z = _origin.z + (Math.random() - 0.5) * 0.06;
+        const speed = 1.5 + Math.random() * 1.2;
+        p.vx = _dir.x * speed + (Math.random() - 0.5) * 0.15;
+        p.vy = _dir.y * speed + Math.random() * 0.3;
+        p.vz = _dir.z * speed + (Math.random() - 0.5) * 0.15;
         p.age = 0;
         p.life = 1.1 + Math.random() * 1.1;
       }
@@ -287,7 +516,9 @@ function Droplets({ sourceRef, tiltRef, fillRatio, setFillRatio, resetToken }: D
       const i3 = i * 3;
 
       if (!p.active) {
-        positions[i3] = 0; positions[i3 + 1] = -100; positions[i3 + 2] = 0;
+        positions[i3] = 0;
+        positions[i3 + 1] = -100;
+        positions[i3 + 2] = 0;
         continue;
       }
 
@@ -309,7 +540,9 @@ function Droplets({ sourceRef, tiltRef, fillRatio, setFillRatio, resetToken }: D
 
       if (p.age >= p.life || Math.abs(p.x) > 20 || Math.abs(p.z) > 20) {
         p.active = false;
-        positions[i3] = 0; positions[i3 + 1] = -100; positions[i3 + 2] = 0;
+        positions[i3] = 0;
+        positions[i3 + 1] = -100;
+        positions[i3 + 2] = 0;
         continue;
       }
 
@@ -319,7 +552,9 @@ function Droplets({ sourceRef, tiltRef, fillRatio, setFillRatio, resetToken }: D
     }
 
     if (geoRef.current.attributes.position) {
-      (geoRef.current.attributes.position as THREE.BufferAttribute).needsUpdate = true;
+      (
+        geoRef.current.attributes.position as THREE.BufferAttribute
+      ).needsUpdate = true;
     }
   });
 
@@ -335,11 +570,23 @@ function Droplets({ sourceRef, tiltRef, fillRatio, setFillRatio, resetToken }: D
 function Ground() {
   return (
     <>
-      <mesh receiveShadow rotation={[-Math.PI / 2, 0, 0]} position={[0, 0, 0]}>
+      <mesh
+        receiveShadow
+        rotation={[-Math.PI / 2, 0, 0]}
+        position={[0, 0, 0]}
+      >
         <planeGeometry args={[40, 40]} />
-        <meshStandardMaterial color="#1c2430" roughness={0.98} metalness={0.02} />
+        <meshStandardMaterial
+          color="#1c2430"
+          roughness={0.98}
+          metalness={0.02}
+        />
       </mesh>
-      <mesh receiveShadow rotation={[-Math.PI / 2, 0, 0]} position={[0, 0.002, 0]}>
+      <mesh
+        receiveShadow
+        rotation={[-Math.PI / 2, 0, 0]}
+        position={[0, 0.002, 0]}
+      >
         <circleGeometry args={[4.75, 64]} />
         <meshStandardMaterial color="#202b37" roughness={1} />
       </mesh>
@@ -353,8 +600,25 @@ function GlassOfWater() {
   const groupRef = useRef<THREE.Group>(null);
   const [fillRatio, setFillRatio] = useState(DEFAULT_FILL);
   const [resetToken, setResetToken] = useState(0);
-  // Smoothed tilt for glass rotation + child reads
   const smoothTiltRef = useRef<TiltRef>({ pitch: 0.15, roll: 0 });
+  const fillRef = useRef(DEFAULT_FILL);
+
+  // Keep fillRef in sync
+  useEffect(() => {
+    fillRef.current = fillRatio;
+  }, [fillRatio]);
+
+  const handleDrain = useCallback((amount: number) => {
+    setFillRatio((prev) => {
+      const next = Math.max(0, prev - amount);
+      return next;
+    });
+  }, []);
+
+  const handleReset = useCallback(() => {
+    setFillRatio(DEFAULT_FILL);
+    setResetToken((v) => v + 1);
+  }, []);
 
   useFrame((_, dt) => {
     if (!groupRef.current) return;
@@ -372,34 +636,44 @@ function GlassOfWater() {
       <group ref={groupRef} position={[0, 1.55, 0]}>
         <GlassShell />
         <GlassBase />
-        <WaterInside fillRatio={fillRatio} tiltRef={smoothTiltRef} />
+        <GlassRimRing />
+        <WaterInside fillRef={fillRef} tiltRef={smoothTiltRef} />
       </group>
 
       <Droplets
         sourceRef={groupRef}
         tiltRef={smoothTiltRef}
-        fillRatio={fillRatio}
-        setFillRatio={setFillRatio}
+        fillRef={fillRef}
+        onDrain={handleDrain}
         resetToken={resetToken}
       />
 
-      <Html position={[0, 3.8, 0]} center>
-        <div className="rounded-2xl border border-white/20 bg-black/45 px-4 py-3 text-center text-white shadow-2xl backdrop-blur-md">
-          <div className="text-sm font-semibold tracking-wide">Tilt to pour</div>
-          <div className="mt-1 text-xs text-white/75">Move mouse or tilt the device</div>
-          <div className="mt-2 text-xs text-cyan-200">Water left: {Math.round(fillRatio * 100)}%</div>
-          <button
-            className="mt-3 rounded-lg bg-white/15 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-white/25"
-            onClick={() => {
-              setFillRatio(DEFAULT_FILL);
-              setResetToken((v) => v + 1);
-            }}
-          >
-            Reset glass
-          </button>
-        </div>
-      </Html>
+      <HUD fillRatio={fillRatio} onReset={handleReset} />
     </group>
+  );
+}
+
+// ── HUD (HTML overlay, minimal, bottom-right) ──────────────────────────────────
+function HUD({
+  fillRatio,
+  onReset,
+}: {
+  fillRatio: number;
+  onReset: () => void;
+}) {
+  const pct = Math.round(fillRatio * 100);
+  return (
+    <div className="pointer-events-none fixed inset-0 z-50">
+      <div className="pointer-events-auto absolute bottom-6 right-6 flex items-center gap-3 rounded-xl border border-white/10 bg-black/40 px-4 py-2.5 text-white backdrop-blur-md">
+        <span className="text-xs font-medium text-cyan-200">{pct}%</span>
+        <button
+          className="rounded-md bg-white/10 px-2.5 py-1 text-xs font-medium transition hover:bg-white/20"
+          onClick={onReset}
+        >
+          Reset
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -410,12 +684,29 @@ function WaterScene() {
       <color attach="background" args={["#0b1118"]} />
       <fog attach="fog" args={["#0b1118", 8, 20]} />
       <ambientLight intensity={0.7} />
-      <directionalLight position={[4, 8, 3]} intensity={1.9} castShadow shadow-mapSize-width={2048} shadow-mapSize-height={2048} />
-      <spotLight position={[-5, 7, 5]} angle={0.35} penumbra={0.7} intensity={45} color="#7dd3fc" />
+      <directionalLight
+        position={[4, 8, 3]}
+        intensity={1.9}
+        castShadow
+        shadow-mapSize-width={2048}
+        shadow-mapSize-height={2048}
+      />
+      <spotLight
+        position={[-5, 7, 5]}
+        angle={0.35}
+        penumbra={0.7}
+        intensity={45}
+        color="#7dd3fc"
+      />
       <Ground />
       <GlassOfWater />
       <Environment preset="city" />
-      <OrbitControls enablePan={false} maxPolarAngle={Math.PI * 0.48} minDistance={5} maxDistance={9} />
+      <OrbitControls
+        enablePan={false}
+        maxPolarAngle={Math.PI * 0.48}
+        minDistance={5}
+        maxDistance={9}
+      />
     </>
   );
 }
@@ -424,7 +715,11 @@ function WaterScene() {
 function WaterContent() {
   return (
     <div className="relative h-[100dvh] w-full overflow-hidden bg-[#0b1118] text-white">
-      <Canvas shadows camera={{ position: [0, 2.4, 6.6], fov: 42 }} gl={{ antialias: true }}>
+      <Canvas
+        shadows
+        camera={{ position: [0, 2.4, 6.6], fov: 42 }}
+        gl={{ antialias: true, localClippingEnabled: true }}
+      >
         <WaterScene />
       </Canvas>
     </div>
