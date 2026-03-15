@@ -20,7 +20,7 @@ const INNER_RADIUS_TOP = GLASS_RADIUS_TOP - WALL_THICKNESS * 1.9;
 const INNER_RADIUS_BOTTOM = GLASS_RADIUS_BOTTOM - WALL_THICKNESS * 1.9;
 const GLASS_CENTER_Y = 1.55;
 const PARTICLE_COUNT = 500;
-const PARTICLE_RADIUS = 0.055;
+const PARTICLE_SPRITE_SIZE = 0.22;
 
 const GLASS_CONFIG: GlassConfig = {
   radiusTop: INNER_RADIUS_TOP,
@@ -168,89 +168,130 @@ function Ground() {
   );
 }
 
-// ── Contained Particles ─────────────────────────────────────────────────────────
+// ── Soft sprite texture for fluid rendering ──────────────────────────────────
+// Pre-built at module scope (no Math.random, no render-time side effects)
+let _fluidSprite: THREE.Texture | null = null;
+function getFluidSprite(): THREE.Texture {
+  if (_fluidSprite) return _fluidSprite;
+  const size = 64;
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext("2d")!;
+  const gradient = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+  gradient.addColorStop(0, "rgba(100, 190, 255, 0.6)");
+  gradient.addColorStop(0.3, "rgba(80, 170, 255, 0.35)");
+  gradient.addColorStop(0.6, "rgba(60, 150, 255, 0.12)");
+  gradient.addColorStop(1, "rgba(40, 130, 255, 0)");
+  ctx.fillStyle = gradient;
+  ctx.fillRect(0, 0, size, size);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.needsUpdate = true;
+  _fluidSprite = tex;
+  return tex;
+}
+
+// ── Contained Particles (Points inside glass group) ────────────────────────────
 function ContainedParticles({ simRef }: { simRef: React.RefObject<SPHSimulation | null> }) {
-  const meshRef = useRef<THREE.InstancedMesh>(null);
-  const dummy = useMemo(() => new THREE.Object3D(), []);
+  const pointsRef = useRef<THREE.Points>(null);
+  const geoRef = useRef<THREE.BufferGeometry>(null);
+  const posBuffer = useRef(new Float32Array(PARTICLE_COUNT * 3));
+
+  useEffect(() => {
+    if (!geoRef.current) return;
+    geoRef.current.setAttribute("position", new THREE.BufferAttribute(posBuffer.current, 3));
+  }, []);
+
+  const material = useMemo(() => {
+    return new THREE.PointsMaterial({
+      size: PARTICLE_SPRITE_SIZE,
+      map: getFluidSprite(),
+      transparent: true,
+      depthWrite: false,
+      blending: THREE.NormalBlending,
+      sizeAttenuation: true,
+      color: new THREE.Color("#4ab8f8"),
+    });
+  }, []);
 
   useFrame(() => {
-    if (!meshRef.current || !simRef.current) return;
-    const positions = simRef.current.getContainedPositions();
+    if (!pointsRef.current || !simRef.current || !geoRef.current) return;
+    const simPositions = simRef.current.getContainedPositions();
     const count = simRef.current.getContainedCount();
-    for (let i = 0; i < count; i++) {
-      dummy.position.set(
-        positions[i * 3],
-        positions[i * 3 + 1],
-        positions[i * 3 + 2],
-      );
-      dummy.scale.set(1, 1, 1);
-      dummy.updateMatrix();
-      meshRef.current.setMatrixAt(i, dummy.matrix);
+    const buf = posBuffer.current;
+
+    // Copy contained particle positions
+    for (let i = 0; i < count * 3; i++) {
+      buf[i] = simPositions[i];
     }
-    // Hide remaining instances
-    for (let i = count; i < PARTICLE_COUNT; i++) {
-      dummy.position.set(0, -100, 0);
-      dummy.scale.set(0, 0, 0);
-      dummy.updateMatrix();
-      meshRef.current.setMatrixAt(i, dummy.matrix);
+    // Move remaining off-screen
+    for (let i = count * 3; i < PARTICLE_COUNT * 3; i += 3) {
+      buf[i] = 0;
+      buf[i + 1] = -100;
+      buf[i + 2] = 0;
     }
-    meshRef.current.instanceMatrix.needsUpdate = true;
+
+    const attr = geoRef.current.attributes.position as THREE.BufferAttribute;
+    if (attr) attr.needsUpdate = true;
   });
 
   return (
-    <instancedMesh
-      ref={meshRef}
-      args={[undefined, undefined, PARTICLE_COUNT]}
-      frustumCulled={false}
-    >
-      <sphereGeometry args={[PARTICLE_RADIUS, 6, 6]} />
-      <meshStandardMaterial
-        color="#3aaef5"
-        transparent
-        opacity={0.85}
-      />
-    </instancedMesh>
+    <points ref={pointsRef} frustumCulled={false} renderOrder={-1}>
+      <bufferGeometry ref={geoRef} />
+      <primitive object={material} attach="material" />
+    </points>
   );
 }
 
-// ── Escaped Particles ───────────────────────────────────────────────────────────
+// ── Escaped Particles (Points at scene root, world coords) ─────────────────────
 function EscapedParticles({ simRef }: { simRef: React.RefObject<SPHSimulation | null> }) {
-  const meshRef = useRef<THREE.InstancedMesh>(null);
-  const dummy = useMemo(() => new THREE.Object3D(), []);
+  const pointsRef = useRef<THREE.Points>(null);
+  const geoRef = useRef<THREE.BufferGeometry>(null);
+  const posBuffer = useRef(new Float32Array(PARTICLE_COUNT * 3));
+
+  useEffect(() => {
+    if (!geoRef.current) return;
+    geoRef.current.setAttribute("position", new THREE.BufferAttribute(posBuffer.current, 3));
+  }, []);
+
+  const material = useMemo(() => {
+    return new THREE.PointsMaterial({
+      size: PARTICLE_SPRITE_SIZE * 0.8,
+      map: getFluidSprite(),
+      transparent: true,
+      depthWrite: false,
+      blending: THREE.NormalBlending,
+      sizeAttenuation: true,
+      color: new THREE.Color("#4ab8f8"),
+    });
+  }, []);
 
   useFrame(() => {
-    if (!meshRef.current || !simRef.current) return;
+    if (!pointsRef.current || !simRef.current || !geoRef.current) return;
     const escaped = simRef.current.getEscapedParticles();
+    const buf = posBuffer.current;
+
     for (let i = 0; i < escaped.length && i < PARTICLE_COUNT; i++) {
       const p = escaped[i];
-      dummy.position.set(p.x, p.y, p.z);
-      dummy.scale.set(1, 1, 1);
-      dummy.updateMatrix();
-      meshRef.current.setMatrixAt(i, dummy.matrix);
+      buf[i * 3] = p.x;
+      buf[i * 3 + 1] = p.y;
+      buf[i * 3 + 2] = p.z;
     }
-    // Hide remaining
     for (let i = escaped.length; i < PARTICLE_COUNT; i++) {
-      dummy.position.set(0, -100, 0);
-      dummy.scale.set(0, 0, 0);
-      dummy.updateMatrix();
-      meshRef.current.setMatrixAt(i, dummy.matrix);
+      buf[i * 3] = 0;
+      buf[i * 3 + 1] = -100;
+      buf[i * 3 + 2] = 0;
     }
-    meshRef.current.instanceMatrix.needsUpdate = true;
+
+    const attr = geoRef.current.attributes.position as THREE.BufferAttribute;
+    if (attr) attr.needsUpdate = true;
   });
 
   return (
-    <instancedMesh
-      ref={meshRef}
-      args={[undefined, undefined, PARTICLE_COUNT]}
-      frustumCulled={false}
-    >
-      <sphereGeometry args={[PARTICLE_RADIUS, 6, 6]} />
-      <meshStandardMaterial
-        color="#3aaef5"
-        transparent
-        opacity={0.85}
-      />
-    </instancedMesh>
+    <points ref={pointsRef} frustumCulled={false}>
+      <bufferGeometry ref={geoRef} />
+      <primitive object={material} attach="material" />
+    </points>
   );
 }
 
