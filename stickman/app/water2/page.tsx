@@ -101,7 +101,7 @@ function useDeviceTilt() {
     const onPointerMove = (e: PointerEvent) => {
       const x = (e.clientX / window.innerWidth - 0.5) * 1.2;
       const y = (e.clientY / window.innerHeight - 0.5) * 1.2;
-      mouseRef.current = { x: y * 0.95, z: -x * 1.05 };
+      mouseRef.current = { x: y * 1.6, z: -x * 1.6 };
     };
     window.addEventListener("pointermove", onPointerMove);
     return () => window.removeEventListener("pointermove", onPointerMove);
@@ -139,12 +139,11 @@ function Glass({ rotationRef }: { rotationRef: React.RefObject<{ x: number; z: n
 
   return (
     <group ref={group}>
-      <mesh position={[0, 0.02, 0]} castShadow receiveShadow>
+      <mesh position={[0, 0.02, 0]} castShadow receiveShadow renderOrder={2}>
         <cylinderGeometry args={[0.58, 0.44, 1.4, 64, 1, true]} />
-        <meshPhysicalMaterial
-          transmission={1} thickness={0.22} roughness={0.04} metalness={0}
-          transparent opacity={0.32} clearcoat={1} clearcoatRoughness={0}
-          ior={1.18} color="#ffffff"
+        <meshStandardMaterial
+          color="#e8f4ff" transparent opacity={0.15} roughness={0.02}
+          metalness={0.1} side={THREE.DoubleSide} depthWrite={false}
         />
       </mesh>
       <mesh position={[0, -0.67, 0]} castShadow receiveShadow>
@@ -196,7 +195,7 @@ function Liquid({
   });
 
   return (
-    <mesh ref={mesh} position={[0, 0.02, 0]} renderOrder={1}>
+    <mesh ref={mesh} position={[0, 0.02, 0]} renderOrder={-1}>
       <cylinderGeometry args={[0.435, 0.325, 1.22, 64, 16, false]} />
       <liquidMaterial ref={mat} transparent side={THREE.DoubleSide} />
     </mesh>
@@ -229,12 +228,12 @@ function DropletsSystem({ rotationRef }: { rotationRef: React.RefObject<{ x: num
     if (!inst.current) return;
     const rot = rotationRef.current;
     const tiltMag = Math.max(Math.abs(rot.x), Math.abs(rot.z));
-    const shouldSpill = tiltMag > 0.55;
+    const shouldSpill = tiltMag > 0.35;
 
     if (shouldSpill) {
       const sideX = rot.z > 0 ? -1 : 1;
       const sideZ = rot.x > 0 ? -1 : 1;
-      const spawnCount = 3 + Math.floor((tiltMag - 0.55) * 22);
+      const spawnCount = 3 + Math.floor((tiltMag - 0.35) * 22);
       for (let n = 0; n < spawnCount; n++) {
         const d = DROPLET_DATA.find((x) => x.life <= 0);
         if (!d) break;
@@ -302,8 +301,8 @@ function Scene() {
 
   useFrame((_, dt) => {
     const target = deviceTilt.current;
-    rotationRef.current.x = THREE.MathUtils.damp(rotationRef.current.x, target.x * 0.95, 5.5, dt);
-    rotationRef.current.z = THREE.MathUtils.damp(rotationRef.current.z, target.z * 1.05, 5.5, dt);
+    rotationRef.current.x = THREE.MathUtils.damp(rotationRef.current.x, target.x, 5.5, dt);
+    rotationRef.current.z = THREE.MathUtils.damp(rotationRef.current.z, target.z, 5.5, dt);
   });
 
   return (
@@ -336,7 +335,7 @@ function Scene() {
 function Water2Content() {
   return (
     <div className="relative h-[100dvh] w-full overflow-hidden bg-[#0b1118] text-white">
-      <Canvas shadows camera={{ position: [0, 1.4, 4.6], fov: 34 }} gl={{ antialias: true }}>
+      <Canvas shadows camera={{ position: [0, 2.0, 4.0], fov: 38 }} gl={{ antialias: true }}>
         <Scene />
       </Canvas>
       <div className="pointer-events-none absolute bottom-4 left-4 rounded-xl bg-black/40 px-3 py-2 text-xs text-white/60 backdrop-blur-md">
