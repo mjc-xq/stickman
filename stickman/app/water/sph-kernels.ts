@@ -18,15 +18,18 @@ export function vec3Len(a: Vec3): number {
   return Math.sqrt(vec3LenSq(a));
 }
 
-// SPH Constants
-export const SMOOTHING_RADIUS = 0.12;
-export const PARTICLE_MASS = 0.002;
-export const REST_DENSITY = 1000;
-export const GAS_CONSTANT = 200;
-export const VISCOSITY = 0.8;
+// SPH Constants — calibrated for ~500 particles in a small glass
+// Key insight: PARTICLE_MASS must produce density ≈ REST_DENSITY when
+// particles are at rest spacing. With h=0.2 and ~20 neighbors, mass=0.65
+// gives density≈6 which matches REST_DENSITY=6.
+export const SMOOTHING_RADIUS = 0.2;
+export const PARTICLE_MASS = 0.65;
+export const REST_DENSITY = 6.0;
+export const GAS_CONSTANT = 80;
+export const VISCOSITY = 3.5;
 export const GRAVITY_MAG = 9.8;
 export const SUBSTEPS = 2;
-export const BOUNDARY_DAMPING = 0.3;
+export const BOUNDARY_DAMPING = 0.5;
 
 // Precomputed kernel coefficients
 const H = SMOOTHING_RADIUS;

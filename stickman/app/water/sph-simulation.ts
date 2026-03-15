@@ -79,7 +79,7 @@ export class SPHSimulation {
     const startY = -g.height / 2 + g.wallMargin;
 
     // Compute spacing from smoothing radius
-    const spacing = SMOOTHING_RADIUS * 0.55;
+    const spacing = SMOOTHING_RADIUS * 0.65;
     let placed = 0;
 
     for (let layer = 0; placed < count; layer++) {
@@ -270,10 +270,10 @@ export class SPHSimulation {
       p.vy += ay * dt;
       p.vz += az * dt;
 
-      // Velocity damping for stability
+      // Velocity clamping for stability
       const speed = Math.sqrt(p.vx * p.vx + p.vy * p.vy + p.vz * p.vz);
-      if (speed > 5) {
-        const s = 5 / speed;
+      if (speed > 3) {
+        const s = 3 / speed;
         p.vx *= s;
         p.vy *= s;
         p.vz *= s;
