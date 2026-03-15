@@ -196,7 +196,27 @@ static void publishIMU() {
 
 // ── Face Drawing ─────────────────────────────────────────────────────
 
-static FaceType currentFace = FACE_IDX_DEFAULT;
+static FaceType currentFace = FACE_IDX_HAPPY;
+static unsigned long lastRandomFaceChange = 0;
+
+// Pick a random face from a list
+static FaceType pickRandom(const FaceType* list, int count) {
+  return list[random(count)];
+}
+
+// Idle faces — shown randomly when nothing is happening
+static const FaceType IDLE_FACES[] = {
+  FACE_IDX_HAPPY, FACE_IDX_HOPEFUL, FACE_IDX_WINK,
+  FACE_IDX_CHEEKY, FACE_IDX_SMIRK, FACE_IDX_SINGING
+};
+static const int IDLE_FACE_COUNT = 6;
+
+// Movement faces — shown briefly when device is being moved around
+static const FaceType MOVE_FACES[] = {
+  FACE_IDX_EXCITED, FACE_IDX_SURPRISED, FACE_IDX_NERVOUS,
+  FACE_IDX_CONFUSED, FACE_IDX_THINKING
+};
+static const int MOVE_FACE_COUNT = 5;
 
 static void drawFace(FaceType face) {
   currentFace = face;
@@ -363,7 +383,7 @@ static void updateToss(float accMag, unsigned long now) {
       if (accMag > launchAccPeak) launchAccPeak = accMag;
       if (accMag < 0.4f) {
         tossState = TOSS_FREEFALL; freefallStart = now; freefallSamples = 0;
-        showFace(FACE_IDX_SHOCKED, "AAAH!");
+        showFace(FACE_IDX_SHOCKED, "Wheeee!");
         char ld[64];
         snprintf(ld, sizeof(ld), "{\\\"state\\\":\\\"airborne\\\",\\\"launchG\\\":%.1f}", launchAccPeak);
         publishEvent("toss", ld);
@@ -380,10 +400,10 @@ static void updateToss(float accMag, unsigned long now) {
         char hs[20];
         if (hi >= 12.0f) snprintf(hs, sizeof(hs), "%d'%d\"", (int)(hi/12), (int)(hi)%12);
         else snprintf(hs, sizeof(hs), "%.0f in", hi);
-        if (hi > 48) showFace(FACE_IDX_SHOCKED,"SO HIGH!",hs);
-        else if (hi > 24) showFace(FACE_IDX_SILLY,"Wow!",hs);
-        else if (hi > 8) showFace(FACE_IDX_HAPPY,"Nice!",hs);
-        else showFace(FACE_IDX_DEFAULT,"Caught!",hs);
+        if (hi > 48) showFace(FACE_IDX_SHOCKED,"Wooow!",hs);
+        else if (hi > 24) showFace(FACE_IDX_EXCITED,"So fun!",hs);
+        else if (hi > 8) showFace(FACE_IDX_PROUD,"Yay!",hs);
+        else showFace(FACE_IDX_HAPPY,"Hehe!",hs);
         char cd[96];
         snprintf(cd, sizeof(cd), "{\\\"state\\\":\\\"landed\\\",\\\"heightIn\\\":%.1f,\\\"freefallMs\\\":%.0f}", hi, fs*1000);
         publishEvent("toss", cd);
@@ -392,7 +412,7 @@ static void updateToss(float accMag, unsigned long now) {
       }
       if (tossState == TOSS_FREEFALL && now - freefallStart > 3000) {
         tossState = TOSS_IDLE;
-        showFace(FACE_IDX_SAD, "Lost me?");
+        showFace(FACE_IDX_CRYING, "Oh no!");
         publishEvent("toss", "{\\\"state\\\":\\\"lost\\\"}");
         tossResultTime = now; resultTime = now; state = STATE_RESULT;
       }
@@ -417,8 +437,8 @@ static bool checkShouldSleep(unsigned long now) {
 static void enterSleep() {
   state = STATE_SLEEPING;
   webSocket.disconnect(); WiFi.disconnect(true);
-  showFace(FACE_IDX_TIRED,"*yawn*"); delay(800);
-  showFace(FACE_IDX_TIRED,"Zzz..."); delay(600);
+  showFace(FACE_IDX_SLEEPY,"*yaaawn*"); delay(800);
+  showFace(FACE_IDX_SLEEPY,"Zzz..."); delay(600);
   StickCP2.Display.setTextColor(COLOR_FACE, COLOR_BG);
   StickCP2.Display.setTextDatum(TL_DATUM);
   StickCP2.Display.drawString("z",100,30,2); delay(250);
@@ -434,7 +454,7 @@ static void enterSleep() {
 static void showReady() {
   StickCP2.Display.fillScreen(COLOR_BG);
   drawModeIndicator();
-  if (mode == MODE_ACTIVE) showFace(FACE_IDX_HAPPY, "Ready!");
+  if (mode == MODE_ACTIVE) showFace(pickRandom(IDLE_FACES, IDLE_FACE_COUNT), "Ready!");
   else drawDebugScreen();
 }
 
@@ -469,9 +489,9 @@ void setup() {
 
   StickCP2.Display.setBrightness(80);
   StickCP2.Display.fillScreen(COLOR_BG);
-  showFace(FACE_IDX_TIRED,""); delay(400);
-  showFace(FACE_IDX_TIRED,"*yawn*"); delay(600);
-  showFace(FACE_IDX_HAPPY,"Hi there!"); delay(800);
+  showFace(FACE_IDX_SLEEPY,""); delay(400);
+  showFace(FACE_IDX_SLEEPY,"*yaaawn*"); delay(600);
+  showFace(FACE_IDX_HAPPY,"Hiii!"); delay(800);
 
   state = STATE_READY;
   showReady();
@@ -521,11 +541,18 @@ void loop() {
 
       // Idle face animation (skip during active toss)
       if (tossState == TOSS_IDLE) {
-        if (now - lastBlink > blinkInterval && !isBlinking) {
-          if (random(4) == 0) { drawFace(random(2) ? FACE_IDX_SILLY : FACE_IDX_DEFAULT); isBlinking = true; }
-          lastBlink = now; blinkInterval = random(8000, 20000);
+        // Occasionally swap to a random idle face (not a flash — stays)
+        if (now - lastBlink > blinkInterval) {
+          drawFace(pickRandom(IDLE_FACES, IDLE_FACE_COUNT));
+          lastBlink = now;
+          blinkInterval = random(6000, 15000);
         }
-        if (isBlinking && now - lastBlink >= 400) { drawFace(FACE_IDX_HAPPY); isBlinking = false; }
+        // Show a movement face when device is being moved gently
+        float gyroMag = sqrtf(imuGx*imuGx + imuGy*imuGy + imuGz*imuGz);
+        if (gyroMag > 20.0f && now - lastRandomFaceChange > 2000) {
+          drawFace(pickRandom(MOVE_FACES, MOVE_FACE_COUNT));
+          lastRandomFaceChange = now;
+        }
       }
 
       // Always detect BOTH gestures and tosses
@@ -536,10 +563,10 @@ void loop() {
         snprintf(gd, sizeof(gd), "{\\\"gesture\\\":\\\"%s\\\"}", GESTURE_NAMES[g]);
         publishEvent("gesture", gd);
         switch (g) {
-          case GESTURE_CIRCLE_LEFT:  showFace(FACE_IDX_DIZZY,"Circle","Left!"); break;
-          case GESTURE_CIRCLE_RIGHT: showFace(FACE_IDX_DIZZY,"Circle","Right!"); break;
-          case GESTURE_TAP:          showFace(FACE_IDX_SHOCKED,"Tap!"); break;
-          case GESTURE_THRUST:       showFace(FACE_IDX_SILLY,"Thrust!"); break;
+          case GESTURE_CIRCLE_LEFT:  showFace(FACE_IDX_CONFUSED,"Woah!","So dizzy!"); break;
+          case GESTURE_CIRCLE_RIGHT: showFace(FACE_IDX_CONFUSED,"Wheee!","Spinning!"); break;
+          case GESTURE_TAP:          showFace(FACE_IDX_ANNOYED,"Oww!","Hey!"); break;
+          case GESTURE_THRUST:       showFace(FACE_IDX_NERVOUS,"Woosh!"); break;
           default: break;
         }
       }
