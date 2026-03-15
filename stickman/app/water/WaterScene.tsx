@@ -230,7 +230,7 @@ void main() {
   vec3 halfVec = normalize(lightDir + viewDir);
   float spec = pow(max(dot(normal, halfVec), 0.0), 128.0);
   float diffuse = max(dot(normal, lightDir), 0.0) * 0.6 + 0.4;
-  vec3 waterColor = vec3(0.1, 0.4, 0.7) * diffuse;
+  vec3 waterColor = vec3(0.2, 0.55, 0.85) * diffuse;
   vec3 envColor = mix(vec3(0.05, 0.1, 0.2), vec3(0.3, 0.5, 0.8), normal.y * 0.5 + 0.5);
   vec2 refractUV = clamp(vUv + normal.xy * 0.02, 0.0, 1.0);
   vec3 refracted = texture2D(uSceneTex, refractUV).rgb;
@@ -296,7 +296,7 @@ function FluidRenderer({
       fragmentShader: DEPTH_FRAG,
       uniforms: {
         uPointScale: { value: 400 },
-        uParticleRadius: { value: 0.13 },
+        uParticleRadius: { value: 0.2 },
         uNear: { value: 0.1 },
         uFar: { value: 100 },
       },
@@ -312,8 +312,8 @@ function FluidRenderer({
         uDepthTex: { value: null },
         uTexelSize: { value: new THREE.Vector2(1, 1) },
         uDirection: { value: new THREE.Vector2(1, 0) },
-        uFilterRadius: { value: 12.0 },
-        uBlurDepthFalloff: { value: 10.0 },
+        uFilterRadius: { value: 20.0 },
+        uBlurDepthFalloff: { value: 4.0 },
       },
       depthTest: false,
       depthWrite: false,
@@ -396,7 +396,7 @@ function FluidRenderer({
     const projCam = cam as THREE.PerspectiveCamera;
     r.depthMat.uniforms.uNear.value = projCam.near;
     r.depthMat.uniforms.uFar.value = projCam.far;
-    r.depthMat.uniforms.uPointScale.value = h * dpr * 0.8;
+    r.depthMat.uniforms.uPointScale.value = h * dpr * 1.2;
 
     // Update particle positions from simulation
     const sim = simRef.current;
@@ -453,7 +453,7 @@ function FluidRenderer({
     // Then B becomes the src for the next iteration
     let srcFbo = r.depthFbo;
 
-    for (let iter = 0; iter < 3; iter++) {
+    for (let iter = 0; iter < 4; iter++) {
       // Horizontal: src -> A
       r.blurMat.uniforms.uDepthTex.value = srcFbo.texture;
       r.blurMat.uniforms.uDirection.value.set(1, 0);
