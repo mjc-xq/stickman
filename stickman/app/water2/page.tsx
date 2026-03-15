@@ -90,18 +90,24 @@ declare module "@react-three/fiber" {
   }
 }
 
-// ── Orientation-driven tilt ───────────────────────────────────────────────────
-function useDeviceTilt() {
+// ── Orientation-driven tilt (same pattern as pig/water1) ──────────────────────
+// Uses useOrientation() gravity vector from the stickman device hooks.
+// gravityX = left/right tilt (roll), gravityY = forward/back tilt (pitch)
+// Mouse fallback when no device connected.
+function useTiltFromOrientation() {
   const orientation = useOrientation();
   const { receiving } = useStickmanStatus();
-  const tiltRef = useRef({ x: 0, z: 0 });
-  const mouseRef = useRef({ x: 0, z: 0 });
+  const tiltRef = useRef({ pitch: 0, roll: 0 });
+  const mouseRef = useRef({ pitch: 0, roll: 0 });
 
   useEffect(() => {
     const onPointerMove = (e: PointerEvent) => {
-      const x = (e.clientX / window.innerWidth - 0.5) * 1.2;
-      const y = (e.clientY / window.innerHeight - 0.5) * 1.2;
-      mouseRef.current = { x: y * 1.6, z: -x * 1.6 };
+      const x = (e.clientX / window.innerWidth) * 2 - 1;
+      const y = (e.clientY / window.innerHeight) * 2 - 1;
+      mouseRef.current = {
+        pitch: y * 1.2,
+        roll: x * 1.2,
+      };
     };
     window.addEventListener("pointermove", onPointerMove);
     return () => window.removeEventListener("pointermove", onPointerMove);
@@ -113,8 +119,8 @@ function useDeviceTilt() {
       if (receiving) {
         const o = orientation.current;
         tiltRef.current = {
-          x: o.gravityY * 1.0,
-          z: -o.gravityX * 1.0,
+          pitch: o.gravityY * 1.2,
+          roll: o.gravityX * 1.2,
         };
       } else {
         tiltRef.current = mouseRef.current;
@@ -296,13 +302,14 @@ function DropletsSystem({ rotationRef }: { rotationRef: React.RefObject<{ x: num
 
 // ── Scene ─────────────────────────────────────────────────────────────────────
 function Scene() {
-  const deviceTilt = useDeviceTilt();
+  const tiltRef = useTiltFromOrientation();
   const rotationRef = useRef({ x: 0, z: 0 });
 
   useFrame((_, dt) => {
-    const target = deviceTilt.current;
-    rotationRef.current.x = THREE.MathUtils.damp(rotationRef.current.x, target.x, 5.5, dt);
-    rotationRef.current.z = THREE.MathUtils.damp(rotationRef.current.z, target.z, 5.5, dt);
+    const t = tiltRef.current;
+    // pitch → rotation.x, roll → rotation.z (same mapping as water1/pig)
+    rotationRef.current.x = THREE.MathUtils.damp(rotationRef.current.x, t.pitch, 5.5, dt);
+    rotationRef.current.z = THREE.MathUtils.damp(rotationRef.current.z, -t.roll, 5.5, dt);
   });
 
   return (
