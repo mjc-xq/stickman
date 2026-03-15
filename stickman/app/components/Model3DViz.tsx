@@ -28,6 +28,8 @@ const _targetQuat = new THREE.Quaternion();
 
 // Toss animation — maps real device height to 3D scene units
 const HEIGHT_SCALE = 8; // meters to scene units
+const MAX_TOSS_Y = 4; // max scene units — keeps pig on screen
+const MIN_TOSS_SCALE = 0.4; // smallest scale at apex (perspective shrink)
 const TUMBLE_SPEED = 5; // rotations/sec during airborne
 const _tumbleAxis = new THREE.Vector3(1, 0.2, 0.3).normalize();
 const _tumbleQuat = new THREE.Quaternion();
@@ -94,14 +96,14 @@ function PigModel() {
           tossY.current = 0;
           // Estimate rise speed from launch G (higher throw = more height)
           const launchForce = Math.min((t.launchG ?? 2) / 4, 1);
-          tossApexHeight.current = (1 + launchForce * 5) * HEIGHT_SCALE * 0.15;
+          tossApexHeight.current = Math.min((1 + launchForce * 5) * HEIGHT_SCALE * 0.15, MAX_TOSS_Y);
           tossRiseTime.current = 0.25 + launchForce * 0.3;
         }
 
         if (t.phase === "landed" && tossPhase.current === "rising") {
           // Device caught — we now know real height and duration
           const realHeight = (t.heightM ?? 0.3) * HEIGHT_SCALE * 0.5;
-          tossApexHeight.current = Math.max(realHeight, 1);
+          tossApexHeight.current = Math.min(Math.max(realHeight, 1), MAX_TOSS_Y);
           // Total freefall: half up, half down
           const totalMs = t.freefallMs ?? 500;
           tossRiseTime.current = (totalMs / 2) / 1000;
@@ -177,14 +179,26 @@ function PigModel() {
       }
 
       groupRef.current.position.y = tossY.current;
+
+      // Perspective shrink — pig gets smaller as it rises (looks like it's flying away)
+      const heightFrac = tossApexHeight.current > 0 ? tossY.current / tossApexHeight.current : 0;
+      const perspScale = 1 - heightFrac * (1 - MIN_TOSS_SCALE);
+      groupRef.current.scale.setScalar(perspScale);
+
       if (phase !== "landing") return;
     }
 
-    // Ease position back to 0 after toss
+    // Ease position and scale back to normal after toss
     if (groupRef.current.position.y > 0.01) {
       groupRef.current.position.y *= 1 - Math.min(5 * delta, 0.95);
     } else {
       groupRef.current.position.y = 0;
+    }
+    const s = groupRef.current.scale.x;
+    if (s < 0.99) {
+      groupRef.current.scale.setScalar(s + (1 - s) * Math.min(8 * delta, 0.95));
+    } else {
+      groupRef.current.scale.setScalar(1);
     }
 
     // --- Normal orientation tracking ---
