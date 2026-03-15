@@ -170,7 +170,7 @@ const FULLSCREEN_VERT = /* glsl */ `
 varying vec2 vUv;
 void main() {
   vUv = uv;
-  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  gl_Position = vec4(position.xy, 0.0, 1.0);
 }
 `;
 
@@ -277,12 +277,18 @@ function FluidRenderer({
       format: THREE.RGBAFormat,
     };
 
-    const depthFbo = new THREE.WebGLRenderTarget(1, 1, fboOpts);
+    const depthFbo = new THREE.WebGLRenderTarget(1, 1, {
+      ...fboOpts,
+      depthBuffer: true,
+      stencilBuffer: false,
+    });
     const blurFboA = new THREE.WebGLRenderTarget(1, 1, fboOpts);
     const blurFboB = new THREE.WebGLRenderTarget(1, 1, fboOpts);
     const sceneFbo = new THREE.WebGLRenderTarget(1, 1, {
       minFilter: THREE.LinearFilter,
       magFilter: THREE.LinearFilter,
+      depthBuffer: true,
+      stencilBuffer: false,
     });
 
     const depthMat = new THREE.ShaderMaterial({
@@ -373,9 +379,10 @@ function FluidRenderer({
     const { width: w, height: h } = state.size;
 
     // Resize FBOs if needed
+    const dpr = renderer.getPixelRatio();
     if (prevSize.current.w !== w || prevSize.current.h !== h) {
-      const pw = Math.max(w, 1);
-      const ph = Math.max(h, 1);
+      const pw = Math.max(Math.floor(w * dpr), 1);
+      const ph = Math.max(Math.floor(h * dpr), 1);
       r.depthFbo.setSize(pw, ph);
       r.blurFboA.setSize(pw, ph);
       r.blurFboB.setSize(pw, ph);
@@ -389,7 +396,7 @@ function FluidRenderer({
     const projCam = cam as THREE.PerspectiveCamera;
     r.depthMat.uniforms.uNear.value = projCam.near;
     r.depthMat.uniforms.uFar.value = projCam.far;
-    r.depthMat.uniforms.uPointScale.value = h * 0.8;
+    r.depthMat.uniforms.uPointScale.value = h * dpr * 0.8;
 
     // Update particle positions from simulation
     const sim = simRef.current;
