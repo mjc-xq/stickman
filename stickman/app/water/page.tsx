@@ -594,31 +594,17 @@ function Ground() {
   );
 }
 
-// ── Glass assembly ─────────────────────────────────────────────────────────────
-function GlassOfWater() {
+// ── Glass assembly (receives state from parent outside Canvas) ────────────────
+interface GlassOfWaterProps {
+  fillRef: React.RefObject<number>;
+  onDrain: (amount: number) => void;
+  resetToken: number;
+}
+
+function GlassOfWater({ fillRef, onDrain, resetToken }: GlassOfWaterProps) {
   const tiltRef = useTiltFromOrientation();
   const groupRef = useRef<THREE.Group>(null);
-  const [fillRatio, setFillRatio] = useState(DEFAULT_FILL);
-  const [resetToken, setResetToken] = useState(0);
   const smoothTiltRef = useRef<TiltRef>({ pitch: 0.15, roll: 0 });
-  const fillRef = useRef(DEFAULT_FILL);
-
-  // Keep fillRef in sync
-  useEffect(() => {
-    fillRef.current = fillRatio;
-  }, [fillRatio]);
-
-  const handleDrain = useCallback((amount: number) => {
-    setFillRatio((prev) => {
-      const next = Math.max(0, prev - amount);
-      return next;
-    });
-  }, []);
-
-  const handleReset = useCallback(() => {
-    setFillRatio(DEFAULT_FILL);
-    setResetToken((v) => v + 1);
-  }, []);
 
   useFrame((_, dt) => {
     if (!groupRef.current) return;
@@ -644,14 +630,13 @@ function GlassOfWater() {
         sourceRef={groupRef}
         tiltRef={smoothTiltRef}
         fillRef={fillRef}
-        onDrain={handleDrain}
+        onDrain={onDrain}
         resetToken={resetToken}
       />
-
-      <HUD fillRatio={fillRatio} onReset={handleReset} />
     </group>
   );
 }
+
 
 // ── HUD (HTML overlay, minimal, bottom-right) ──────────────────────────────────
 function HUD({
@@ -678,7 +663,7 @@ function HUD({
 }
 
 // ── Scene ──────────────────────────────────────────────────────────────────────
-function WaterScene() {
+function WaterScene({ fillRef, onDrain, resetToken }: GlassOfWaterProps) {
   return (
     <>
       <color attach="background" args={["#0b1118"]} />
@@ -699,7 +684,7 @@ function WaterScene() {
         color="#7dd3fc"
       />
       <Ground />
-      <GlassOfWater />
+      <GlassOfWater fillRef={fillRef} onDrain={onDrain} resetToken={resetToken} />
       <Environment preset="city" />
       <OrbitControls
         enablePan={false}
@@ -711,8 +696,25 @@ function WaterScene() {
   );
 }
 
-// ── Page ────────────────────────────────────────────────────────────────────────
+// ── Page — state lives here so HUD is outside Canvas ─────────────────────────
 function WaterContent() {
+  const [fillRatio, setFillRatio] = useState(DEFAULT_FILL);
+  const [resetToken, setResetToken] = useState(0);
+  const fillRef = useRef(DEFAULT_FILL);
+
+  useEffect(() => {
+    fillRef.current = fillRatio;
+  }, [fillRatio]);
+
+  const handleDrain = useCallback((amount: number) => {
+    setFillRatio((prev) => Math.max(0, prev - amount));
+  }, []);
+
+  const handleReset = useCallback(() => {
+    setFillRatio(DEFAULT_FILL);
+    setResetToken((v) => v + 1);
+  }, []);
+
   return (
     <div className="relative h-[100dvh] w-full overflow-hidden bg-[#0b1118] text-white">
       <Canvas
@@ -720,8 +722,9 @@ function WaterContent() {
         camera={{ position: [0, 2.4, 6.6], fov: 42 }}
         gl={{ antialias: true, localClippingEnabled: true }}
       >
-        <WaterScene />
+        <WaterScene fillRef={fillRef} onDrain={handleDrain} resetToken={resetToken} />
       </Canvas>
+      <HUD fillRatio={fillRatio} onReset={handleReset} />
     </div>
   );
 }
