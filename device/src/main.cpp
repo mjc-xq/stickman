@@ -40,7 +40,6 @@ static bool joystickMode = false; // when true, tilt sends analog stick
 
 // ── Gesture ──────────────────────────────────────────────────────────
 // Single gesture: wand tap (sharp flick in any direction)
-static const char* TAP_NAME = "Tap";
 
 // ── Toss / App States ────────────────────────────────────────────────
 enum TossState { TOSS_IDLE, TOSS_LAUNCHED, TOSS_FREEFALL, TOSS_CAUGHT };
@@ -53,7 +52,6 @@ static unsigned long resultTime = 0;
 // ── Idle face animation ──────────────────────────────────────────────
 static unsigned long lastBlink = 0;
 static unsigned long blinkInterval = 4000;
-static bool isBlinking = false;
 
 // ── Power Management ─────────────────────────────────────────────────
 static unsigned long lastButtonPress = 0;
@@ -441,14 +439,9 @@ static void drawDebugScreen() {
 
 // ── Tap Detection ────────────────────────────────────────────────────
 // Detects a sharp flick/tap in any direction using accel magnitude.
-// [C4 FIX] Implements actual spike-shape detection: magnitude must rise
-// sharply THEN fall (a peak), preventing false triggers from sustained
-// motion, drops, or excited handling by kids.
-//
-// ── Tuning: adjust these thresholds for sensitivity ──
-// ── Tap sensitivity tuning ──
-// Lower = more sensitive. A deliberate wand flick hits ~2G easily.
-// Normal handling/walking rarely exceeds 1.8G peak with proper spike shape.
+// Spike-shape detection: magnitude must rise sharply THEN fall (a peak).
+// Prevents false triggers from sustained motion, drops, or excited handling.
+// ── Tune these thresholds for sensitivity ──
 #define TAP_RISE_THRESH  0.8f   // minimum rise delta to start spike (g)
 #define TAP_PEAK_THRESH  1.8f   // minimum peak magnitude (g)
 #define TAP_FALL_THRESH  0.3f   // minimum fall delta to confirm spike (g)
@@ -646,7 +639,7 @@ void loop() {
     mode = (mode == MODE_ACTIVE) ? MODE_DEBUG : MODE_ACTIVE;
     publishEvent("mode", mode == MODE_ACTIVE ? "{\\\"mode\\\":\\\"active\\\"}" : "{\\\"mode\\\":\\\"debug\\\"}");
     // BLE keyboard stays connected/advertising across mode switches
-    prevAccMag = 1.0f; prevPrevAccMag = 1.0f; isBlinking = false;
+    prevAccMag = 1.0f; prevPrevAccMag = 1.0f;
     tossState = TOSS_IDLE; state = STATE_READY;
     showReady();
     return;
@@ -658,11 +651,6 @@ void loop() {
   float accMag = sqrtf(imuAx*imuAx + imuAy*imuAy + imuAz*imuAz);
   publishIMU();
 
-  // Joystick mode: tilt sends arrow keys for Apple TV navigation
-  if (joystickMode && mode == MODE_ACTIVE && now - lastJoySend >= JOY_SEND_INTERVAL_MS) {
-    bleSendArrows();
-    lastJoySend = now;
-  }
   motionAccum += fabsf(accMag - 1.0f) + fabsf(imuGz) * 0.01f;
   motionSamples++;
 
@@ -691,6 +679,12 @@ void loop() {
           showFace(pick(MOVE_FACES, MOVE_N), pick(MOVE_TEXTS, MOVE_TEXT_N));
           lastRandomFaceChange = now;
         }
+      }
+
+      // Joystick mode: tilt sends arrow keys (only in READY, not during result)
+      if (joystickMode && now - lastJoySend >= JOY_SEND_INTERVAL_MS) {
+        bleSendArrows();
+        lastJoySend = now;
       }
 
       // Detect tap → show face + send BLE select + publish Ably event
