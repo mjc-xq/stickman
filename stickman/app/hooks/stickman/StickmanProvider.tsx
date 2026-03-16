@@ -58,7 +58,7 @@ export function StickmanProvider({ children }: { children: ReactNode }) {
   const smooth = useRef<SmoothedIMUState>({
     ax: 0, ay: 0, az: 1, gx: 0, gy: 0, gz: 0, p: 0, r: 0,
   });
-  const gravity = useRef<GravityState>({ x: 0, y: 0, z: 1, tiltMag: 0, angle: 0 });
+  const gravity = useRef<GravityState>({ x: 0, y: 0, z: 1, tiltMag: 0, angle: 0, tiltLR: 0, tiltFB: 0 });
   const pointer = useRef<PointerState>({ x: 0, y: 0, vx: 0, vy: 0 });
   const dotPos = useRef({ x: 0, y: 0 });
   const dotVel = useRef({ x: 0, y: 0 });
@@ -151,6 +151,11 @@ export function StickmanProvider({ children }: { children: ReactNode }) {
 
       g.tiltMag = Math.sqrt(gnx * gnx + gny * gny);
       g.angle = Math.atan2(-gnx, gny) * (180 / Math.PI);
+
+      // NXP AN3461 3-axis tilt angles (stable at all orientations)
+      // Device: +X=left, +Y=top, +Z=screen-out
+      g.tiltLR = Math.atan2(g.x, Math.sqrt(g.y * g.y + g.z * g.z));
+      g.tiltFB = Math.atan2(-g.y, Math.sqrt(g.x * g.x + g.z * g.z));
 
       const accelDotG = s.ax * gnx + s.ay * gny + s.az * (g.z / gMag);
       let linX = s.ax - accelDotG * gnx;

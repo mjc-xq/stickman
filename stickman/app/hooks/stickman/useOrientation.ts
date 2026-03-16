@@ -11,6 +11,7 @@ export function useOrientation(): React.RefObject<OrientationState> {
     const cached: OrientationState = {
       gravityX: 0, gravityY: 0, gravityZ: 1,
       tiltMag: 0, angle: 0, pitch: 0, roll: 0,
+      tiltLR: 0, tiltFB: 0,
     };
     const obj = {} as { current: OrientationState };
     Object.defineProperty(obj, "current", {
@@ -24,6 +25,8 @@ export function useOrientation(): React.RefObject<OrientationState> {
         cached.angle = g.angle;
         cached.pitch = s.p;
         cached.roll = s.r;
+        cached.tiltLR = g.tiltLR;
+        cached.tiltFB = g.tiltFB;
         return cached;
       },
     });

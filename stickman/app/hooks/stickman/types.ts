@@ -75,11 +75,14 @@ export interface PointerConfig {
 }
 
 export interface GravityState {
-  x: number;
-  y: number;
-  z: number;
+  x: number;  // device +X = LEFT edge
+  y: number;  // device +Y = toward TOP
+  z: number;  // device +Z = out of screen
   tiltMag: number;
   angle: number;
+  // NXP AN3461 3-axis tilt angles (radians), stable at all orientations
+  tiltLR: number;  // left/right: atan2(ax, sqrt(ay² + az²))
+  tiltFB: number;  // forward/back: atan2(-ay, sqrt(ax² + az²))
 }
 
 export interface SmoothedIMUState {
@@ -96,6 +99,8 @@ export interface OrientationState {
   angle: number;
   pitch: number;
   roll: number;
+  tiltLR: number;  // left/right tilt in radians (NXP AN3461)
+  tiltFB: number;  // forward/back tilt in radians (NXP AN3461)
 }
 
 export type TossPhase = "idle" | "airborne" | "landed" | "lost";

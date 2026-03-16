@@ -193,30 +193,10 @@ function PigModel() {
       groupRef.current.scale.setScalar(1);
     }
 
-    // --- Orientation from gravity (NXP AN3461 3-axis formula) ---
-    // Device: +X=left, +Y=top, +Z=screen-out (verified via /calibrate)
-    // Three.js: +X=right, +Y=up, +Z=toward camera
-    //
-    // We compute two tilt angles from the gravity vector.
-    // 3-axis atan2 ensures only one angle is unstable at a time.
-    const ax = o.gravityX; // left(+) / right(-)
-    const ay = o.gravityY; // top(+) / bottom(-)
-    const az = o.gravityZ; // screen-out(+) / screen-in(-)
-
-    const len = Math.sqrt(ax * ax + ay * ay + az * az);
-    if (len < 0.5) return;
-
-    // Tilt left/right: device +X is LEFT, so positive ax = tilted left.
-    // In Three.js, positive Z rotation = CCW from above = tilt left. So: direct.
-    const tiltLR = Math.atan2(ax, Math.sqrt(ay * ay + az * az));
-
-    // Tilt forward/back: device +Y is TOP. When you tilt forward (top away),
-    // ay decreases. In Three.js, positive X rotation = top tips backward.
-    // So negate: tilt forward = negative ay = positive Three.js X rotation.
-    const tiltFB = Math.atan2(-ay, Math.sqrt(ax * ax + az * az));
-
-    // Apply: X=forward/back tilt, Z=left/right tilt, no Y (no yaw from accel)
-    _euler.set(tiltFB, 0, tiltLR, "XYZ");
+    // --- Orientation from pre-computed tilt angles (useOrientation hook) ---
+    // tiltLR/tiltFB are computed in StickmanProvider using NXP AN3461 formula.
+    // Three.js mapping: tiltFB → X rotation, tiltLR → Z rotation
+    _euler.set(o.tiltFB, 0, o.tiltLR, "XYZ");
     _targetQuat.setFromEuler(_euler);
 
     const alpha = 1 - Math.exp(-12 * delta);
