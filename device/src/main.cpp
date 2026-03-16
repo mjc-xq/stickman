@@ -114,6 +114,7 @@ static float prevSentAx = 0, prevSentAy = 0, prevSentAz = 0;
 
 static BleKeyboard bleKb(BLE_DEVICE_NAME, "Stickman", 100);
 static bool bleStarted = false;
+static bool bleEnabled = true;  // persisted in NVS — double-tap BtnB to toggle
 static unsigned long blePressTime = 0;
 static uint8_t blePressedKey = 0;
 
@@ -125,22 +126,62 @@ static unsigned long lastJoySend = 0;
 static unsigned long lastArrowTime[4] = {0,0,0,0};
 static bool arrowHeld[4] = {false,false,false,false};
 
+// Read BLE enabled state from NVS (persists across power cycles)
+static bool nvsReadBleEnabled() {
+  nvs_handle_t h;
+  uint8_t val = 1;
+  if (nvs_open("stickman", NVS_READONLY, &h) == ESP_OK) {
+    nvs_get_u8(h, "ble_on", &val);
+    nvs_close(h);
+  }
+  return val != 0;
+}
+
+static void nvsWriteBleEnabled(bool on) {
+  nvs_handle_t h;
+  if (nvs_open("stickman", NVS_READWRITE, &h) == ESP_OK) {
+    nvs_set_u8(h, "ble_on", on ? 1 : 0);
+    nvs_commit(h);
+    nvs_close(h);
+  }
+}
+
 static void bleInit() {
-  // Init NVS (required for BLE bonding storage)
   nvs_flash_init();
-  bleKb.begin();
-  bleStarted = true;
-  Serial.println("BLE: Keyboard '" BLE_DEVICE_NAME "' started");
+  bleEnabled = nvsReadBleEnabled();
+  if (bleEnabled) {
+    bleKb.begin();
+    bleStarted = true;
+    Serial.println("BLE: ON '" BLE_DEVICE_NAME "'");
+  } else {
+    Serial.println("BLE: OFF (double-tap side btn to enable)");
+  }
+}
+
+// Toggle BLE on/off and persist to NVS
+static void bleToggle() {
+  bleEnabled = !bleEnabled;
+  nvsWriteBleEnabled(bleEnabled);
+  if (bleEnabled && !bleStarted) {
+    bleKb.begin();
+    bleStarted = true;
+    Serial.println("BLE: turned ON");
+  } else if (!bleEnabled && bleStarted) {
+    bleKb.end();
+    bleStarted = false;
+    Serial.println("BLE: turned OFF");
+  }
 }
 
 static const char* bleStatusStr() {
+  if (!bleEnabled) return "OFF";
   if (bleKb.isConnected()) return "CONNECTED";
   if (bleStarted) return "PAIRING";
   return "OFF";
 }
 
 static void bleSendKey(uint8_t key) {
-  if (!bleKb.isConnected()) return;
+  if (!bleEnabled || !bleKb.isConnected()) return;
   bleKb.press(key);
   blePressedKey = key;
   blePressTime = millis();
@@ -158,7 +199,7 @@ static void bleUpdate() {
 
 // Tilt → arrow keys for Apple TV navigation
 static void bleSendArrows() {
-  if (!bleKb.isConnected()) return;
+  if (!bleEnabled || !bleKb.isConnected()) return;
   unsigned long now = millis();
 
   // Device: +X=left, +Y=top
@@ -632,13 +673,36 @@ void loop() {
   }
   if (M5.BtnA.wasReleased()) publishEvent("btn", "{\\\"button\\\":\\\"A\\\",\\\"state\\\":\\\"up\\\"}");
 
-  // BtnB: toggle debug screen (side button)
+  // BtnB: single tap = debug mode, double tap = toggle BLE on/off
+  static unsigned long lastBtnBTime = 0;
+  static bool btnBWaiting = false; // waiting to see if it's a double tap
+
   if (M5.BtnB.wasPressed()) {
     lastButtonPress = now;
     publishEvent("btn", "{\\\"button\\\":\\\"B\\\",\\\"state\\\":\\\"down\\\"}");
+
+    if (btnBWaiting && now - lastBtnBTime < 400) {
+      // Double tap! Toggle BLE
+      btnBWaiting = false;
+      bleToggle();
+      showFace(bleEnabled ? FACE_IDX_HAPPY : FACE_IDX_SLEEPY,
+               bleEnabled ? "BLE On!" : "BLE Off!");
+      state = STATE_RESULT; resultTime = now;
+      Serial.printf("BLE toggled: %s\n", bleEnabled ? "ON" : "OFF");
+      return;
+    }
+
+    // First tap — wait to see if a second comes
+    lastBtnBTime = now;
+    btnBWaiting = true;
+    return;
+  }
+
+  // After 400ms with no second tap, execute the single-tap action (debug toggle)
+  if (btnBWaiting && now - lastBtnBTime >= 400) {
+    btnBWaiting = false;
     mode = (mode == MODE_ACTIVE) ? MODE_DEBUG : MODE_ACTIVE;
     publishEvent("mode", mode == MODE_ACTIVE ? "{\\\"mode\\\":\\\"active\\\"}" : "{\\\"mode\\\":\\\"debug\\\"}");
-    // BLE keyboard stays connected/advertising across mode switches
     prevAccMag = 1.0f; prevPrevAccMag = 1.0f;
     tossState = TOSS_IDLE; state = STATE_READY;
     showReady();
