@@ -33,6 +33,15 @@
 #define COLOR_FACE  0x4228
 #define COLOR_INNER 0x6328
 
+// ── Screen Layout (135×240) ────────────────────────────────────────
+#define LAYOUT_TITLE_Y  0
+#define LAYOUT_TITLE_H  20    // 0–19
+#define LAYOUT_GFX_Y    20
+#define LAYOUT_GFX_H    180   // 20–199
+#define LAYOUT_TEXT_Y    200
+#define LAYOUT_TEXT_H    40    // 200–239
+#define LAYOUT_LINE2_Y   220
+
 // ── App Modes ────────────────────────────────────────────────────────
 // BtnB: toggle debug screen. BtnA: toggle joystick input mode.
 enum AppMode { MODE_ACTIVE, MODE_DEBUG };
@@ -390,7 +399,7 @@ static void drawFace(FaceType face) {
   currentFace = face;
   const uint8_t* data = (const uint8_t*)pgm_read_ptr(&FACE_DATA[face]);
   int x = (135 - FACE_W) / 2;
-  int y = 20;
+  int y = LAYOUT_GFX_Y + (LAYOUT_GFX_H - FACE_H) / 2;  // center in gfx zone
   uint16_t lineBuf[FACE_W];
   const uint16_t fg = (uint16_t)BLACK, bg = (uint16_t)WHITE;
   for (int row = 0; row < FACE_H; row++) {
@@ -401,23 +410,26 @@ static void drawFace(FaceType face) {
     }
     StickCP2.Display.pushImage(x, y + row, FACE_W, 1, lineBuf);
   }
+  // Fill padding around face in graphics zone
+  StickCP2.Display.fillRect(0, LAYOUT_GFX_Y, 135, y - LAYOUT_GFX_Y, WHITE);
+  StickCP2.Display.fillRect(0, y + FACE_H, 135, LAYOUT_TEXT_Y - y - FACE_H, WHITE);
   if (x > 0) {
     StickCP2.Display.fillRect(0, y, x, FACE_H, WHITE);
     StickCP2.Display.fillRect(x + FACE_W, y, 135 - x - FACE_W, FACE_H, WHITE);
   }
 }
 
-static void clearTextArea() { StickCP2.Display.fillRect(0, 155, 135, 85, COLOR_BG); }
+static void clearTextArea() { StickCP2.Display.fillRect(0, LAYOUT_TEXT_Y, 135, LAYOUT_TEXT_H, COLOR_BG); }
 
 static void showMessage(const char* l1, const char* l2 = nullptr) {
   clearTextArea();
   StickCP2.Display.setTextColor(COLOR_FACE, COLOR_BG);
-  StickCP2.Display.setTextDatum(BC_DATUM);
+  StickCP2.Display.setTextDatum(TC_DATUM);
   if (l2) {
-    StickCP2.Display.drawString(l1, 67, 200, 4);
-    StickCP2.Display.drawString(l2, 67, 232, 4);
+    StickCP2.Display.drawString(l1, 67, LAYOUT_TEXT_Y, 2);
+    StickCP2.Display.drawString(l2, 67, LAYOUT_LINE2_Y, 2);
   } else {
-    StickCP2.Display.drawString(l1, 67, 220, 4);
+    StickCP2.Display.drawString(l1, 67, LAYOUT_TEXT_Y + (LAYOUT_TEXT_H - 16) / 2, 2);
   }
 }
 
@@ -426,10 +438,10 @@ static void showFace(FaceType face, const char* m1, const char* m2 = nullptr) {
 }
 
 static void drawModeIndicator() {
-  StickCP2.Display.fillRect(0, 0, 135, 18, COLOR_INNER);
+  StickCP2.Display.fillRect(0, LAYOUT_TITLE_Y, 135, LAYOUT_TITLE_H, COLOR_INNER);
   StickCP2.Display.setTextColor(COLOR_BG, COLOR_INNER);
   StickCP2.Display.setTextDatum(TC_DATUM);
-  StickCP2.Display.drawString(mode == MODE_ACTIVE ? "~ Stickman ~" : "# Debug #", 67, 1, 2);
+  StickCP2.Display.drawString(mode == MODE_ACTIVE ? "~ Stickman ~" : "# Debug #", 67, 2, 2);
 }
 
 // ── Debug Screen ─────────────────────────────────────────────────────
