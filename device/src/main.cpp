@@ -2,6 +2,7 @@
 #include <utility/imu/MPU6886_Class.hpp>
 #include <WiFi.h>
 #include <WebSocketsClient.h>
+#include <BleGamepad.h>
 #include "faces.h"
 
 // ── WiFi ─────────────────────────────────────────────────────────────
@@ -31,8 +32,10 @@
 #define COLOR_FACE  0x4228
 #define COLOR_INNER 0x6328
 
-// ── App Modes (BtnB toggles) ─────────────────────────────────────────
+// ── App Modes ────────────────────────────────────────────────────────
+// BtnB: toggle debug screen. BtnA: toggle joystick input mode.
 enum AppMode { MODE_ACTIVE, MODE_DEBUG };
+static bool joystickMode = false; // when true, tilt sends analog stick
 
 // ── Gesture ──────────────────────────────────────────────────────────
 // Single gesture: wand tap (sharp flick in any direction)
@@ -54,8 +57,8 @@ static bool isBlinking = false;
 // ── Power Management ─────────────────────────────────────────────────
 static unsigned long lastButtonPress = 0;
 static unsigned long lastMotionTime = 0;
-static const unsigned long MOTION_SLEEP_MS = 60000;
-static const unsigned long BUTTON_SLEEP_MS = 180000;
+static const unsigned long MOTION_SLEEP_MS = 300000;  // 5 min no motion
+static const unsigned long BUTTON_SLEEP_MS = 600000;  // 10 min no button
 
 // ── IMU ──────────────────────────────────────────────────────────────
 static m5::MPU6886_Class* mpu = nullptr;
@@ -99,6 +102,109 @@ static float ablyRate = 0;
 static unsigned long ablyMsgSerial = 0;
 static float prevPitch = 0, prevRoll = 0;
 static float prevSentAx = 0, prevSentAy = 0, prevSentAz = 0;
+
+// ── BLE Gamepad ──────────────────────────────────────────────────────
+// Device name: "Chaos Wand". Advertises as a gamepad with 1 button.
+// Button 1 = select/enter for Apple TV navigation.
+// Advertising only happens when debug screen is showing (pairing mode).
+// Connection persists when switching back to active mode.
+#define BLE_DEVICE_NAME "Chaos Wand"
+#define BLE_BUTTON_SELECT BUTTON_1  // gamepad button for enter/select
+#define BLE_PRESS_MS 80             // how long to hold the button press (ms)
+
+static BleGamepad bleGamepad(BLE_DEVICE_NAME, "Stickman", 100);
+static bool bleStarted = false;
+static bool bleAdvertising = false;
+static unsigned long blePressTime = 0; // when button was pressed (0 = not pressed)
+
+static void bleInit() {
+  BleGamepadConfiguration cfg;
+  cfg.setAutoReport(false); // manual report for joystick + button
+  cfg.setButtonCount(1);
+  cfg.setHatSwitchCount(0);
+  // X/Y axes for joystick tilt control (Apple TV trackpad navigation)
+  cfg.setIncludeXAxis(true);
+  cfg.setIncludeYAxis(true);
+  cfg.setIncludeZAxis(false);
+  cfg.setIncludeRxAxis(false);
+  cfg.setIncludeRyAxis(false);
+  cfg.setIncludeRzAxis(false);
+  cfg.setIncludeSlider1(false);
+  cfg.setIncludeSlider2(false);
+  bleGamepad.begin(&cfg);
+  bleStarted = true;
+  bleAdvertising = true;
+  Serial.println("BLE: Gamepad started, advertising as " BLE_DEVICE_NAME);
+}
+
+static void bleStartAdvertising() {
+  if (!bleStarted) { bleInit(); return; }
+  if (!bleAdvertising && !bleGamepad.isConnected()) {
+    bleGamepad.end();
+    bleInit(); // restart to re-advertise
+  }
+  bleAdvertising = true;
+}
+
+static void bleStopAdvertising() {
+  // Don't disconnect if already connected — just stop advertising for new devices.
+  // BLE stack automatically stops advertising once connected, so this is mainly
+  // about intent tracking for the debug display.
+  bleAdvertising = false;
+}
+
+// Send a short press+release of the select button
+static void bleSendSelect() {
+  if (!bleGamepad.isConnected()) return;
+  bleGamepad.press(BLE_BUTTON_SELECT);
+  bleGamepad.sendReport();
+  blePressTime = millis();
+  Serial.println("BLE: Select pressed");
+}
+
+// Release the button after BLE_PRESS_MS (called from loop)
+static void bleUpdate() {
+  if (blePressTime > 0 && millis() - blePressTime >= BLE_PRESS_MS) {
+    bleGamepad.release(BLE_BUTTON_SELECT);
+    bleGamepad.sendReport();
+    blePressTime = 0;
+  }
+}
+
+static const char* bleStatusStr() {
+  if (bleGamepad.isConnected()) return "CONNECTED";
+  if (bleAdvertising) return "PAIRING";
+  return "OFF";
+}
+
+// Send tilt as joystick axes (called every loop when joystick mode is on)
+// Maps device tilt to -16384..16383 range (BLE gamepad axis range)
+// Device: +X=left, +Y=top, +Z=screen-out (verified via /calibrate)
+// Joystick: left/right tilt → X axis, forward/back tilt → Y axis
+#define JOY_TILT_SCALE 16000.0f  // scale factor: ~1g tilt = full deflection
+#define JOY_DEAD_ZONE 0.08f      // ignore tilt below this (g) to prevent drift
+
+static void bleSendJoystick() {
+  if (!bleGamepad.isConnected()) return;
+
+  // Use gravity-subtracted accel for tilt
+  // ax: positive = left tilt → joystick X negative (left)
+  // ay: positive = top up → joystick Y negative (up/forward)
+  float tiltX = imuAx;  // left(+) / right(-)
+  float tiltY = imuAy;  // top(+) / bottom(-)
+
+  // Apply dead zone
+  if (fabsf(tiltX) < JOY_DEAD_ZONE) tiltX = 0;
+  if (fabsf(tiltY) < JOY_DEAD_ZONE) tiltY = 0;
+
+  // Map to joystick range: negate X (device left = joy left = negative)
+  int16_t jx = (int16_t)constrain((int)(-tiltX * JOY_TILT_SCALE), -16384, 16383);
+  int16_t jy = (int16_t)constrain((int)(tiltY * JOY_TILT_SCALE), -16384, 16383);
+
+  bleGamepad.setX(jx);
+  bleGamepad.setY(jy);
+  bleGamepad.sendReport();
+}
 
 // ── Debug ────────────────────────────────────────────────────────────
 static unsigned long lastDebugDraw = 0;
@@ -155,7 +261,7 @@ static void publishEvent(const char* name, const char* data) {
 static void publishIMU() {
   if (ablyState != ABLY_ATTACHED) return;
   unsigned long now = millis();
-  if (now - lastAblyPublish < 100) return;
+  if (now - lastAblyPublish < 50) return; // 20Hz max for responsive tracking
   float pitch = atan2f(imuAx, sqrtf(imuAy*imuAy + imuAz*imuAz)) * 57.2958f;
   float roll  = atan2f(imuAy, sqrtf(imuAx*imuAx + imuAz*imuAz)) * 57.2958f;
   bool changed = fabsf(pitch - prevPitch) >= 2.0f || fabsf(roll - prevRoll) >= 2.0f
@@ -341,8 +447,17 @@ static void drawDebugScreen() {
   if (ablyState == ABLY_ATTACHED) {
     snprintf(buf, sizeof(buf), "Rate: %.0f msg/s", ablyRate);
     StickCP2.Display.setTextColor(WHITE, BLACK);
-    StickCP2.Display.drawString(buf, 4, y, 2);
+    StickCP2.Display.drawString(buf, 4, y, 2); y += lh;
   }
+
+  // BLE status
+  const char* bleStatus = bleStatusStr();
+  bool bleCon = bleGamepad.isConnected();
+  StickCP2.Display.setTextColor(bleCon ? GREEN : bleAdvertising ? YELLOW : RED, BLACK);
+  snprintf(buf, sizeof(buf), "BLE: %s", bleStatus);
+  StickCP2.Display.drawString(buf, 4, y, 2); y += lh;
+  StickCP2.Display.setTextColor(CYAN, BLACK);
+  StickCP2.Display.drawString(BLE_DEVICE_NAME, 4, y, 2);
 }
 
 // ── Tap Detection ────────────────────────────────────────────────────
@@ -485,6 +600,9 @@ void setup() {
   }
   mpu = static_cast<m5::MPU6886_Class*>(imuBase);
 
+  // BLE Gamepad — init early so it's ready when debug screen is shown
+  bleInit();
+
   WiFi.mode(WIFI_STA); WiFi.begin(WIFI_SSID, WIFI_PASS);
   char wsPath[256];
   snprintf(wsPath, sizeof(wsPath), "/?key=%s&format=json&v=1.2&clientId=stickman", ABLY_KEY);
@@ -512,19 +630,40 @@ void setup() {
 void loop() {
   StickCP2.update();
   webSocket.loop();
+  bleUpdate(); // handle BLE button release timing
   unsigned long now = millis();
 
-  // Buttons
+  // BtnA: toggle joystick mode (front button)
   if (M5.BtnA.wasPressed()) {
     lastButtonPress = now;
+    joystickMode = !joystickMode;
     publishEvent("btn", "{\\\"button\\\":\\\"A\\\",\\\"state\\\":\\\"down\\\"}");
+    if (joystickMode) {
+      // Center the joystick when entering mode
+      if (bleGamepad.isConnected()) {
+        bleGamepad.setX(0); bleGamepad.setY(0); bleGamepad.sendReport();
+      }
+      Serial.println("Joystick mode ON");
+    } else {
+      // Center joystick when exiting
+      if (bleGamepad.isConnected()) {
+        bleGamepad.setX(0); bleGamepad.setY(0); bleGamepad.sendReport();
+      }
+      Serial.println("Joystick mode OFF");
+    }
+    // Draw small indicator dot in top-right corner
+    StickCP2.Display.fillCircle(125, 8, 4, joystickMode ? GREEN : COLOR_INNER);
   }
   if (M5.BtnA.wasReleased()) publishEvent("btn", "{\\\"button\\\":\\\"A\\\",\\\"state\\\":\\\"up\\\"}");
+
+  // BtnB: toggle debug screen (side button)
   if (M5.BtnB.wasPressed()) {
     lastButtonPress = now;
     publishEvent("btn", "{\\\"button\\\":\\\"B\\\",\\\"state\\\":\\\"down\\\"}");
     mode = (mode == MODE_ACTIVE) ? MODE_DEBUG : MODE_ACTIVE;
     publishEvent("mode", mode == MODE_ACTIVE ? "{\\\"mode\\\":\\\"active\\\"}" : "{\\\"mode\\\":\\\"debug\\\"}");
+    if (mode == MODE_DEBUG) bleStartAdvertising();
+    else bleStopAdvertising();
     prevAccMag = 1.0f; prevPrevAccMag = 1.0f; isBlinking = false;
     tossState = TOSS_IDLE; state = STATE_READY;
     showReady();
@@ -536,6 +675,11 @@ void loop() {
   readIMUFull();
   float accMag = sqrtf(imuAx*imuAx + imuAy*imuAy + imuAz*imuAz);
   publishIMU();
+
+  // Send joystick data when in joystick mode
+  if (joystickMode && mode == MODE_ACTIVE) {
+    bleSendJoystick();
+  }
   motionAccum += fabsf(accMag - 1.0f) + fabsf(imuGz) * 0.01f;
   motionSamples++;
 
@@ -563,10 +707,11 @@ void loop() {
         }
       }
 
-      // Detect tap and toss
+      // Detect tap → show face + send BLE select + publish Ably event
       if (detectTap(accMag)) {
         state = STATE_RESULT; resultTime = now;
         publishEvent("gesture", "{\\\"gesture\\\":\\\"Tap\\\"}");
+        bleSendSelect(); // BLE gamepad button press for Apple TV select
         showFace(pick(TAP_FACES, TAP_FACE_N), pick(TAP_TEXTS, TAP_TEXT_N));
       }
       updateToss(accMag, now);
