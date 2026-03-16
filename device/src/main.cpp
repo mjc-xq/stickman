@@ -189,19 +189,41 @@ static void bleUpdate() {
   }
 }
 
-// Send tilt as analog stick (for Apple TV navigation)
+// Send tilt as D-pad hat switch for Apple TV menu navigation.
+// Apple TV uses hat switch (D-pad) directions, not analog sticks, for UI nav.
 // Device: +X=left, +Y=top, +Z=screen-out
 static void bleSendJoystick() {
   if (!bleGamepad.isConnected()) return;
-  float tiltX = imuAx;
-  float tiltY = imuAy;
-  if (fabsf(tiltX) < JOY_DEAD_ZONE) tiltX = 0;
-  if (fabsf(tiltY) < JOY_DEAD_ZONE) tiltY = 0;
-  // Negate X: device +X=left, gamepad +X=right
-  int16_t jx = (int16_t)constrain((int)(-tiltX * JOY_TILT_SCALE), -16384, 16383);
-  int16_t jy = (int16_t)constrain((int)(tiltY * JOY_TILT_SCALE), -16384, 16383);
-  bleGamepad.setX(jx);
-  bleGamepad.setY(jy);
+
+  // Determine dominant tilt direction
+  float ax = imuAx;  // +left, -right
+  float ay = imuAy;  // +top/forward, -bottom/back
+
+  // 8-direction hat switch: 0=up, 45=up-right, 90=right, etc.
+  // DPAD_CENTERED = no direction
+  bool left  = ax > JOY_DEAD_ZONE;
+  bool right = ax < -JOY_DEAD_ZONE;
+  bool up    = ay > JOY_DEAD_ZONE;
+  bool down  = ay < -JOY_DEAD_ZONE;
+
+  uint8_t hat;
+  if (up && right)       hat = HAT_UP_RIGHT;
+  else if (up && left)   hat = HAT_UP_LEFT;
+  else if (down && right) hat = HAT_DOWN_RIGHT;
+  else if (down && left) hat = HAT_DOWN_LEFT;
+  else if (up)           hat = HAT_UP;
+  else if (down)         hat = HAT_DOWN;
+  else if (left)         hat = HAT_LEFT;
+  else if (right)        hat = HAT_RIGHT;
+  else                   hat = HAT_CENTERED;
+
+  bleGamepad.setHat(hat);
+
+  // Also send analog axes for apps that use them
+  float tiltX = (fabsf(ax) < JOY_DEAD_ZONE) ? 0 : ax;
+  float tiltY = (fabsf(ay) < JOY_DEAD_ZONE) ? 0 : ay;
+  bleGamepad.setX((int16_t)constrain((int)(-tiltX * JOY_TILT_SCALE), -16384, 16383));
+  bleGamepad.setY((int16_t)constrain((int)(tiltY * JOY_TILT_SCALE), -16384, 16383));
   bleGamepad.sendReport();
 }
 
@@ -465,9 +487,12 @@ static void drawDebugScreen() {
 // motion, drops, or excited handling by kids.
 //
 // ── Tuning: adjust these thresholds for sensitivity ──
-#define TAP_RISE_THRESH  1.5f   // minimum rise delta to start spike (g)
-#define TAP_PEAK_THRESH  2.5f   // minimum peak magnitude (g) — 2.5G filters handling
-#define TAP_FALL_THRESH  0.5f   // minimum fall delta to confirm spike (g)
+// ── Tap sensitivity tuning ──
+// Lower = more sensitive. A deliberate wand flick hits ~2G easily.
+// Normal handling/walking rarely exceeds 1.8G peak with proper spike shape.
+#define TAP_RISE_THRESH  0.8f   // minimum rise delta to start spike (g)
+#define TAP_PEAK_THRESH  1.8f   // minimum peak magnitude (g)
+#define TAP_FALL_THRESH  0.3f   // minimum fall delta to confirm spike (g)
 
 static bool detectTap(float accMag) {
   unsigned long now = millis();
