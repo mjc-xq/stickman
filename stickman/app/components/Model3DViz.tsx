@@ -18,10 +18,8 @@ import { useOrientation, useToss } from "@/app/hooks/stickman";
 //   Device +Z → Three.js +Y  (screen normal → up)
 //   Device +Y → Three.js +Z  (device top → toward camera)
 
-const _gravVec = new THREE.Vector3();
-const _restVec = new THREE.Vector3(0, 1, 0); // device at rest (flat, screen up) → Three.js +Y
 const _targetQuat = new THREE.Quaternion();
-const _flipQuat = new THREE.Quaternion(0, 0, 1, 0); // 180° around Z for upside-down edge case
+const _euler = new THREE.Euler();
 
 // Toss animation — maps real device height to 3D scene units
 const HEIGHT_SCALE = 8; // meters to scene units
@@ -195,29 +193,33 @@ function PigModel() {
       groupRef.current.scale.setScalar(1);
     }
 
-    // --- Orientation via quaternion-from-gravity (no Euler angles) ---
-    // Device axes (verified): +X=left, +Y=top, +Z=screen-out
-    // Three.js axes: +X=right, +Y=up, +Z=toward camera
-    // Mapping: -devX→threeX, +devZ→threeY, +devY→threeZ
-    const gx = o.gravityX;
-    const gy = o.gravityY;
-    const gz = o.gravityZ;
+    // --- Orientation from gravity (NXP AN3461 3-axis formula) ---
+    // Device: +X=left, +Y=top, +Z=screen-out (verified via /calibrate)
+    // Three.js: +X=right, +Y=up, +Z=toward camera
+    //
+    // We compute two tilt angles from the gravity vector.
+    // 3-axis atan2 ensures only one angle is unstable at a time.
+    const ax = o.gravityX; // left(+) / right(-)
+    const ay = o.gravityY; // top(+) / bottom(-)
+    const az = o.gravityZ; // screen-out(+) / screen-in(-)
 
-    _gravVec.set(-gx, gz, gy);
-    const len = _gravVec.length();
-    if (len < 0.5) return; // unreliable (freefall or noise)
-    _gravVec.divideScalar(len);
+    const len = Math.sqrt(ax * ax + ay * ay + az * az);
+    if (len < 0.5) return;
 
-    // Handle near-upside-down edge case (anti-parallel vectors)
-    if (_gravVec.y < -0.99) {
-      _targetQuat.copy(_flipQuat);
-    } else {
-      // Quaternion that rotates rest gravity (0,1,0) to current gravity
-      _targetQuat.setFromUnitVectors(_restVec, _gravVec);
-    }
+    // Tilt left/right: device +X is LEFT, so positive ax = tilted left.
+    // In Three.js, positive Z rotation = CCW from above = tilt left. So: direct.
+    const tiltLR = Math.atan2(ax, Math.sqrt(ay * ay + az * az));
 
-    const SMOOTH_SPEED = 12;
-    const alpha = 1 - Math.exp(-SMOOTH_SPEED * delta);
+    // Tilt forward/back: device +Y is TOP. When you tilt forward (top away),
+    // ay decreases. In Three.js, positive X rotation = top tips backward.
+    // So negate: tilt forward = negative ay = positive Three.js X rotation.
+    const tiltFB = Math.atan2(-ay, Math.sqrt(ax * ax + az * az));
+
+    // Apply: X=forward/back tilt, Z=left/right tilt, no Y (no yaw from accel)
+    _euler.set(tiltFB, 0, tiltLR, "XYZ");
+    _targetQuat.setFromEuler(_euler);
+
+    const alpha = 1 - Math.exp(-12 * delta);
     smoothQuat.current.slerp(_targetQuat, alpha);
     groupRef.current.quaternion.copy(smoothQuat.current);
   });
