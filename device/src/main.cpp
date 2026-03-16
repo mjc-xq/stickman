@@ -2,7 +2,7 @@
 #include <utility/imu/MPU6886_Class.hpp>
 #include <WiFi.h>
 #include <WebSocketsClient.h>
-#include <BleKeyboard.h>
+#include <BleGamepad.h>
 #include "faces.h"
 
 // ── WiFi ─────────────────────────────────────────────────────────────
@@ -107,98 +107,93 @@ static unsigned long ablyMsgSerial = 0;
 static float prevPitch = 0, prevRoll = 0;
 static float prevSentAx = 0, prevSentAy = 0, prevSentAz = 0;
 
-// ── BLE Keyboard (Apple TV compatible) ───────────────────────────────
-// Apple TV recognizes standard BLE HID keyboards for navigation.
-// Generic BLE gamepads do NOT work with tvOS without MFi certification.
+// ── BLE Gamepad (Apple TV compatible via Xbox VID/PID) ───────────────
+// Apple TV supports BLE HID gamepads but uses a VID/PID whitelist.
+// By presenting as an Xbox Wireless Controller (VID 0x045E, PID 0x0B13),
+// tvOS recognizes the device as a valid game controller.
 //
 // Input mapping:
-//   Tap gesture → KEY_RETURN (select/enter on Apple TV)
-//   Joystick mode (BtnA toggle): tilt sends arrow keys
-//     Tilt left/right → LEFT_ARROW / RIGHT_ARROW
-//     Tilt forward/back → UP_ARROW / DOWN_ARROW
-//   BLE keyboard arrow keys are fully supported by tvOS for navigation.
+//   Tap gesture → BUTTON_1 (A button on Xbox = select on Apple TV)
+//   Joystick mode (BtnA toggle): tilt → X/Y analog axes for navigation
 //
-// Advertising: always on (BLE keyboard needs to be discoverable for pairing).
-// Once paired, tvOS reconnects automatically — no need to re-advertise.
+// Source: Apple Developer Forums thread/741696 — confirmed that PnP ID
+// determines whether iOS/tvOS recognizes a BLE HID device as a gamepad.
 
 #define BLE_DEVICE_NAME "Chaos Wand"
-#define BLE_PRESS_MS 80  // key press duration (ms) — tune for Apple TV responsiveness
+#define BLE_PRESS_MS 80   // button press duration (ms)
+#define XBOX_VID 0x045E   // Microsoft vendor ID
+#define XBOX_PID 0x0B13   // Xbox Wireless Controller (BLE firmware 5.x)
 
-static BleKeyboard bleKeyboard(BLE_DEVICE_NAME, "Stickman", 100);
+static BleGamepad bleGamepad(BLE_DEVICE_NAME, "Microsoft", 100);
 static bool bleStarted = false;
 static unsigned long blePressTime = 0;
-static uint8_t blePressedKey = 0; // which key is currently pressed (0 = none)
 
-// ── Joystick-as-arrows tuning ──
-#define JOY_TILT_THRESH 0.25f     // tilt threshold (g) to trigger arrow key
-#define JOY_REPEAT_MS 200         // repeat rate for held tilt (ms)
-#define JOY_SEND_INTERVAL_MS 25   // rate-limit BLE reports (40Hz)
+// ── Joystick tuning ──
+#define JOY_TILT_SCALE 16000.0f   // ~1g tilt = full deflection
+#define JOY_DEAD_ZONE 0.08f       // ignore tilt below this (g)
+#define JOY_SEND_INTERVAL_MS 25   // rate-limit to 40Hz
 static unsigned long lastJoySend = 0;
-static unsigned long lastArrowTime[4] = {0,0,0,0}; // L,R,U,D repeat timers
-static bool arrowHeld[4] = {false,false,false,false};
 
 static void bleInit() {
-  bleKeyboard.begin();
+  BleGamepadConfiguration cfg;
+  cfg.setAutoReport(false);
+  cfg.setButtonCount(16);        // Xbox has 16 buttons
+  cfg.setHatSwitchCount(1);      // Xbox has a D-pad hat
+  cfg.setVid(XBOX_VID);
+  cfg.setPid(XBOX_PID);
+  cfg.setIncludeXAxis(true);
+  cfg.setIncludeYAxis(true);
+  cfg.setIncludeZAxis(false);
+  cfg.setIncludeRxAxis(false);
+  cfg.setIncludeRyAxis(false);
+  cfg.setIncludeRzAxis(false);
+  cfg.setIncludeSlider1(false);
+  cfg.setIncludeSlider2(false);
+  bleGamepad.begin(&cfg);
   bleStarted = true;
-  Serial.println("BLE: Keyboard started as " BLE_DEVICE_NAME);
+  Serial.println("BLE: Gamepad started as " BLE_DEVICE_NAME " (Xbox VID/PID)");
 }
 
 static const char* bleStatusStr() {
-  if (bleKeyboard.isConnected()) return "CONNECTED";
+  if (bleGamepad.isConnected()) return "CONNECTED";
   if (bleStarted) return "PAIRING";
   return "OFF";
 }
 
-// Send a short key press+release (non-blocking, release handled in bleUpdate)
-static void bleSendKey(uint8_t key) {
-  if (!bleKeyboard.isConnected()) return;
-  bleKeyboard.press(key);
-  blePressedKey = key;
+// Send a short press+release of button 1 (Xbox A = Apple TV select)
+static void bleSendSelect() {
+  if (!bleGamepad.isConnected()) return;
+  bleGamepad.press(BUTTON_1);
+  bleGamepad.sendReport();
   blePressTime = millis();
 }
 
-// Release key after BLE_PRESS_MS
+// Release button after BLE_PRESS_MS. Discard on disconnect.
 static void bleUpdate() {
   if (blePressTime > 0) {
-    if (!bleKeyboard.isConnected()) {
-      blePressTime = 0; blePressedKey = 0;
-      return;
-    }
+    if (!bleGamepad.isConnected()) { blePressTime = 0; return; }
     if (millis() - blePressTime >= BLE_PRESS_MS) {
-      bleKeyboard.release(blePressedKey);
-      blePressTime = 0; blePressedKey = 0;
+      bleGamepad.release(BUTTON_1);
+      bleGamepad.sendReport();
+      blePressTime = 0;
     }
   }
 }
 
-// Send arrow keys based on tilt (for Apple TV navigation)
+// Send tilt as analog stick (for Apple TV navigation)
 // Device: +X=left, +Y=top, +Z=screen-out
-static void bleSendArrows() {
-  if (!bleKeyboard.isConnected()) return;
-  unsigned long now = millis();
-
-  // Tilt thresholds → arrow key mapping
-  // Device +X = left, so positive ax = tilted left → LEFT_ARROW
-  bool wantLeft  = imuAx > JOY_TILT_THRESH;
-  bool wantRight = imuAx < -JOY_TILT_THRESH;
-  bool wantUp    = imuAy > JOY_TILT_THRESH;  // +Y = top pointing up = tilt forward
-  bool wantDown  = imuAy < -JOY_TILT_THRESH;
-
-  const uint8_t keys[4] = {KEY_LEFT_ARROW, KEY_RIGHT_ARROW, KEY_UP_ARROW, KEY_DOWN_ARROW};
-  bool wants[4] = {wantLeft, wantRight, wantUp, wantDown};
-
-  for (int i = 0; i < 4; i++) {
-    if (wants[i]) {
-      if (!arrowHeld[i] || (now - lastArrowTime[i] >= JOY_REPEAT_MS)) {
-        bleKeyboard.press(keys[i]);
-        bleKeyboard.release(keys[i]);
-        lastArrowTime[i] = now;
-        arrowHeld[i] = true;
-      }
-    } else {
-      arrowHeld[i] = false;
-    }
-  }
+static void bleSendJoystick() {
+  if (!bleGamepad.isConnected()) return;
+  float tiltX = imuAx;
+  float tiltY = imuAy;
+  if (fabsf(tiltX) < JOY_DEAD_ZONE) tiltX = 0;
+  if (fabsf(tiltY) < JOY_DEAD_ZONE) tiltY = 0;
+  // Negate X: device +X=left, gamepad +X=right
+  int16_t jx = (int16_t)constrain((int)(-tiltX * JOY_TILT_SCALE), -16384, 16383);
+  int16_t jy = (int16_t)constrain((int)(tiltY * JOY_TILT_SCALE), -16384, 16383);
+  bleGamepad.setX(jx);
+  bleGamepad.setY(jy);
+  bleGamepad.sendReport();
 }
 
 // ── Debug ────────────────────────────────────────────────────────────
@@ -446,7 +441,7 @@ static void drawDebugScreen() {
   }
 
   // BLE status
-  bool bleCon = bleKeyboard.isConnected();
+  bool bleCon = bleGamepad.isConnected();
   StickCP2.Display.setTextColor(bleCon ? GREEN : bleStarted ? YELLOW : RED, BLACK);
   snprintf(buf, sizeof(buf), "BLE: %s", bleStatusStr());
   StickCP2.Display.drawString(buf, 4, y, 2); y += lh;
@@ -641,8 +636,10 @@ void loop() {
     lastButtonPress = now;
     joystickMode = !joystickMode;
     publishEvent("btn", "{\\\"button\\\":\\\"A\\\",\\\"state\\\":\\\"down\\\"}");
-    // Reset arrow state when toggling
-    for (int i = 0; i < 4; i++) arrowHeld[i] = false;
+    // Center joystick when toggling
+    if (bleGamepad.isConnected()) {
+      bleGamepad.setX(0); bleGamepad.setY(0); bleGamepad.sendReport();
+    }
     Serial.printf("Joystick mode %s\n", joystickMode ? "ON" : "OFF");
     // Draw small indicator dot in top-right corner
     StickCP2.Display.fillCircle(125, 8, 4, joystickMode ? GREEN : COLOR_INNER);
@@ -668,9 +665,9 @@ void loop() {
   float accMag = sqrtf(imuAx*imuAx + imuAy*imuAy + imuAz*imuAz);
   publishIMU();
 
-  // Joystick mode: tilt sends arrow keys for Apple TV navigation
+  // Joystick mode: tilt sends analog stick for Apple TV navigation
   if (joystickMode && mode == MODE_ACTIVE && now - lastJoySend >= JOY_SEND_INTERVAL_MS) {
-    bleSendArrows();
+    bleSendJoystick();
     lastJoySend = now;
   }
   motionAccum += fabsf(accMag - 1.0f) + fabsf(imuGz) * 0.01f;
@@ -704,7 +701,7 @@ void loop() {
       if (detectTap(accMag)) {
         state = STATE_RESULT; resultTime = now;
         publishEvent("gesture", "{\\\"gesture\\\":\\\"Tap\\\"}");
-        bleSendKey(KEY_RETURN); // Apple TV select/enter
+        bleSendSelect(); // Xbox A button = Apple TV select
         showFace(pick(TAP_FACES, TAP_FACE_N), pick(TAP_TEXTS, TAP_TEXT_N));
       }
       updateToss(accMag, now);
