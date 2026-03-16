@@ -4,7 +4,7 @@ import { useRef, useMemo, useEffect, Suspense } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
 import { OrbitControls, useGLTF, Environment, Stars, Center } from "@react-three/drei";
 import * as THREE from "three";
-import { useOrientation, useSmoothedIMU, useToss } from "@/app/hooks/stickman";
+import { useOrientation, useToss } from "@/app/hooks/stickman";
 
 // Device axes (M5StickC Plus 2, portrait, USB at bottom):
 //   +X = LEFT edge     (tilt right → ax goes negative)
@@ -18,13 +18,10 @@ import { useOrientation, useSmoothedIMU, useToss } from "@/app/hooks/stickman";
 //   Device +Z → Three.js +Y  (screen normal → up)
 //   Device +Y → Three.js +Z  (device top → toward camera)
 
-const DEG_TO_RAD = Math.PI / 180;
-const REST_UP = new THREE.Vector3(0, 1, 0);
-const FLIP_QUAT = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI);
-const _upDir = new THREE.Vector3();
-const _tiltQuat = new THREE.Quaternion();
-const _yawQuat = new THREE.Quaternion();
+const _gravVec = new THREE.Vector3();
+const _restVec = new THREE.Vector3(0, 1, 0); // device at rest (flat, screen up) → Three.js +Y
 const _targetQuat = new THREE.Quaternion();
+const _flipQuat = new THREE.Quaternion(0, 0, 1, 0); // 180° around Z for upside-down edge case
 
 // Toss animation — maps real device height to 3D scene units
 const HEIGHT_SCALE = 8; // meters to scene units
@@ -37,11 +34,9 @@ const _landingQuat = new THREE.Quaternion(); // identity = upright
 
 function PigModel() {
   const orientation = useOrientation();
-  const smoothedIMU = useSmoothedIMU();
   const toss = useToss();
   const groupRef = useRef<THREE.Group>(null);
   const smoothQuat = useRef(new THREE.Quaternion());
-  const yawAngle = useRef(0);
   const { scene } = useGLTF("/3d/animal-pig.glb");
 
   // Toss animation state — driven by real device events
@@ -123,7 +118,6 @@ function PigModel() {
     if (!groupRef.current) return;
 
     const o = orientation.current;
-    const imu = smoothedIMU.current;
 
     // --- Toss animation driven by real device events ---
     const phase = tossPhase.current;
@@ -201,30 +195,28 @@ function PigModel() {
       groupRef.current.scale.setScalar(1);
     }
 
-    // --- Normal orientation tracking ---
-    // Device→Three.js: negate X (device +X=left, three +X=right), Z→Y, Y→Z
-    _upDir.set(-o.gravityX, o.gravityZ, o.gravityY);
+    // --- Orientation via quaternion-from-gravity (no Euler angles) ---
+    // Device axes (verified): +X=left, +Y=top, +Z=screen-out
+    // Three.js axes: +X=right, +Y=up, +Z=toward camera
+    // Mapping: -devX→threeX, +devZ→threeY, +devY→threeZ
+    const gx = o.gravityX;
+    const gy = o.gravityY;
+    const gz = o.gravityZ;
 
-    const lenSq = _upDir.lengthSq();
-    if (lenSq < 0.25) return;
-    _upDir.multiplyScalar(1 / Math.sqrt(lenSq));
+    _gravVec.set(-gx, gz, gy);
+    const len = _gravVec.length();
+    if (len < 0.5) return; // unreliable (freefall or noise)
+    _gravVec.divideScalar(len);
 
-    const dot = _upDir.dot(REST_UP);
-    if (dot < -0.999) {
-      _tiltQuat.copy(FLIP_QUAT);
+    // Handle near-upside-down edge case (anti-parallel vectors)
+    if (_gravVec.y < -0.99) {
+      _targetQuat.copy(_flipQuat);
     } else {
-      _tiltQuat.setFromUnitVectors(REST_UP, _upDir);
+      // Quaternion that rotates rest gravity (0,1,0) to current gravity
+      _targetQuat.setFromUnitVectors(_restVec, _gravVec);
     }
 
-    const GYRO_DEADZONE = 2.0; // filter gyro drift at rest (~0.5-1 dps noise)
-    const gz = Math.abs(imu.gz) > GYRO_DEADZONE ? imu.gz : 0;
-    yawAngle.current += -gz * delta * DEG_TO_RAD; // negate: device +Z yaw is CW, Three.js Y yaw is CCW
-    yawAngle.current = ((yawAngle.current % (2 * Math.PI)) + 3 * Math.PI) % (2 * Math.PI) - Math.PI;
-    _yawQuat.setFromAxisAngle(_upDir, yawAngle.current);
-
-    _targetQuat.multiplyQuaternions(_yawQuat, _tiltQuat);
-
-    const SMOOTH_SPEED = 10;
+    const SMOOTH_SPEED = 12;
     const alpha = 1 - Math.exp(-SMOOTH_SPEED * delta);
     smoothQuat.current.slerp(_targetQuat, alpha);
     groupRef.current.quaternion.copy(smoothQuat.current);
