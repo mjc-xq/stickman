@@ -442,8 +442,10 @@ static const char* const BLE_OFF_TEXTS[] = {
 static void drawSprite(SpriteIdx sprite) {
   currentSprite = sprite;
   const uint16_t* data = (const uint16_t*)pgm_read_ptr(&SPRITE_DATA[sprite]);
-  // Sprite fills the entire graphics zone (135x180)
+  // Swap bytes: our RGB565 is standard byte order, ST7789 wants big-endian
+  StickCP2.Display.setSwapBytes(true);
   StickCP2.Display.pushImage(0, LAYOUT_GFX_Y, SPRITE_W, SPRITE_H, data);
+  StickCP2.Display.setSwapBytes(false);
 }
 
 static void clearTextArea() { StickCP2.Display.fillRect(0, LAYOUT_TEXT_Y, 135, LAYOUT_TEXT_H, COLOR_BG); }
@@ -456,7 +458,7 @@ static void showMessage(const char* l1, const char* l2 = nullptr) {
     StickCP2.Display.drawString(l1, 67, LAYOUT_TEXT_Y, 2);
     StickCP2.Display.drawString(l2, 67, LAYOUT_LINE2_Y, 2);
   } else {
-    StickCP2.Display.drawString(l1, 67, LAYOUT_TEXT_Y + (LAYOUT_TEXT_H - 16) / 2, 2);
+    StickCP2.Display.drawString(l1, 67, LAYOUT_TEXT_Y + (LAYOUT_TEXT_H - 26) / 2, 4);
   }
 }
 
