@@ -2,7 +2,7 @@
 #include <utility/imu/MPU6886_Class.hpp>
 #include <WiFi.h>
 #include <WebSocketsClient.h>
-#include <BleGamepad.h>
+#include <BleKeyboard.h>
 #include "faces.h"
 
 // ── WiFi ─────────────────────────────────────────────────────────────
@@ -64,15 +64,19 @@ static const unsigned long BUTTON_SLEEP_MS = 600000;  // 10 min no button
 static m5::MPU6886_Class* mpu = nullptr;
 static float imuAx, imuAy, imuAz, imuGx, imuGy, imuGz;
 
-static void readIMUFull() {
+// [C8 FIX] Returns false on I2C read failure — caller should skip processing
+static bool readIMUFull() {
   uint8_t buf[14];
-  mpu->readRegister(m5::MPU6886_Class::REG_ACCEL_XOUT_H, buf, 14);
+  if (!mpu->readRegister(m5::MPU6886_Class::REG_ACCEL_XOUT_H, buf, 14)) {
+    return false; // I2C error — keep previous values
+  }
   imuAx = (int16_t)((buf[0] << 8) | buf[1]) * (8.0f / 32768.0f);
   imuAy = (int16_t)((buf[2] << 8) | buf[3]) * (8.0f / 32768.0f);
   imuAz = (int16_t)((buf[4] << 8) | buf[5]) * (8.0f / 32768.0f);
   imuGx = (int16_t)((buf[8] << 8) | buf[9]) * (2000.0f / 32768.0f);
   imuGy = (int16_t)((buf[10] << 8) | buf[11]) * (2000.0f / 32768.0f);
   imuGz = (int16_t)((buf[12] << 8) | buf[13]) * (2000.0f / 32768.0f);
+  return true;
 }
 
 // ── Tap Detection State ──────────────────────────────────────────────
@@ -103,107 +107,98 @@ static unsigned long ablyMsgSerial = 0;
 static float prevPitch = 0, prevRoll = 0;
 static float prevSentAx = 0, prevSentAy = 0, prevSentAz = 0;
 
-// ── BLE Gamepad ──────────────────────────────────────────────────────
-// Device name: "Chaos Wand". Advertises as a gamepad with 1 button.
-// Button 1 = select/enter for Apple TV navigation.
-// Advertising only happens when debug screen is showing (pairing mode).
-// Connection persists when switching back to active mode.
-#define BLE_DEVICE_NAME "Chaos Wand"
-#define BLE_BUTTON_SELECT BUTTON_1  // gamepad button for enter/select
-#define BLE_PRESS_MS 80             // how long to hold the button press (ms)
+// ── BLE Keyboard (Apple TV compatible) ───────────────────────────────
+// Apple TV recognizes standard BLE HID keyboards for navigation.
+// Generic BLE gamepads do NOT work with tvOS without MFi certification.
+//
+// Input mapping:
+//   Tap gesture → KEY_RETURN (select/enter on Apple TV)
+//   Joystick mode (BtnA toggle): tilt sends arrow keys
+//     Tilt left/right → LEFT_ARROW / RIGHT_ARROW
+//     Tilt forward/back → UP_ARROW / DOWN_ARROW
+//   BLE keyboard arrow keys are fully supported by tvOS for navigation.
+//
+// Advertising: always on (BLE keyboard needs to be discoverable for pairing).
+// Once paired, tvOS reconnects automatically — no need to re-advertise.
 
-static BleGamepad bleGamepad(BLE_DEVICE_NAME, "Stickman", 100);
+#define BLE_DEVICE_NAME "Chaos Wand"
+#define BLE_PRESS_MS 80  // key press duration (ms) — tune for Apple TV responsiveness
+
+static BleKeyboard bleKeyboard(BLE_DEVICE_NAME, "Stickman", 100);
 static bool bleStarted = false;
-static bool bleAdvertising = false;
-static unsigned long blePressTime = 0; // when button was pressed (0 = not pressed)
+static unsigned long blePressTime = 0;
+static uint8_t blePressedKey = 0; // which key is currently pressed (0 = none)
+
+// ── Joystick-as-arrows tuning ──
+#define JOY_TILT_THRESH 0.25f     // tilt threshold (g) to trigger arrow key
+#define JOY_REPEAT_MS 200         // repeat rate for held tilt (ms)
+#define JOY_SEND_INTERVAL_MS 25   // rate-limit BLE reports (40Hz)
+static unsigned long lastJoySend = 0;
+static unsigned long lastArrowTime[4] = {0,0,0,0}; // L,R,U,D repeat timers
+static bool arrowHeld[4] = {false,false,false,false};
 
 static void bleInit() {
-  BleGamepadConfiguration cfg;
-  cfg.setAutoReport(false); // manual report for joystick + button
-  cfg.setButtonCount(1);
-  cfg.setHatSwitchCount(0);
-  // X/Y axes for joystick tilt control (Apple TV trackpad navigation)
-  cfg.setIncludeXAxis(true);
-  cfg.setIncludeYAxis(true);
-  cfg.setIncludeZAxis(false);
-  cfg.setIncludeRxAxis(false);
-  cfg.setIncludeRyAxis(false);
-  cfg.setIncludeRzAxis(false);
-  cfg.setIncludeSlider1(false);
-  cfg.setIncludeSlider2(false);
-  bleGamepad.begin(&cfg);
+  bleKeyboard.begin();
   bleStarted = true;
-  bleAdvertising = true;
-  Serial.println("BLE: Gamepad started, advertising as " BLE_DEVICE_NAME);
-}
-
-static void bleStartAdvertising() {
-  if (!bleStarted) { bleInit(); return; }
-  if (!bleAdvertising && !bleGamepad.isConnected()) {
-    bleGamepad.end();
-    bleInit(); // restart to re-advertise
-  }
-  bleAdvertising = true;
-}
-
-static void bleStopAdvertising() {
-  // Don't disconnect if already connected — just stop advertising for new devices.
-  // BLE stack automatically stops advertising once connected, so this is mainly
-  // about intent tracking for the debug display.
-  bleAdvertising = false;
-}
-
-// Send a short press+release of the select button
-static void bleSendSelect() {
-  if (!bleGamepad.isConnected()) return;
-  bleGamepad.press(BLE_BUTTON_SELECT);
-  bleGamepad.sendReport();
-  blePressTime = millis();
-  Serial.println("BLE: Select pressed");
-}
-
-// Release the button after BLE_PRESS_MS (called from loop)
-static void bleUpdate() {
-  if (blePressTime > 0 && millis() - blePressTime >= BLE_PRESS_MS) {
-    bleGamepad.release(BLE_BUTTON_SELECT);
-    bleGamepad.sendReport();
-    blePressTime = 0;
-  }
+  Serial.println("BLE: Keyboard started as " BLE_DEVICE_NAME);
 }
 
 static const char* bleStatusStr() {
-  if (bleGamepad.isConnected()) return "CONNECTED";
-  if (bleAdvertising) return "PAIRING";
+  if (bleKeyboard.isConnected()) return "CONNECTED";
+  if (bleStarted) return "PAIRING";
   return "OFF";
 }
 
-// Send tilt as joystick axes (called every loop when joystick mode is on)
-// Maps device tilt to -16384..16383 range (BLE gamepad axis range)
-// Device: +X=left, +Y=top, +Z=screen-out (verified via /calibrate)
-// Joystick: left/right tilt → X axis, forward/back tilt → Y axis
-#define JOY_TILT_SCALE 16000.0f  // scale factor: ~1g tilt = full deflection
-#define JOY_DEAD_ZONE 0.08f      // ignore tilt below this (g) to prevent drift
+// Send a short key press+release (non-blocking, release handled in bleUpdate)
+static void bleSendKey(uint8_t key) {
+  if (!bleKeyboard.isConnected()) return;
+  bleKeyboard.press(key);
+  blePressedKey = key;
+  blePressTime = millis();
+}
 
-static void bleSendJoystick() {
-  if (!bleGamepad.isConnected()) return;
+// Release key after BLE_PRESS_MS
+static void bleUpdate() {
+  if (blePressTime > 0) {
+    if (!bleKeyboard.isConnected()) {
+      blePressTime = 0; blePressedKey = 0;
+      return;
+    }
+    if (millis() - blePressTime >= BLE_PRESS_MS) {
+      bleKeyboard.release(blePressedKey);
+      blePressTime = 0; blePressedKey = 0;
+    }
+  }
+}
 
-  // Use gravity-subtracted accel for tilt
-  // ax: positive = left tilt → joystick X negative (left)
-  // ay: positive = top up → joystick Y negative (up/forward)
-  float tiltX = imuAx;  // left(+) / right(-)
-  float tiltY = imuAy;  // top(+) / bottom(-)
+// Send arrow keys based on tilt (for Apple TV navigation)
+// Device: +X=left, +Y=top, +Z=screen-out
+static void bleSendArrows() {
+  if (!bleKeyboard.isConnected()) return;
+  unsigned long now = millis();
 
-  // Apply dead zone
-  if (fabsf(tiltX) < JOY_DEAD_ZONE) tiltX = 0;
-  if (fabsf(tiltY) < JOY_DEAD_ZONE) tiltY = 0;
+  // Tilt thresholds → arrow key mapping
+  // Device +X = left, so positive ax = tilted left → LEFT_ARROW
+  bool wantLeft  = imuAx > JOY_TILT_THRESH;
+  bool wantRight = imuAx < -JOY_TILT_THRESH;
+  bool wantUp    = imuAy > JOY_TILT_THRESH;  // +Y = top pointing up = tilt forward
+  bool wantDown  = imuAy < -JOY_TILT_THRESH;
 
-  // Map to joystick range: negate X (device left = joy left = negative)
-  int16_t jx = (int16_t)constrain((int)(-tiltX * JOY_TILT_SCALE), -16384, 16383);
-  int16_t jy = (int16_t)constrain((int)(tiltY * JOY_TILT_SCALE), -16384, 16383);
+  const uint8_t keys[4] = {KEY_LEFT_ARROW, KEY_RIGHT_ARROW, KEY_UP_ARROW, KEY_DOWN_ARROW};
+  bool wants[4] = {wantLeft, wantRight, wantUp, wantDown};
 
-  bleGamepad.setX(jx);
-  bleGamepad.setY(jy);
-  bleGamepad.sendReport();
+  for (int i = 0; i < 4; i++) {
+    if (wants[i]) {
+      if (!arrowHeld[i] || (now - lastArrowTime[i] >= JOY_REPEAT_MS)) {
+        bleKeyboard.press(keys[i]);
+        bleKeyboard.release(keys[i]);
+        lastArrowTime[i] = now;
+        arrowHeld[i] = true;
+      }
+    } else {
+      arrowHeld[i] = false;
+    }
+  }
 }
 
 // ── Debug ────────────────────────────────────────────────────────────
@@ -451,10 +446,9 @@ static void drawDebugScreen() {
   }
 
   // BLE status
-  const char* bleStatus = bleStatusStr();
-  bool bleCon = bleGamepad.isConnected();
-  StickCP2.Display.setTextColor(bleCon ? GREEN : bleAdvertising ? YELLOW : RED, BLACK);
-  snprintf(buf, sizeof(buf), "BLE: %s", bleStatus);
+  bool bleCon = bleKeyboard.isConnected();
+  StickCP2.Display.setTextColor(bleCon ? GREEN : bleStarted ? YELLOW : RED, BLACK);
+  snprintf(buf, sizeof(buf), "BLE: %s", bleStatusStr());
   StickCP2.Display.drawString(buf, 4, y, 2); y += lh;
   StickCP2.Display.setTextColor(CYAN, BLACK);
   StickCP2.Display.drawString(BLE_DEVICE_NAME, 4, y, 2);
@@ -462,30 +456,39 @@ static void drawDebugScreen() {
 
 // ── Tap Detection ────────────────────────────────────────────────────
 // Detects a sharp flick/tap in any direction using accel magnitude.
-// Uses a "spike shape" check: magnitude must jump UP then come back DOWN.
-// This prevents false triggers from sustained motion (like tossing).
+// [C4 FIX] Implements actual spike-shape detection: magnitude must rise
+// sharply THEN fall (a peak), preventing false triggers from sustained
+// motion, drops, or excited handling by kids.
+//
+// ── Tuning: adjust these thresholds for sensitivity ──
+#define TAP_RISE_THRESH  1.5f   // minimum rise delta to start spike (g)
+#define TAP_PEAK_THRESH  2.5f   // minimum peak magnitude (g) — 2.5G filters handling
+#define TAP_FALL_THRESH  0.5f   // minimum fall delta to confirm spike (g)
 
 static bool detectTap(float accMag) {
   unsigned long now = millis();
 
-  // Shift history
-  float delta = accMag - prevAccMag;
-  float prevDelta = prevAccMag - prevPrevAccMag;
+  // Compute deltas from history
+  float prevDelta = prevAccMag - prevPrevAccMag;  // was it rising?
+  float delta = accMag - prevAccMag;               // is it now falling?
+  float peakMag = prevAccMag;                      // the potential peak
+
+  // Shift history (always, even during cooldown)
   prevPrevAccMag = prevAccMag;
   prevAccMag = accMag;
+
+  // [C5 FIX] No taps in joystick mode — would send conflicting inputs
+  if (joystickMode) return false;
 
   // Skip during cooldown or active toss
   if (now - lastTapTime < TAP_COOLDOWN_MS) return false;
   if (tossState != TOSS_IDLE) return false;
 
   // Spike shape: previous sample was a peak (rose then fell)
-  // prevDelta > 0 means it was rising, delta < 0 means it's now falling
-  // The peak magnitude (prevAccMag before shift = current prevAccMag...
-  // actually we need the peak value which is the previous accMag)
-  //
-  // Simpler: just check if the magnitude spiked above threshold and
-  // the change was sharp (large delta in one step)
-  if (fabsf(delta) > 1.5f && accMag > 1.8f) {
+  // prevDelta > threshold = was rising sharply
+  // delta < -threshold = is now falling
+  // peakMag > threshold = peak was high enough
+  if (prevDelta > TAP_RISE_THRESH && delta < -TAP_FALL_THRESH && peakMag > TAP_PEAK_THRESH) {
     lastTapTime = now;
     return true;
   }
@@ -638,19 +641,9 @@ void loop() {
     lastButtonPress = now;
     joystickMode = !joystickMode;
     publishEvent("btn", "{\\\"button\\\":\\\"A\\\",\\\"state\\\":\\\"down\\\"}");
-    if (joystickMode) {
-      // Center the joystick when entering mode
-      if (bleGamepad.isConnected()) {
-        bleGamepad.setX(0); bleGamepad.setY(0); bleGamepad.sendReport();
-      }
-      Serial.println("Joystick mode ON");
-    } else {
-      // Center joystick when exiting
-      if (bleGamepad.isConnected()) {
-        bleGamepad.setX(0); bleGamepad.setY(0); bleGamepad.sendReport();
-      }
-      Serial.println("Joystick mode OFF");
-    }
+    // Reset arrow state when toggling
+    for (int i = 0; i < 4; i++) arrowHeld[i] = false;
+    Serial.printf("Joystick mode %s\n", joystickMode ? "ON" : "OFF");
     // Draw small indicator dot in top-right corner
     StickCP2.Display.fillCircle(125, 8, 4, joystickMode ? GREEN : COLOR_INNER);
   }
@@ -662,8 +655,7 @@ void loop() {
     publishEvent("btn", "{\\\"button\\\":\\\"B\\\",\\\"state\\\":\\\"down\\\"}");
     mode = (mode == MODE_ACTIVE) ? MODE_DEBUG : MODE_ACTIVE;
     publishEvent("mode", mode == MODE_ACTIVE ? "{\\\"mode\\\":\\\"active\\\"}" : "{\\\"mode\\\":\\\"debug\\\"}");
-    if (mode == MODE_DEBUG) bleStartAdvertising();
-    else bleStopAdvertising();
+    // BLE keyboard stays connected/advertising across mode switches
     prevAccMag = 1.0f; prevPrevAccMag = 1.0f; isBlinking = false;
     tossState = TOSS_IDLE; state = STATE_READY;
     showReady();
@@ -671,14 +663,15 @@ void loop() {
   }
   if (M5.BtnB.wasReleased()) publishEvent("btn", "{\\\"button\\\":\\\"B\\\",\\\"state\\\":\\\"up\\\"}");
 
-  // IMU
-  readIMUFull();
+  // IMU — [C8] skip frame if I2C read fails
+  if (!readIMUFull()) { delay(1); return; }
   float accMag = sqrtf(imuAx*imuAx + imuAy*imuAy + imuAz*imuAz);
   publishIMU();
 
-  // Send joystick data when in joystick mode
-  if (joystickMode && mode == MODE_ACTIVE) {
-    bleSendJoystick();
+  // Joystick mode: tilt sends arrow keys for Apple TV navigation
+  if (joystickMode && mode == MODE_ACTIVE && now - lastJoySend >= JOY_SEND_INTERVAL_MS) {
+    bleSendArrows();
+    lastJoySend = now;
   }
   motionAccum += fabsf(accMag - 1.0f) + fabsf(imuGz) * 0.01f;
   motionSamples++;
@@ -711,7 +704,7 @@ void loop() {
       if (detectTap(accMag)) {
         state = STATE_RESULT; resultTime = now;
         publishEvent("gesture", "{\\\"gesture\\\":\\\"Tap\\\"}");
-        bleSendSelect(); // BLE gamepad button press for Apple TV select
+        bleSendKey(KEY_RETURN); // Apple TV select/enter
         showFace(pick(TAP_FACES, TAP_FACE_N), pick(TAP_TEXTS, TAP_TEXT_N));
       }
       updateToss(accMag, now);
