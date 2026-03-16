@@ -51,12 +51,11 @@ export function ParticleImageViz() {
     let imageLoaded = false;
     let loadedImg: HTMLImageElement | null = null;
 
-    const buildBg = (w: number, h: number, dpr: number) => {
+    const buildBg = (w: number, h: number) => {
       const offscreen = document.createElement("canvas");
-      offscreen.width = w * dpr;
-      offscreen.height = h * dpr;
+      offscreen.width = w;
+      offscreen.height = h;
       const bgCtx = offscreen.getContext("2d")!;
-      bgCtx.scale(dpr, dpr);
       const grad = bgCtx.createLinearGradient(0, 0, 0, h);
       grad.addColorStop(0, "#0a0618");
       grad.addColorStop(0.25, "#1a0a3a");
@@ -99,23 +98,15 @@ export function ParticleImageViz() {
       imgBounds = { x: drawX, y: drawY, w: drawW, h: drawH };
 
       ctx.clearRect(0, 0, canvas.width, canvas.height);
-      const dpr = window.devicePixelRatio || 1;
-      ctx.save();
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.drawImage(loadedImg, drawX, drawY, drawW, drawH);
-      const pixelData = ctx.getImageData(drawX * dpr, drawY * dpr, drawW * dpr, drawH * dpr);
-      ctx.restore();
+      const pixelData = ctx.getImageData(drawX, drawY, drawW, drawH);
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
       const newDests: { x: number; y: number }[] = [];
       const inc = Math.max(1, Math.round(drawW / DENSITY));
-      // Sample from the scaled pixel data
-      const pdW = drawW * dpr;
       for (let i = 0; i < drawW; i += inc) {
         for (let j = 0; j < drawH; j += inc) {
-          const px = Math.round(i * dpr);
-          const py = Math.round(j * dpr);
-          if (px < pdW && pixelData.data[(px + py * pdW) * 4 + 3] > 128) {
+          if (pixelData.data[(i + j * drawW) * 4 + 3] > 128) {
             newDests.push({ x: drawX + i, y: drawY + j });
           }
         }
@@ -158,25 +149,21 @@ export function ParticleImageViz() {
     const resize = () => {
       const rect = canvas.getBoundingClientRect();
       if (rect.width === 0 || rect.height === 0) return;
-      const dpr = window.devicePixelRatio || 1;
       size = { w: rect.width, h: rect.height };
-      canvas.width = rect.width * dpr;
-      canvas.height = rect.height * dpr;
-      buildBg(rect.width, rect.height, dpr);
+      canvas.width = rect.width;
+      canvas.height = rect.height;
+      buildBg(rect.width, rect.height);
       createParticles();
     };
 
     const animate = () => {
       const { w, h } = size;
-      const dpr = window.devicePixelRatio || 1;
 
-      ctx.setTransform(1, 0, 0, 1, 0, 0);
       if (bgCanvas) {
         ctx.drawImage(bgCanvas, 0, 0);
       } else {
-        ctx.clearRect(0, 0, w * dpr, h * dpr);
+        ctx.clearRect(0, 0, w, h);
       }
-      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
       const ib = imgBounds;
       const norm = pointer.current;
