@@ -130,7 +130,7 @@ static unsigned long blePressTime = 0;
 
 // ── Joystick tuning ──
 #define JOY_TILT_SCALE 16000.0f   // ~1g tilt = full deflection
-#define JOY_DEAD_ZONE 0.08f       // ignore tilt below this (g)
+#define JOY_DEAD_ZONE 0.15f       // ignore tilt below ~9° to prevent drift from kids' grip
 #define JOY_SEND_INTERVAL_MS 25   // rate-limit to 40Hz
 static unsigned long lastJoySend = 0;
 
