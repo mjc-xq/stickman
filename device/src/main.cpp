@@ -4,7 +4,7 @@
 #include <WebSocketsClient.h>
 #include <BleKeyboard.h>
 #include <nvs_flash.h>
-#include "faces.h"
+#include "sprites.h"
 
 // ── WiFi ─────────────────────────────────────────────────────────────
 #define WIFI_SSID "Flapjack"
@@ -317,44 +317,50 @@ static void publishIMU() {
   }
 }
 
-// ── Face Drawing ─────────────────────────────────────────────────────
+// ── Sprite Drawing ───────────────────────────────────────────────────
 
-static FaceType currentFace = FACE_IDX_HAPPY;
-static unsigned long lastRandomFaceChange = 0;
+static SpriteIdx currentSprite = SPRITE_IDLE_STANDING;
+static unsigned long lastRandomSpriteChange = 0;
+static unsigned long lastAnimSwap = 0;  // 2-frame animation cycling
 
-static FaceType pick(const FaceType* list, int n) { return list[random(n)]; }
+static SpriteIdx pick(const SpriteIdx* list, int n) { return list[random(n)]; }
 static const char* pick(const char* const* list, int n) { return list[random(n)]; }
 
-// ── Face + text pools for every context ──────────────────────────────
+// ── Sprite + text pools for every context ────────────────────────────
 
-static const FaceType IDLE_FACES[] = {
-  FACE_IDX_HAPPY, FACE_IDX_HOPEFUL, FACE_IDX_WINK, FACE_IDX_CHEEKY,
-  FACE_IDX_SMIRK, FACE_IDX_SINGING, FACE_IDX_CONTENT, FACE_IDX_CALM,
-  FACE_IDX_CHEERFUL, FACE_IDX_PLEASED, FACE_IDX_FRIENDLY,
-  FACE_IDX_GRATEFUL, FACE_IDX_AMUSED, FACE_IDX_CURIOUS,
-  FACE_IDX_ATTENTIVE, FACE_IDX_INTRIGUED, FACE_IDX_MISCHIEVOUS
+static const SpriteIdx IDLE_SPRITES[] = {
+  SPRITE_IDLE_STANDING, SPRITE_IDLE_WAND_TWIRL,
+  SPRITE_IDLE_HUMMING_1, SPRITE_IDLE_HUMMING_2,
+  SPRITE_IDLE_HAT_ADJUST,
+  SPRITE_IDLE_LOOKING_LEFT, SPRITE_IDLE_LOOKING_RIGHT,
+  SPRITE_IDLE_SITTING, SPRITE_IDLE_GLASSES_PUSH,
+  SPRITE_IDLE_SPELL_PRACTICE, SPRITE_IDLE_YAWN, SPRITE_IDLE_WAVE
 };
-#define IDLE_N 17
+#define IDLE_SPRITE_N 12
 
 static const char* const IDLE_TEXTS[] = {
   "La la la~", "Hmm hmm~", "Hi!", "*vibes*", "Hehe", ":)",
   "Comfy~", "Nice day!", "*hums*", "Oh hey!", "Teehee",
-  "Sup!", "Boop!", "*wiggles*", "*sparkle*", "Yay~", "Meow?"
+  "Sup!", "Boop!", "*wiggles*", "*sparkle*", "Yay~", "Meow?",
+  "Abracadabra!", "*whistles*", "Do do do~"
 };
-#define IDLE_TEXT_N 17
+#define IDLE_TEXT_N 20
 
-static const FaceType MOVE_FACES[] = {
-  FACE_IDX_EXCITED, FACE_IDX_SURPRISED, FACE_IDX_NERVOUS,
-  FACE_IDX_CONFUSED, FACE_IDX_THINKING, FACE_IDX_CURIOUS,
-  FACE_IDX_INTRIGUED, FACE_IDX_ATTENTIVE, FACE_IDX_AMUSED
+static const SpriteIdx MOVE_SPRITES[] = {
+  SPRITE_MOVE_1, SPRITE_MOVE_2
 };
-#define MOVE_N 9
+#define MOVE_SPRITE_N 2
 
 static const char* const MOVE_TEXTS[] = {
   "Whoa!", "Ooh!", "Huh?", "Hmm?", "Where we", "going?",
-  "Wee!", "Wobbly!", "Adventure!", "Zoom!", "Wait up!"
+  "Wee!", "Wobbly!", "Careful!", "Zoom!", "Wait up!", "Eep!"
 };
-#define MOVE_TEXT_N 11
+#define MOVE_TEXT_N 12
+
+static const SpriteIdx TAP_SPRITES[] = {
+  SPRITE_TAP_ANNOYED, SPRITE_TAP_ANGRY
+};
+#define TAP_SPRITE_N 2
 
 static const char* const TAP_TEXTS[] = {
   "Oww!", "Hey!", "Oof!", "Rude!", "Bonk!", "Ouch!",
@@ -362,12 +368,10 @@ static const char* const TAP_TEXTS[] = {
 };
 #define TAP_TEXT_N 12
 
-static const FaceType TAP_FACES[] = {
-  FACE_IDX_ANNOYED, FACE_IDX_ANGRY, FACE_IDX_DISGUSTED,
-  FACE_IDX_SHOCKED, FACE_IDX_EMBARRASSED
+static const SpriteIdx TOSS_AIR_SPRITES[] = {
+  SPRITE_TOSS_AIR_1, SPRITE_TOSS_AIR_2
 };
-#define TAP_FACE_N 5
-
+#define TOSS_AIR_SPRITE_N 2
 
 static const char* const TOSS_AIR_TEXTS[] = {
   "AAAH!", "Wheeee!", "Flying!", "I'm up!", "Woooo!",
@@ -375,48 +379,71 @@ static const char* const TOSS_AIR_TEXTS[] = {
 };
 #define TOSS_AIR_N 9
 
-static const char* const TOSS_CATCH_HIGH[] = {
-  "Wooow!", "Epic!", "Sky high!", "Insane!", "Unreal!"
+static const SpriteIdx CATCH_HIGH_SPRITES[] = {
+  SPRITE_CATCH_HIGH, SPRITE_CATCH_HIGH_ALT
 };
-#define TOSS_CATCH_HIGH_N 5
+#define CATCH_HIGH_SPRITE_N 2
 
-static const char* const TOSS_CATCH_MED[] = {
-  "So fun!", "Nice one!", "Great!", "Awesome!", "Woohoo!"
+static const char* const TOSS_CATCH_HIGH_TEXTS[] = {
+  "Wooow!", "Epic!", "Sky high!", "Insane!", "Unreal!", "LEGENDARY!"
 };
-#define TOSS_CATCH_MED_N 5
+#define TOSS_CATCH_HIGH_TEXT_N 6
 
-static const char* const TOSS_CATCH_LOW[] = {
+static const SpriteIdx CATCH_MED_SPRITES[] = {
+  SPRITE_CATCH_MED, SPRITE_CATCH_MED_ALT
+};
+#define CATCH_MED_SPRITE_N 2
+
+static const char* const TOSS_CATCH_MED_TEXTS[] = {
+  "So fun!", "Nice one!", "Great!", "Awesome!", "Woohoo!", "Sweet!"
+};
+#define TOSS_CATCH_MED_TEXT_N 6
+
+static const SpriteIdx CATCH_LOW_SPRITES[] = {
+  SPRITE_CATCH_LOW, SPRITE_CATCH_LOW_ALT
+};
+#define CATCH_LOW_SPRITE_N 2
+
+static const char* const TOSS_CATCH_LOW_TEXTS[] = {
   "Yay!", "Hehe!", "Caught!", "Whew!", "Got me!", "Safe!"
 };
-#define TOSS_CATCH_LOW_N 6
+#define TOSS_CATCH_LOW_TEXT_N 6
+
+static const SpriteIdx TOSS_LOST_SPRITES[] = {
+  SPRITE_TOSS_LOST_1, SPRITE_TOSS_LOST_2
+};
+#define TOSS_LOST_SPRITE_N 2
 
 static const char* const TOSS_LOST_TEXTS[] = {
   "Oh no!", "Where am", "I?!", "*crying*", "Come back!", "Help!"
 };
 #define TOSS_LOST_N 6
 
-static void drawFace(FaceType face) {
-  currentFace = face;
-  const uint8_t* data = (const uint8_t*)pgm_read_ptr(&FACE_DATA[face]);
-  int x = (135 - FACE_W) / 2;
-  int y = LAYOUT_GFX_Y + (LAYOUT_GFX_H - FACE_H) / 2;  // center in gfx zone
-  uint16_t lineBuf[FACE_W];
-  const uint16_t fg = (uint16_t)BLACK, bg = (uint16_t)WHITE;
-  for (int row = 0; row < FACE_H; row++) {
-    for (int col = 0; col < FACE_W; col++) {
-      int byteIdx = row * FACE_ROW_BYTES + (col >> 3);
-      int bitIdx = 7 - (col & 7);
-      lineBuf[col] = (pgm_read_byte(&data[byteIdx]) & (1 << bitIdx)) ? fg : bg;
-    }
-    StickCP2.Display.pushImage(x, y + row, FACE_W, 1, lineBuf);
-  }
-  // Fill padding around face in graphics zone
-  StickCP2.Display.fillRect(0, LAYOUT_GFX_Y, 135, y - LAYOUT_GFX_Y, WHITE);
-  StickCP2.Display.fillRect(0, y + FACE_H, 135, LAYOUT_TEXT_Y - y - FACE_H, WHITE);
-  if (x > 0) {
-    StickCP2.Display.fillRect(0, y, x, FACE_H, WHITE);
-    StickCP2.Display.fillRect(x + FACE_W, y, 135 - x - FACE_W, FACE_H, WHITE);
-  }
+static const SpriteIdx BLE_ON_SPRITES[] = {
+  SPRITE_BLE_ON, SPRITE_BLE_ON_ALT
+};
+#define BLE_ON_SPRITE_N 2
+
+static const char* const BLE_ON_TEXTS[] = {
+  "BLE On!", "Zap!", "Connected!", "Magic link!", "Spell cast!"
+};
+#define BLE_ON_TEXT_N 5
+
+static const SpriteIdx BLE_OFF_SPRITES[] = {
+  SPRITE_BLE_OFF, SPRITE_BLE_OFF_ALT
+};
+#define BLE_OFF_SPRITE_N 2
+
+static const char* const BLE_OFF_TEXTS[] = {
+  "BLE Off!", "Unplugged~", "Going dark", "Sleepy...", "Offline~"
+};
+#define BLE_OFF_TEXT_N 5
+
+static void drawSprite(SpriteIdx sprite) {
+  currentSprite = sprite;
+  const uint16_t* data = (const uint16_t*)pgm_read_ptr(&SPRITE_DATA[sprite]);
+  // Sprite fills the entire graphics zone (135x180)
+  StickCP2.Display.pushImage(0, LAYOUT_GFX_Y, SPRITE_W, SPRITE_H, data);
 }
 
 static void clearTextArea() { StickCP2.Display.fillRect(0, LAYOUT_TEXT_Y, 135, LAYOUT_TEXT_H, COLOR_BG); }
@@ -433,8 +460,8 @@ static void showMessage(const char* l1, const char* l2 = nullptr) {
   }
 }
 
-static void showFace(FaceType face, const char* m1, const char* m2 = nullptr) {
-  drawFace(face); showMessage(m1, m2);
+static void showSprite(SpriteIdx sprite, const char* m1, const char* m2 = nullptr) {
+  drawSprite(sprite); showMessage(m1, m2);
 }
 
 static void drawModeIndicator() {
@@ -545,7 +572,7 @@ static void updateToss(float accMag, unsigned long now) {
       if (accMag > launchAccPeak) launchAccPeak = accMag;
       if (accMag < 0.4f) {
         tossState = TOSS_FREEFALL; freefallStart = now; freefallSamples = 0;
-        showFace(FACE_IDX_SHOCKED, pick(TOSS_AIR_TEXTS, TOSS_AIR_N));
+        showSprite(pick(TOSS_AIR_SPRITES, TOSS_AIR_SPRITE_N), pick(TOSS_AIR_TEXTS, TOSS_AIR_N));
         char ld[64];
         snprintf(ld, sizeof(ld), "{\\\"state\\\":\\\"airborne\\\",\\\"launchG\\\":%.1f}", launchAccPeak);
         publishEvent("toss", ld);
@@ -562,10 +589,9 @@ static void updateToss(float accMag, unsigned long now) {
         char hs[20];
         if (hi >= 12.0f) snprintf(hs, sizeof(hs), "%d'%d\"", (int)(hi/12), (int)(hi)%12);
         else snprintf(hs, sizeof(hs), "%.0f in", hi);
-        if (hi > 48) showFace(FACE_IDX_SHOCKED, pick(TOSS_CATCH_HIGH, TOSS_CATCH_HIGH_N), hs);
-        else if (hi > 24) showFace(FACE_IDX_EXCITED, pick(TOSS_CATCH_MED, TOSS_CATCH_MED_N), hs);
-        else if (hi > 8) showFace(FACE_IDX_PROUD, pick(TOSS_CATCH_LOW, TOSS_CATCH_LOW_N), hs);
-        else showFace(FACE_IDX_HAPPY, pick(TOSS_CATCH_LOW, TOSS_CATCH_LOW_N), hs);
+        if (hi > 48) showSprite(pick(CATCH_HIGH_SPRITES, CATCH_HIGH_SPRITE_N), pick(TOSS_CATCH_HIGH_TEXTS, TOSS_CATCH_HIGH_TEXT_N), hs);
+        else if (hi > 24) showSprite(pick(CATCH_MED_SPRITES, CATCH_MED_SPRITE_N), pick(TOSS_CATCH_MED_TEXTS, TOSS_CATCH_MED_TEXT_N), hs);
+        else showSprite(pick(CATCH_LOW_SPRITES, CATCH_LOW_SPRITE_N), pick(TOSS_CATCH_LOW_TEXTS, TOSS_CATCH_LOW_TEXT_N), hs);
         char cd[96];
         snprintf(cd, sizeof(cd), "{\\\"state\\\":\\\"landed\\\",\\\"heightIn\\\":%.1f,\\\"freefallMs\\\":%.0f}", hi, fs*1000);
         publishEvent("toss", cd);
@@ -574,7 +600,7 @@ static void updateToss(float accMag, unsigned long now) {
       }
       if (tossState == TOSS_FREEFALL && now - freefallStart > 3000) {
         tossState = TOSS_IDLE;
-        showFace(FACE_IDX_CRYING, pick(TOSS_LOST_TEXTS, TOSS_LOST_N));
+        showSprite(pick(TOSS_LOST_SPRITES, TOSS_LOST_SPRITE_N), pick(TOSS_LOST_TEXTS, TOSS_LOST_N));
         publishEvent("toss", "{\\\"state\\\":\\\"lost\\\"}");
         tossResultTime = now; resultTime = now; state = STATE_RESULT;
       }
@@ -599,8 +625,8 @@ static bool checkShouldSleep(unsigned long now) {
 static void enterSleep() {
   state = STATE_SLEEPING;
   webSocket.disconnect(); WiFi.disconnect(true);
-  showFace(FACE_IDX_SLEEPY,"*yaaawn*"); delay(800);
-  showFace(FACE_IDX_SLEEPY,"Zzz..."); delay(600);
+  showSprite(SPRITE_SLEEP_1,"*yaaawn*"); delay(800);
+  showSprite(SPRITE_SLEEP_2,"Zzz..."); delay(600);
   StickCP2.Display.setTextColor(COLOR_FACE, COLOR_BG);
   StickCP2.Display.setTextDatum(TL_DATUM);
   StickCP2.Display.drawString("z",100,30,2); delay(250);
@@ -616,7 +642,7 @@ static void enterSleep() {
 static void showReady() {
   StickCP2.Display.fillScreen(COLOR_BG);
   drawModeIndicator();
-  if (mode == MODE_ACTIVE) showFace(pick(IDLE_FACES, IDLE_N), pick(IDLE_TEXTS, IDLE_TEXT_N));
+  if (mode == MODE_ACTIVE) showSprite(pick(IDLE_SPRITES, IDLE_SPRITE_N), pick(IDLE_TEXTS, IDLE_TEXT_N));
   else drawDebugScreen();
 }
 
@@ -655,9 +681,9 @@ void setup() {
 
   StickCP2.Display.setBrightness(80);
   StickCP2.Display.fillScreen(COLOR_BG);
-  showFace(FACE_IDX_SLEEPY,""); delay(400);
-  showFace(FACE_IDX_SLEEPY,"*yaaawn*"); delay(600);
-  showFace(FACE_IDX_HAPPY,"Hiii!"); delay(800);
+  showSprite(SPRITE_WAKE_1,""); delay(400);
+  showSprite(SPRITE_WAKE_1,"*yaaawn*"); delay(600);
+  showSprite(SPRITE_WAKE_2,"Hiii!"); delay(800);
 
   state = STATE_READY;
   showReady();
@@ -680,6 +706,8 @@ void loop() {
     // Reset arrow state when toggling
     for (int i = 0; i < 4; i++) arrowHeld[i] = false;
     Serial.printf("Joystick mode %s\n", joystickMode ? "ON" : "OFF");
+    if (joystickMode) showSprite(SPRITE_JOYSTICK, "Game mode!");
+    else showSprite(pick(IDLE_SPRITES, IDLE_SPRITE_N), pick(IDLE_TEXTS, IDLE_TEXT_N));
     // Draw small indicator dot in top-right corner
     StickCP2.Display.fillCircle(125, 8, 4, joystickMode ? GREEN : COLOR_INNER);
   }
@@ -697,8 +725,8 @@ void loop() {
       // Double tap! Toggle BLE
       btnBWaiting = false;
       bleToggle();
-      showFace(bleEnabled ? FACE_IDX_HAPPY : FACE_IDX_SLEEPY,
-               bleEnabled ? "BLE On!" : "BLE Off!");
+      showSprite(bleEnabled ? pick(BLE_ON_SPRITES, BLE_ON_SPRITE_N) : pick(BLE_OFF_SPRITES, BLE_OFF_SPRITE_N),
+                 bleEnabled ? pick(BLE_ON_TEXTS, BLE_ON_TEXT_N) : pick(BLE_OFF_TEXTS, BLE_OFF_TEXT_N));
       state = STATE_RESULT; resultTime = now;
       Serial.printf("BLE toggled: %s\n", bleEnabled ? "ON" : "OFF");
       return;
@@ -741,19 +769,19 @@ void loop() {
         break;
       }
 
-      // Idle face animation (skip during active toss)
+      // Idle sprite animation (skip during active toss)
       if (tossState == TOSS_IDLE) {
-        // Swap idle face + text periodically
+        // Swap idle sprite + text periodically
         if (now - lastBlink > blinkInterval) {
-          showFace(pick(IDLE_FACES, IDLE_N), pick(IDLE_TEXTS, IDLE_TEXT_N));
+          showSprite(pick(IDLE_SPRITES, IDLE_SPRITE_N), pick(IDLE_TEXTS, IDLE_TEXT_N));
           lastBlink = now;
           blinkInterval = random(5000, 12000);
         }
-        // React to gentle movement with a different face
+        // React to gentle movement with a stumble sprite
         float gyroMag = sqrtf(imuGx*imuGx + imuGy*imuGy + imuGz*imuGz);
-        if (gyroMag > 20.0f && now - lastRandomFaceChange > 2500) {
-          showFace(pick(MOVE_FACES, MOVE_N), pick(MOVE_TEXTS, MOVE_TEXT_N));
-          lastRandomFaceChange = now;
+        if (gyroMag > 20.0f && now - lastRandomSpriteChange > 2500) {
+          showSprite(pick(MOVE_SPRITES, MOVE_SPRITE_N), pick(MOVE_TEXTS, MOVE_TEXT_N));
+          lastRandomSpriteChange = now;
         }
       }
 
@@ -763,12 +791,12 @@ void loop() {
         lastJoySend = now;
       }
 
-      // Detect tap → show face + send BLE select + publish Ably event
+      // Detect tap → show bonk sprite + send BLE select + publish
       if (detectTap(accMag)) {
         state = STATE_RESULT; resultTime = now;
         publishEvent("gesture", "{\\\"gesture\\\":\\\"Tap\\\"}");
         bleSendKey(KEY_RETURN); // Apple TV select/enter
-        showFace(pick(TAP_FACES, TAP_FACE_N), pick(TAP_TEXTS, TAP_TEXT_N));
+        showSprite(pick(TAP_SPRITES, TAP_SPRITE_N), pick(TAP_TEXTS, TAP_TEXT_N));
       }
       updateToss(accMag, now);
       break;
@@ -776,6 +804,15 @@ void loop() {
     case STATE_RESULT:
       // Keep checking toss during result (for freefall → catch transitions)
       updateToss(accMag, now);
+      // Animate 2-frame sprites while airborne or lost (she flails!)
+      if (now - lastAnimSwap > 350) {
+        lastAnimSwap = now;
+        if (tossState == TOSS_FREEFALL) {
+          drawSprite(currentSprite == SPRITE_TOSS_AIR_1 ? SPRITE_TOSS_AIR_2 : SPRITE_TOSS_AIR_1);
+        } else if (currentSprite == SPRITE_TOSS_LOST_1 || currentSprite == SPRITE_TOSS_LOST_2) {
+          drawSprite(currentSprite == SPRITE_TOSS_LOST_1 ? SPRITE_TOSS_LOST_2 : SPRITE_TOSS_LOST_1);
+        }
+      }
       if (now - resultTime > 1500) { state = STATE_READY; showReady(); lastBlink = now; }
       break;
     default: break;
