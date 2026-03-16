@@ -34,14 +34,9 @@
 // ── App Modes (BtnB toggles) ─────────────────────────────────────────
 enum AppMode { MODE_ACTIVE, MODE_DEBUG };
 
-// ── Gesture Types ────────────────────────────────────────────────────
-enum GestureType {
-  GESTURE_NONE = 0, GESTURE_CIRCLE_LEFT, GESTURE_CIRCLE_RIGHT,
-  GESTURE_TAP, GESTURE_THRUST
-};
-static const char* GESTURE_NAMES[] = {
-  "None", "Circle Left", "Circle Right", "Tap", "Thrust"
-};
+// ── Gesture ──────────────────────────────────────────────────────────
+// Single gesture: wand tap (sharp flick in any direction)
+static const char* TAP_NAME = "Tap";
 
 // ── Toss / App States ────────────────────────────────────────────────
 enum TossState { TOSS_IDLE, TOSS_LAUNCHED, TOSS_FREEFALL, TOSS_CAUGHT };
@@ -77,14 +72,11 @@ static void readIMUFull() {
   imuGz = (int16_t)((buf[12] << 8) | buf[13]) * (2000.0f / 32768.0f);
 }
 
-// ── Wand Gesture State ───────────────────────────────────────────────
-static float gyroAccum = 0;       // total rotation magnitude
-static int gyroDir = 0;           // +1 or -1 for direction
-static float prevAccMag = 0;
-static float thrustAccum = 0;
-static int thrustSamples = 0;
-static unsigned long lastTapTime = 0, lastGestureTime = 0, lastGyroTime = 0;
-static const unsigned long GESTURE_COOLDOWN_MS = 600;
+// ── Tap Detection State ──────────────────────────────────────────────
+static float prevAccMag = 1.0f;
+static float prevPrevAccMag = 1.0f;  // two-sample history for spike shape
+static unsigned long lastTapTime = 0;
+static const unsigned long TAP_COOLDOWN_MS = 500;
 
 // ── Toss State ───────────────────────────────────────────────────────
 static TossState tossState = TOSS_IDLE;
@@ -242,22 +234,6 @@ static const FaceType TAP_FACES[] = {
 };
 #define TAP_FACE_N 5
 
-static const char* const CIRCLE_TEXTS[] = {
-  "So dizzy!", "Wheee!", "Spinning!", "Round n", "round!",
-  "My head!", "Woozy~", "Again!", "Whirlpool!", "*spirals*"
-};
-#define CIRCLE_TEXT_N 10
-
-static const FaceType CIRCLE_FACES[] = {
-  FACE_IDX_CONFUSED, FACE_IDX_SURPRISED, FACE_IDX_NERVOUS, FACE_IDX_SHOCKED
-};
-#define CIRCLE_FACE_N 4
-
-static const char* const THRUST_TEXTS[] = {
-  "Woosh!", "Zoom!", "Nyoom!", "Fast!", "Yikes!",
-  "So quick!", "Speedy!", "Vroom!", "Wheee!"
-};
-#define THRUST_TEXT_N 9
 
 static const char* const TOSS_AIR_TEXTS[] = {
   "AAAH!", "Wheeee!", "Flying!", "I'm up!", "Woooo!",
@@ -369,71 +345,37 @@ static void drawDebugScreen() {
   }
 }
 
-// ── Gesture Detection (always active) ────────────────────────────────
-// Fixed: use total gyro magnitude for circles, lower thresholds for thrust
+// ── Tap Detection ────────────────────────────────────────────────────
+// Detects a sharp flick/tap in any direction using accel magnitude.
+// Uses a "spike shape" check: magnitude must jump UP then come back DOWN.
+// This prevents false triggers from sustained motion (like tossing).
 
-static GestureType detectGesture(float accMag) {
+static bool detectTap(float accMag) {
   unsigned long now = millis();
 
-  // Always update prevAccMag to avoid stale deltas after cooldown
-  float accDelta = fabsf(accMag - prevAccMag);
+  // Shift history
+  float delta = accMag - prevAccMag;
+  float prevDelta = prevAccMag - prevPrevAccMag;
+  prevPrevAccMag = prevAccMag;
   prevAccMag = accMag;
 
-  // Always accumulate gyro (even during cooldown) so circles don't get lost
-  float dt = (lastGyroTime > 0) ? (now - lastGyroTime) / 1000.0f : 0.02f;
-  lastGyroTime = now;
-  if (dt > 0.1f) dt = 0.02f;
+  // Skip during cooldown or active toss
+  if (now - lastTapTime < TAP_COOLDOWN_MS) return false;
+  if (tossState != TOSS_IDLE) return false;
 
-  float gyroMag = sqrtf(imuGx*imuGx + imuGy*imuGy + imuGz*imuGz);
-  // Accumulate when any rotation detected (low 15 dps threshold)
-  if (gyroMag > 15.0f) {
-    gyroAccum += gyroMag * dt;
-    // Continuously track direction from the dominant signed gyro axis
-    // (averaged over the motion, not just first sample)
-    float maxAbs = fabsf(imuGx);
-    float sign = imuGx;
-    if (fabsf(imuGy) > maxAbs) { maxAbs = fabsf(imuGy); sign = imuGy; }
-    if (fabsf(imuGz) > maxAbs) { maxAbs = fabsf(imuGz); sign = imuGz; }
-    gyroDir += (sign > 0) ? 1 : -1; // vote-based direction
-  } else {
-    gyroAccum *= 0.96f; // gentle decay
-    if (gyroAccum < 5.0f) { gyroAccum = 0; gyroDir = 0; }
+  // Spike shape: previous sample was a peak (rose then fell)
+  // prevDelta > 0 means it was rising, delta < 0 means it's now falling
+  // The peak magnitude (prevAccMag before shift = current prevAccMag...
+  // actually we need the peak value which is the previous accMag)
+  //
+  // Simpler: just check if the magnitude spiked above threshold and
+  // the change was sharp (large delta in one step)
+  if (fabsf(delta) > 1.5f && accMag > 1.8f) {
+    lastTapTime = now;
+    return true;
   }
 
-  // Don't fire gestures during cooldown or active toss
-  if (now - lastGestureTime < GESTURE_COOLDOWN_MS) return GESTURE_NONE;
-  if (tossState != TOSS_IDLE) return GESTURE_NONE;
-
-  // CIRCLE: fires when enough rotation accumulated (even during motion)
-  if (gyroAccum > 80.0f) {
-    GestureType g = (gyroDir > 0) ? GESTURE_CIRCLE_RIGHT : GESTURE_CIRCLE_LEFT;
-    gyroAccum = 0; gyroDir = 0;
-    lastGestureTime = now;
-    return g;
-  }
-
-  // THRUST: sustained strong accel (checked before tap to avoid tap stealing)
-  if (accMag > 1.8f) {
-    thrustAccum += accMag;
-    thrustSamples++;
-    if (thrustSamples >= 3 && thrustAccum / thrustSamples > 2.0f) {
-      thrustAccum = 0; thrustSamples = 0;
-      lastGestureTime = now;
-      return GESTURE_THRUST;
-    }
-  } else {
-    // If we had some thrust samples but not enough, and there was a sharp spike,
-    // that's a tap (not a failed thrust attempt)
-    thrustAccum = 0; thrustSamples = 0;
-  }
-
-  // TAP: sharp spike — only if thrust isn't accumulating
-  if (thrustSamples == 0 && accDelta > 1.8f && now - lastTapTime > 400) {
-    lastTapTime = now; lastGestureTime = now;
-    return GESTURE_TAP;
-  }
-
-  return GESTURE_NONE;
+  return false;
 }
 
 // ── Toss Detection (always active, runs alongside gestures) ──────────
@@ -552,7 +494,7 @@ void setup() {
 
   unsigned long now = millis();
   lastButtonPress = now; lastMotionTime = now; lastBlink = now;
-  lastMotionCheck = now; lastGestureTime = now;
+  lastMotionCheck = now; lastTapTime = now;
 
   StickCP2.Display.setBrightness(80);
   StickCP2.Display.fillScreen(COLOR_BG);
@@ -583,8 +525,7 @@ void loop() {
     publishEvent("btn", "{\\\"button\\\":\\\"B\\\",\\\"state\\\":\\\"down\\\"}");
     mode = (mode == MODE_ACTIVE) ? MODE_DEBUG : MODE_ACTIVE;
     publishEvent("mode", mode == MODE_ACTIVE ? "{\\\"mode\\\":\\\"active\\\"}" : "{\\\"mode\\\":\\\"debug\\\"}");
-    gyroAccum = 0; gyroDir = 0; thrustAccum = 0; thrustSamples = 0;
-    prevAccMag = 0; lastGyroTime = 0; isBlinking = false;
+    prevAccMag = 1.0f; prevPrevAccMag = 1.0f; isBlinking = false;
     tossState = TOSS_IDLE; state = STATE_READY;
     showReady();
     return;
@@ -622,20 +563,11 @@ void loop() {
         }
       }
 
-      // Always detect BOTH gestures and tosses
-      GestureType g = detectGesture(accMag);
-      if (g != GESTURE_NONE) {
+      // Detect tap and toss
+      if (detectTap(accMag)) {
         state = STATE_RESULT; resultTime = now;
-        char gd[64];
-        snprintf(gd, sizeof(gd), "{\\\"gesture\\\":\\\"%s\\\"}", GESTURE_NAMES[g]);
-        publishEvent("gesture", gd);
-        switch (g) {
-          case GESTURE_CIRCLE_LEFT:  showFace(pick(CIRCLE_FACES, CIRCLE_FACE_N), pick(CIRCLE_TEXTS, CIRCLE_TEXT_N)); break;
-          case GESTURE_CIRCLE_RIGHT: showFace(pick(CIRCLE_FACES, CIRCLE_FACE_N), pick(CIRCLE_TEXTS, CIRCLE_TEXT_N)); break;
-          case GESTURE_TAP:          showFace(pick(TAP_FACES, TAP_FACE_N), pick(TAP_TEXTS, TAP_TEXT_N)); break;
-          case GESTURE_THRUST:       showFace(FACE_IDX_NERVOUS, pick(THRUST_TEXTS, THRUST_TEXT_N)); break;
-          default: break;
-        }
+        publishEvent("gesture", "{\\\"gesture\\\":\\\"Tap\\\"}");
+        showFace(pick(TAP_FACES, TAP_FACE_N), pick(TAP_TEXTS, TAP_TEXT_N));
       }
       updateToss(accMag, now);
       break;
