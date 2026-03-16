@@ -18,30 +18,35 @@ pio run --target upload
 pio device monitor   # 115200 baud
 ```
 
-## IMU Axis Convention
+## IMU Axis Convention (verified via /calibrate)
 
 ```
         +Z (out of screen)
          ↑
          |
     +---------+
+    |  +Y ↑   |
     |         |
-    | SCREEN  | → +X (right edge)
++X ← SCREEN  |
     |         |
     +---------+
-         |
-         ↓ +Y (toward USB)
+         (USB)
 ```
 
-**Accelerometer reads reaction force** (opposite gravity). The axis pointing UP reads +1g:
+- **+X = LEFT edge** (tilt right → ax goes **negative**)
+- **+Y = toward TOP** (away from USB; standing upright → ay ≈ +1)
+- **+Z = out of screen** (flat on back, screen up → az ≈ +1)
 
 | Orientation | ax | ay | az |
 |---|---|---|---|
 | Flat on back, screen up | ~0 | ~0 | **+1.0** |
 | Standing portrait, USB down | ~0 | **+1.0** | ~0 |
-| Landscape, tilted right | **+1.0** | ~0 | ~0 |
+| Tilted right (right edge down) | **-1.0** | ~0 | ~0 |
+| Tilted left (left edge down) | **+1.0** | ~0 | ~0 |
 
-**Pitch** = `atan2(ax, sqrt(ay² + az²))` — tilt left/right
+**3D viz mapping** (device → Three.js): `-devX→threeX, devZ→threeY(up), devY→threeZ`
+
+**Pitch** = `atan2(ax, sqrt(ay² + az²))` — tilt left/right (note: positive pitch = tilt LEFT)
 **Roll** = `atan2(ay, sqrt(ax² + az²))` — tilt forward/back
 
 **3D viz axis mapping** (device → Three.js): `devX→X, devZ→Y(up), devY→Z`

@@ -7,16 +7,16 @@ import * as THREE from "three";
 import { useOrientation, useSmoothedIMU, useToss } from "@/app/hooks/stickman";
 
 // Device axes (M5StickC Plus 2, portrait, USB at bottom):
-//   +X = right edge    (flat on back: ax ≈ 0)
-//   +Y = toward USB    (flat on back: ay ≈ 0)
-//   +Z = out of screen (flat on back: az ≈ +1g)
+//   +X = LEFT edge     (tilt right → ax goes negative)
+//   +Y = toward TOP    (away from USB; standing upright → ay ≈ +1)
+//   +Z = out of screen (flat on back, screen up → az ≈ +1)
 //
 // Three.js axes: +X = right, +Y = up, +Z = toward camera
 //
 // Axis mapping (device accel → Three.js "up" direction):
-//   Device +X → Three.js +X  (right stays right)
+//   Device -X → Three.js +X  (device left = Three.js right, so negate)
 //   Device +Z → Three.js +Y  (screen normal → up)
-//   Device +Y → Three.js +Z  (USB direction → toward camera)
+//   Device +Y → Three.js +Z  (device top → toward camera)
 
 const DEG_TO_RAD = Math.PI / 180;
 const REST_UP = new THREE.Vector3(0, 1, 0);
@@ -202,7 +202,8 @@ function PigModel() {
     }
 
     // --- Normal orientation tracking ---
-    _upDir.set(o.gravityX, o.gravityZ, o.gravityY);
+    // Device→Three.js: negate X (device +X=left, three +X=right), Z→Y, Y→Z
+    _upDir.set(-o.gravityX, o.gravityZ, o.gravityY);
 
     const lenSq = _upDir.lengthSq();
     if (lenSq < 0.25) return;
@@ -215,9 +216,9 @@ function PigModel() {
       _tiltQuat.setFromUnitVectors(REST_UP, _upDir);
     }
 
-    const GYRO_DEADZONE = 1.0;
+    const GYRO_DEADZONE = 2.0; // filter gyro drift at rest (~0.5-1 dps noise)
     const gz = Math.abs(imu.gz) > GYRO_DEADZONE ? imu.gz : 0;
-    yawAngle.current += gz * delta * DEG_TO_RAD;
+    yawAngle.current += -gz * delta * DEG_TO_RAD; // negate: device +Z yaw is CW, Three.js Y yaw is CCW
     yawAngle.current = ((yawAngle.current % (2 * Math.PI)) + 3 * Math.PI) % (2 * Math.PI) - Math.PI;
     _yawQuat.setFromAxisAngle(_upDir, yawAngle.current);
 

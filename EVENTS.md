@@ -53,19 +53,24 @@ Published at up to 10Hz, only when orientation changes ≥2° or acceleration ch
          ↑
          |
     +---------+
+    |  +Y ↑   |
     |         |
-    | SCREEN  | → +X (right edge)
++X ← SCREEN  |
     |         |
     +---------+
-         |
-         ↓ +Y (toward USB)
+         (USB)
 ```
+
+- **+X = LEFT edge** (tilt right → ax goes negative)
+- **+Y = toward TOP** (away from USB; standing upright → ay ≈ +1)
+- **+Z = out of screen** (flat on back, screen up → az ≈ +1)
 
 | Orientation | ax | ay | az | Description |
 |---|---|---|---|---|
-| Flat on back, screen up | ~0 | ~0 | **+1.0** | Gravity along +Z |
-| Standing portrait, USB down | ~0 | **+1.0** | ~0 | Gravity along +Y |
-| Landscape, port right (rotated 90° left) | **+1.0** | ~0 | ~0 | Gravity along +X |
+| Flat on back, screen up | ~0 | ~0 | **+1.0** | +Z axis points up |
+| Standing portrait, USB down | ~0 | **+1.0** | ~0 | +Y axis points up |
+| Tilted right (right edge down) | **-1.0** | ~0 | ~0 | -X axis points up |
+| Tilted left (left edge down) | **+1.0** | ~0 | ~0 | +X axis points up |
 
 **Notes:**
 - Accelerometer reads the **reaction force** (opposite gravity). At rest, the axis pointing up reads +1g.

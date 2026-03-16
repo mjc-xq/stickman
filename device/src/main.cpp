@@ -12,22 +12,19 @@
 #define ABLY_KEY "9X6hPw.YFBkcQ:vRU9-1-MuwTSteM4YXv5cnmtByZpNHlyvMvoL-xdy0c"
 #define ABLY_CHANNEL "stickman"
 
-// ── IMU Axis Convention ───────────────────────────────────────────────
+// ── IMU Axis Convention (verified via /calibrate) ────────────────────
 // M5StickC Plus 2, portrait, USB at bottom:
-//   +X = right edge,  +Y = toward USB (down),  +Z = out of screen
+//   +X = LEFT edge     (tilt right → ax ≈ -1)
+//   +Y = toward TOP    (standing upright → ay ≈ +1)
+//   +Z = out of screen (flat, screen up → az ≈ +1)
 //
-// Accelerometer reads REACTION force (opposite gravity):
-//   Flat on back, screen up:  ax≈0  ay≈0  az≈+1  (Z points up = +1g)
-//   Standing portrait:        ax≈0  ay≈+1 az≈0   (Y points up = +1g)
-//   Landscape, tilted right:  ax≈+1 ay≈0  az≈0   (X points up = +1g)
+// Accelerometer reads REACTION force (axis pointing UP = +1g):
+//   Flat on back, screen up:     ax≈0   ay≈0   az≈+1
+//   Standing portrait, USB down: ax≈0   ay≈+1  az≈0
+//   Tilted right (right edge down): ax≈-1  ay≈0  az≈0
 //
-// Gyroscope: degrees/sec, ±2000 dps range. Right-hand rule.
-//
-// Pitch = atan2(ax, sqrt(ay² + az²)) — tilt left/right
-// Roll  = atan2(ay, sqrt(ax² + az²)) — tilt forward/back
-//
-// 3D viz axis mapping (device → Three.js):
-//   devX → threeX,  devZ → threeY (up),  devY → threeZ
+// 3D viz mapping (device → Three.js):
+//   -devX → threeX (negate!),  devZ → threeY (up),  devY → threeZ
 
 // ── Colors ───────────────────────────────────────────────────────────
 #define COLOR_BG    0xF79E
