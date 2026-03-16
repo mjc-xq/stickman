@@ -3,6 +3,7 @@
 #include <WiFi.h>
 #include <WebSocketsClient.h>
 #include <BleGamepad.h>
+#include <NimBLEDevice.h>
 #include "faces.h"
 
 // ── WiFi ─────────────────────────────────────────────────────────────
@@ -158,6 +159,14 @@ static const char* bleStatusStr() {
   if (bleGamepad.isConnected()) return "CONNECTED";
   if (bleStarted) return "PAIRING";
   return "OFF";
+}
+
+// Re-start advertising if not connected (radio contention can silently stop it)
+static void bleEnsureAdvertising() {
+  if (bleStarted && !bleGamepad.isConnected()) {
+    // NimBLE's advertising may have stopped — restart it
+    NimBLEDevice::getAdvertising()->start();
+  }
 }
 
 // Send a short press+release of button 1 (Xbox A = Apple TV select)
@@ -598,10 +607,12 @@ void setup() {
   }
   mpu = static_cast<m5::MPU6886_Class*>(imuBase);
 
-  // BLE Gamepad — init early so it's ready when debug screen is shown
-  bleInit();
-
+  // WiFi first — let it start connecting in background
   WiFi.mode(WIFI_STA); WiFi.begin(WIFI_SSID, WIFI_PASS);
+  delay(100); // brief settle before starting BLE
+
+  // BLE Gamepad — init after WiFi.begin() so radio coex is established
+  bleInit();
   char wsPath[256];
   snprintf(wsPath, sizeof(wsPath), "/?key=%s&format=json&v=1.2&clientId=stickman", ABLY_KEY);
   webSocket.beginSSL("realtime.ably.io", 443, wsPath);
@@ -677,7 +688,11 @@ void loop() {
     case STATE_READY: {
       if (mode != MODE_DEBUG && checkShouldSleep(now)) { enterSleep(); return; }
       if (mode == MODE_DEBUG) {
-        if (now - lastDebugDraw > 500) { drawDebugScreen(); lastDebugDraw = now; }
+        if (now - lastDebugDraw > 500) {
+          bleEnsureAdvertising(); // keep advertising visible while in debug/pairing mode
+          drawDebugScreen();
+          lastDebugDraw = now;
+        }
         break;
       }
 
