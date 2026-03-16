@@ -193,10 +193,9 @@ function PigModel() {
       groupRef.current.scale.setScalar(1);
     }
 
-    // --- Orientation from pre-computed tilt angles (useOrientation hook) ---
-    // tiltLR/tiltFB are computed in StickmanProvider using NXP AN3461 formula.
-    // Three.js mapping: tiltFB → X rotation, tiltLR → Z rotation
-    _euler.set(o.tiltFB, 0, o.tiltLR, "XYZ");
+    // --- Orientation from pre-computed tilt + yaw (useOrientation hook) ---
+    // tiltLR/tiltFB: NXP AN3461 from accel. yaw: gyro Z integrated when flat.
+    _euler.set(o.tiltFB, o.yaw, o.tiltLR, "XYZ");
     _targetQuat.setFromEuler(_euler);
 
     const alpha = 1 - Math.exp(-12 * delta);

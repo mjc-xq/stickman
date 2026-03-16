@@ -83,6 +83,7 @@ export interface GravityState {
   // NXP AN3461 3-axis tilt angles (radians), stable at all orientations
   tiltLR: number;  // left/right: atan2(ax, sqrt(ay² + az²))
   tiltFB: number;  // forward/back: atan2(-ay, sqrt(ax² + az²))
+  yaw: number;     // spin around screen-normal (radians, from gyro Z)
 }
 
 export interface SmoothedIMUState {
@@ -101,6 +102,7 @@ export interface OrientationState {
   roll: number;
   tiltLR: number;  // left/right tilt in radians (NXP AN3461)
   tiltFB: number;  // forward/back tilt in radians (NXP AN3461)
+  yaw: number;     // spin around screen-normal axis (radians, from gyro Z)
 }
 
 export type TossPhase = "idle" | "airborne" | "landed" | "lost";

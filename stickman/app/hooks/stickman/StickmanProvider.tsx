@@ -58,7 +58,7 @@ export function StickmanProvider({ children }: { children: ReactNode }) {
   const smooth = useRef<SmoothedIMUState>({
     ax: 0, ay: 0, az: 1, gx: 0, gy: 0, gz: 0, p: 0, r: 0,
   });
-  const gravity = useRef<GravityState>({ x: 0, y: 0, z: 1, tiltMag: 0, angle: 0, tiltLR: 0, tiltFB: 0 });
+  const gravity = useRef<GravityState>({ x: 0, y: 0, z: 1, tiltMag: 0, angle: 0, tiltLR: 0, tiltFB: 0, yaw: 0 });
   const pointer = useRef<PointerState>({ x: 0, y: 0, vx: 0, vy: 0 });
   const dotPos = useRef({ x: 0, y: 0 });
   const dotVel = useRef({ x: 0, y: 0 });
@@ -156,6 +156,16 @@ export function StickmanProvider({ children }: { children: ReactNode }) {
       // Device: +X=left, +Y=top, +Z=screen-out
       g.tiltLR = Math.atan2(g.x, Math.sqrt(g.y * g.y + g.z * g.z));
       g.tiltFB = Math.atan2(-g.y, Math.sqrt(g.x * g.x + g.z * g.z));
+
+      // Yaw: integrate gyro Z when device is mostly flat (gz > 0.7g)
+      // Accel can't detect spin around screen-normal, only gyro can.
+      // Decays slowly toward 0 to prevent unbounded drift.
+      const GYRO_DEAD = 3.0; // dps dead zone (gyro noise at rest)
+      const gzDps = Math.abs(s.gz) > GYRO_DEAD ? s.gz : 0;
+      if (Math.abs(g.z) > 0.5) {
+        g.yaw += gzDps * dt * (Math.PI / 180);
+      }
+      g.yaw *= 0.995; // slow drift decay
 
       const accelDotG = s.ax * gnx + s.ay * gny + s.az * (g.z / gMag);
       let linX = s.ax - accelDotG * gnx;
