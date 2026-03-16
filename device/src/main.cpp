@@ -346,16 +346,18 @@ static const char* const IDLE_TEXTS[] = {
 };
 #define IDLE_TEXT_N 20
 
-static const SpriteIdx MOVE_SPRITES[] = {
-  SPRITE_MOVE_1, SPRITE_MOVE_2
+static const char* const TILT_TEXTS[] = {
+  "Whoa!", "Ooh!", "Wobbly!", "Careful!", "Eep!", "Tipping!",
+  "Whee!", "Steady!", "I'm sliding!", "Hold me!", "Ahh!", "Leaning!",
+  "Off balance!", "Not again!", "Woaaah!", "Help!", "Dizzy!"
 };
-#define MOVE_SPRITE_N 2
+#define TILT_TEXT_N 17
 
-static const char* const MOVE_TEXTS[] = {
-  "Whoa!", "Ooh!", "Huh?", "Hmm?", "Where we", "going?",
-  "Wee!", "Wobbly!", "Careful!", "Zoom!", "Wait up!", "Eep!"
+static const char* const TILT_UP_TEXTS[] = {
+  "Upside down!", "Wrong way!", "The world!", "Ahhhh!", "Whoa whoa!",
+  "My glasses!", "Blood rush!", "Flip me!", "Dizzy...", "Nooo!"
 };
-#define MOVE_TEXT_N 12
+#define TILT_UP_TEXT_N 10
 
 static const SpriteIdx TAP_SPRITES[] = {
   SPRITE_TAP_ANNOYED, SPRITE_TAP_ANGRY
@@ -364,9 +366,11 @@ static const SpriteIdx TAP_SPRITES[] = {
 
 static const char* const TAP_TEXTS[] = {
   "Oww!", "Hey!", "Oof!", "Rude!", "Bonk!", "Ouch!",
-  "Ack!", "Stop it!", "Meanie!", "Bap!", "Not cool!", "Eeek!"
+  "Ack!", "Stop it!", "Meanie!", "Bap!", "Not cool!", "Eeek!",
+  "Excuse me?!", "*bonk*", "Why?!", "So mean!", "Quit it!",
+  "My hat!", "Grr!", "Watch it!"
 };
-#define TAP_TEXT_N 12
+#define TAP_TEXT_N 20
 
 static const SpriteIdx TOSS_AIR_SPRITES[] = {
   SPRITE_TOSS_AIR_1, SPRITE_TOSS_AIR_2
@@ -779,11 +783,20 @@ void loop() {
           lastBlink = now;
           blinkInterval = random(5000, 12000);
         }
-        // React to gentle movement with a stumble sprite
-        float gyroMag = sqrtf(imuGx*imuGx + imuGy*imuGy + imuGz*imuGz);
-        if (gyroMag > 20.0f && now - lastRandomSpriteChange > 2500) {
-          showSprite(pick(MOVE_SPRITES, MOVE_SPRITE_N), pick(MOVE_TEXTS, MOVE_TEXT_N));
-          lastRandomSpriteChange = now;
+        // React to tilt — show orientation-reactive sprite
+        {
+          int8_t tilt = 0;
+          if (imuAx > 0.5f) tilt = 1;       // tilted left
+          else if (imuAx < -0.5f) tilt = 2;  // tilted right
+          if (imuAy < -0.3f) tilt = 3;       // upside down (overrides L/R)
+          static int8_t prevTilt = 0;
+          if (tilt != prevTilt) {
+            prevTilt = tilt;
+            if (tilt == 1) showSprite(SPRITE_TILT_LEFT, pick(TILT_TEXTS, TILT_TEXT_N));
+            else if (tilt == 2) showSprite(SPRITE_TILT_RIGHT, pick(TILT_TEXTS, TILT_TEXT_N));
+            else if (tilt == 3) showSprite(SPRITE_TILT_UP, pick(TILT_UP_TEXTS, TILT_UP_TEXT_N));
+            else { showSprite(pick(IDLE_SPRITES, IDLE_SPRITE_N), pick(IDLE_TEXTS, IDLE_TEXT_N)); lastBlink = now; }
+          }
         }
       }
 
