@@ -360,6 +360,21 @@ static const char* const IDLE_TEXTS[] = {
 };
 #define IDLE_TEXT_N 20
 
+static const SpriteIdx TILT_LEFT_SPRITES[] = {
+  SPRITE_TILT_LEFT, SPRITE_TILT_LEFT_2, SPRITE_TILT_LEFT_3
+};
+#define TILT_LEFT_SPRITE_N 3
+
+static const SpriteIdx TILT_RIGHT_SPRITES[] = {
+  SPRITE_TILT_RIGHT, SPRITE_TILT_RIGHT_2, SPRITE_TILT_RIGHT_3
+};
+#define TILT_RIGHT_SPRITE_N 3
+
+static const SpriteIdx TILT_UP_SPRITES[] = {
+  SPRITE_TILT_UP, SPRITE_TILT_UP_2, SPRITE_TILT_UP_3
+};
+#define TILT_UP_SPRITE_N 3
+
 static const char* const TILT_TEXTS[] = {
   "Whoa!", "Ooh!", "Wobbly!", "Careful!", "Eep!", "Tipping!",
   "Whee!", "Steady!", "I'm sliding!", "Hold me!", "Ahh!", "Leaning!",
@@ -805,9 +820,9 @@ void loop() {
           static int8_t prevTilt = 0;
           if (tilt != prevTilt) {
             prevTilt = tilt;
-            if (tilt == 1) showSprite(SPRITE_TILT_RIGHT, pick(TILT_TEXTS, TILT_TEXT_N));
-            else if (tilt == 2) showSprite(SPRITE_TILT_LEFT, pick(TILT_TEXTS, TILT_TEXT_N));
-            else if (tilt == 3) showSprite(SPRITE_TILT_UP, pick(TILT_UP_TEXTS, TILT_UP_TEXT_N));
+            if (tilt == 1) showSprite(pick(TILT_RIGHT_SPRITES, TILT_RIGHT_SPRITE_N), pick(TILT_TEXTS, TILT_TEXT_N));
+            else if (tilt == 2) showSprite(pick(TILT_LEFT_SPRITES, TILT_LEFT_SPRITE_N), pick(TILT_TEXTS, TILT_TEXT_N));
+            else if (tilt == 3) showSprite(pick(TILT_UP_SPRITES, TILT_UP_SPRITE_N), pick(TILT_UP_TEXTS, TILT_UP_TEXT_N));
             else { showSprite(pick(IDLE_SPRITES, IDLE_SPRITE_N), pick(IDLE_TEXTS, IDLE_TEXT_N)); lastBlink = now; }
           }
         }
