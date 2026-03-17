@@ -348,6 +348,7 @@ static void drawModeIndicator(const char* label = nullptr);
 static SpriteIdx currentSprite = SPRITE_IDLE_STANDING;
 static unsigned long lastRandomSpriteChange = 0;
 static unsigned long lastAnimSwap = 0;  // 2-frame animation cycling
+static int8_t prevTilt = 0;             // tilt detection state (0=neutral, 1=left, 2=right, 3=up)
 
 static SpriteIdx pick(const SpriteIdx* list, int n) { return list[random(n)]; }
 static const char* pick(const char* const* list, int n) { return list[random(n)]; }
@@ -367,10 +368,10 @@ static const SpriteIdx IDLE_SPRITES[] = {
 static const char* const IDLE_TEXTS[] = {
   "La la la~", "Hmm hmm~", "Hi!", "*vibes*", "Hehe", ":)",
   "Comfy~", "Nice day!", "*hums*", "Oh hey!", "Teehee",
-  "Sup!", "Boop!", "*wiggles*", "*sparkle*", "Yay~", "Meow?",
-  "Abracadabra!", "*whistles*", "Do do do~"
+  "Sup!", "Boop!", "*wiggles*", "*sparkle*", "Yay~", "Heehee~",
+  "Abracadabra!", "*whistles*", "Do do do~", "Wingardium~"
 };
-#define IDLE_TEXT_N 20
+#define IDLE_TEXT_N 21
 
 static const SpriteIdx TILT_LEFT_SPRITES[] = {
   SPRITE_TILT_LEFT, SPRITE_TILT_LEFT_2, SPRITE_TILT_LEFT_3
@@ -628,6 +629,7 @@ static void updateToss(float accMag, unsigned long now) {
       if (accMag > 2.5f) { // higher threshold to avoid gesture false triggers
         launchAccPeak = accMag; launchTime = now;
         tossState = TOSS_LAUNCHED;
+        drawSprite(SPRITE_TOSS_LAUNCH);
       }
       break;
     case TOSS_LAUNCHED:
@@ -655,7 +657,7 @@ static void updateToss(float accMag, unsigned long now) {
         else if (hi > 24) showSprite(pick(CATCH_MED_SPRITES, CATCH_MED_SPRITE_N), pick(TOSS_CATCH_MED_TEXTS, TOSS_CATCH_MED_TEXT_N), hs);
         else showSprite(pick(CATCH_LOW_SPRITES, CATCH_LOW_SPRITE_N), pick(TOSS_CATCH_LOW_TEXTS, TOSS_CATCH_LOW_TEXT_N), hs);
         char cd[96];
-        snprintf(cd, sizeof(cd), "{\\\"state\\\":\\\"landed\\\",\\\"heightIn\\\":%.1f,\\\"freefallMs\\\":%.0f}", hi, fs*1000);
+        snprintf(cd, sizeof(cd), "{\\\"state\\\":\\\"landed\\\",\\\"heightIn\\\":%.1f,\\\"heightM\\\":%.3f,\\\"freefallMs\\\":%.0f}", hi, hi * 0.0254f, fs*1000);
         publishEvent("toss", cd);
         tossResultTime = now;
         resultTime = now; state = STATE_RESULT;
@@ -934,7 +936,6 @@ void loop() {
           if (imuAx > 0.5f) tilt = 1;       // tilted left
           else if (imuAx < -0.5f) tilt = 2;  // tilted right
           if (imuAy < -0.3f) tilt = 3;       // upside down (overrides L/R)
-          static int8_t prevTilt = 0;
           if (tilt != prevTilt) {
             prevTilt = tilt;
             if (tilt == 1) showSprite(pick(TILT_RIGHT_SPRITES, TILT_RIGHT_SPRITE_N), pick(TILT_TEXTS, TILT_TEXT_N));

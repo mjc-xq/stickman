@@ -20,7 +20,7 @@ export interface ButtonEvent {
 
 export interface GestureEvent {
   type: "gesture";
-  gesture: "Circle Left" | "Circle Right" | "Tap" | "Thrust";
+  gesture: "Tap";
 }
 
 export interface TossAirborneEvent {
@@ -46,7 +46,7 @@ export type TossEvent = TossAirborneEvent | TossLandedEvent | TossLostEvent;
 
 export interface ModeEvent {
   type: "mode";
-  mode: "wand" | "toss" | "debug";
+  mode: "active" | "debug";
 }
 
 export type StickmanEvent =

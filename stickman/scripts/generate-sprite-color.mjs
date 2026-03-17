@@ -228,11 +228,13 @@ async function main() {
       .filter((f) => f.endsWith(".png") && !f.endsWith("_raw.png"));
     for (const f of pngFiles) {
       const name = f.replace(".png", "");
+      const spriteMatch = SPRITES.find((s) => s.name === name);
+      const frame = spriteMatch?.frame ?? "body";
       const rawPath = path.join(OUTPUT_DIR, `${name}_raw.png`);
       if (!fs.existsSync(rawPath))
         fs.copyFileSync(path.join(OUTPUT_DIR, f), rawPath);
-      if (processImage(rawPath, path.join(OUTPUT_DIR, f)))
-        console.log(`  OK: ${f}`);
+      if (processImage(rawPath, path.join(OUTPUT_DIR, f), frame))
+        console.log(`  OK: ${f} (${frame})`);
       else console.log(`  FAIL: ${f}`);
     }
     const rawFiles = fs
