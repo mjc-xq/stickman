@@ -1,4 +1,10 @@
+// IR blaster defines — must come before IRremote include
+#define DISABLE_CODE_FOR_RECEIVER
+#define SEND_PWM_BY_TIMER
+#define IR_TX_PIN 19
+
 #include <M5StickCPlus2.h>
+#include <IRremote.hpp>
 #include <utility/imu/MPU6886_Class.hpp>
 #include <WiFi.h>
 #include <WebSocketsClient.h>
@@ -693,6 +699,85 @@ static void enterSleep() {
   StickCP2.Power.deepSleep(0, true);
 }
 
+// ── IR Power-Off Blaster ─────────────────────────────────────────────
+// Blasts common TV/projector/soundbar power-off codes across protocols.
+// Covers ~30 brands. Takes ~8 seconds to cycle through all codes.
+
+static void irBlastPowerOff() {
+  showSprite(pick(BLE_ON_SPRITES, BLE_ON_SPRITE_N), "Zapping!");
+  drawModeIndicator("~ ZAP! ~");
+  Serial.println("IR: blasting power-off codes...");
+
+  // NEC protocol — most TVs (address, command)
+  static const uint16_t NEC_CODES[][2] = {
+    {0x0707, 0x02},   // Samsung
+    {0x04, 0x08},     // LG
+    {0x04, 0x02},     // LG alt
+    {0x0000, 0x08},   // Hisense / Insignia / generic
+    {0x0004, 0x08},   // Vizio
+    {0x0004, 0x0B},   // Vizio alt
+    {0x0002, 0x08},   // Toshiba
+    {0x0008, 0x08},   // Sharp
+    {0x0008, 0x12},   // Sharp alt
+    {0x0060, 0x08},   // Emerson
+    {0x0020, 0x08},   // Sanyo
+    {0x0040, 0x02},   // JVC
+    {0x8166, 0x12},   // TCL / Roku
+    {0x8168, 0x12},   // Roku alt
+    {0x0000, 0x45},   // Onn / Walmart brand
+    {0x87EE, 0x02},   // Apple TV (IR)
+    {0x87EE, 0x03},   // Apple TV alt
+    {0x00FF, 0x08},   // Funai / Magnavox / Sylvania
+    {0x001E, 0x08},   // Hitachi
+    {0x0A0A, 0x02},   // Yamaha soundbar
+    {0x7689, 0x0C},   // Bose soundbar
+    {0x1818, 0x02},   // Pioneer
+    {0x4040, 0x1A},   // Epson projector
+    {0x10EF, 0x08},   // BenQ projector
+  };
+  for (auto& c : NEC_CODES) {
+    IrSender.sendNEC(c[0], c[1], 0);
+    delay(80);
+  }
+
+  showMessage("Zapping!!");
+
+  // Samsung protocol (48-bit)
+  IrSender.sendSamsung(0x0707, 0x02, 0); delay(80);
+  IrSender.sendSamsung(0x0707, 0x98, 0); delay(80); // Samsung power off specific
+
+  // Sony SIRC (12-bit, 15-bit, 20-bit — send each 3x per Sony spec)
+  for (int r = 0; r < 3; r++) { IrSender.sendSony(0x01, 0x15, 12); delay(25); } delay(60);
+  for (int r = 0; r < 3; r++) { IrSender.sendSony(0x01, 0x15, 15); delay(25); } delay(60);
+  for (int r = 0; r < 3; r++) { IrSender.sendSony(0x4B, 0x15, 15); delay(25); } delay(60);
+  for (int r = 0; r < 3; r++) { IrSender.sendSony(0x1A, 0x15, 20); delay(25); } delay(60);
+
+  showMessage("ZAP ZAP!");
+
+  // Panasonic (Kaseikyo)
+  IrSender.sendPanasonic(0x4004, 0x0100BCBD, 0); delay(80);
+  IrSender.sendPanasonic(0x4004, 0x0100BCBD, 0); delay(80); // repeat
+
+  // RC5 (Philips and others — toggle bit handled by library)
+  IrSender.sendRC5(0x00, 0x0C, 0); delay(80);  // TV standby
+  IrSender.sendRC5(0x00, 0x0C, 0); delay(80);  // repeat
+  IrSender.sendRC5(0x01, 0x0C, 0); delay(80);  // Monitor standby
+
+  // RC6 (Philips newer / Microsoft MCE)
+  IrSender.sendRC6(0x00, 0x0C, 0); delay(80);
+  IrSender.sendRC6(0x00, 0x0C, 0); delay(80);
+
+  // Second pass of most common codes for reliability
+  showMessage("*zzzap*");
+  for (int i = 0; i < 6 && i < (int)(sizeof(NEC_CODES)/sizeof(NEC_CODES[0])); i++) {
+    IrSender.sendNEC(NEC_CODES[i][0], NEC_CODES[i][1], 1); // with 1 repeat
+    delay(80);
+  }
+  for (int r = 0; r < 3; r++) { IrSender.sendSony(0x01, 0x15, 12); delay(25); }
+
+  Serial.println("IR: done!");
+}
+
 // ── Show Ready ───────────────────────────────────────────────────────
 
 static void showReady() {
@@ -732,6 +817,10 @@ void setup() {
   wandMount = nvsReadWandMount();
   if (wandMount) Serial.println("Wand mount: ON (axes inverted)");
 
+
+  // IR blaster
+  IrSender.begin(DISABLE_LED_FEEDBACK);
+  IrSender.setSendPin(IR_TX_PIN);
 
   // Then WiFi + Ably
   WiFi.mode(WIFI_STA); WiFi.begin(WIFI_SSID, WIFI_PASS);
@@ -804,6 +893,13 @@ void loop() {
     return;
   }
   if (M5.BtnB.wasReleased()) publishEvent("btn", "{\\\"button\\\":\\\"B\\\",\\\"state\\\":\\\"up\\\"}");
+
+  // Power button: IR blast all power-off codes
+  if (M5.BtnPWR.wasClicked()) {
+    lastButtonPress = now;
+    irBlastPowerOff();
+    state = STATE_RESULT; resultTime = now;
+  }
 
   // IMU — [C8] skip frame if I2C read fails
   if (!readIMUFull()) { delay(1); return; }
