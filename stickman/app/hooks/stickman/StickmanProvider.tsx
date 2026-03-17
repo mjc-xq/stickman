@@ -58,7 +58,7 @@ export function StickmanProvider({ children }: { children: ReactNode }) {
   const smooth = useRef<SmoothedIMUState>({
     ax: 0, ay: 0, az: 1, gx: 0, gy: 0, gz: 0, p: 0, r: 0,
   });
-  const gravity = useRef<GravityState>({ x: 0, y: 0, z: 1, tiltMag: 0, angle: 0, tiltLR: 0, tiltFB: 0, yaw: 0 });
+  const gravity = useRef<GravityState>({ x: 0, y: 0, z: 1, tiltMag: 0, angle: 0, tiltLR: 0, tiltFB: 0, yaw: 0, qx: 0, qy: 0, qz: 0, qw: 1 });
   const pointer = useRef<PointerState>({ x: 0, y: 0, vx: 0, vy: 0 });
   const dotPos = useRef({ x: 0, y: 0 });
   const dotVel = useRef({ x: 0, y: 0 });
@@ -152,7 +152,7 @@ export function StickmanProvider({ children }: { children: ReactNode }) {
       g.tiltMag = Math.sqrt(gnx * gnx + gny * gny);
       g.angle = Math.atan2(-gnx, gny) * (180 / Math.PI);
 
-      // NXP AN3461 3-axis tilt angles (stable at all orientations)
+      // NXP AN3461 3-axis tilt angles (kept for backward compat)
       // Device: +X=left, +Y=top, +Z=screen-out
       g.tiltLR = Math.atan2(g.x, Math.sqrt(g.y * g.y + g.z * g.z));
       g.tiltFB = Math.atan2(-g.y, Math.sqrt(g.x * g.x + g.z * g.z));
@@ -166,6 +166,53 @@ export function StickmanProvider({ children }: { children: ReactNode }) {
         g.yaw += gzDps * dt * (Math.PI / 180);
       }
       g.yaw *= 0.995; // slow drift decay
+
+      // ── Quaternion orientation (Three.js space) ───────────────────
+      // Map device gravity to Three.js axes:
+      //   Device +X=left  → Three.js +X=right  (negate)
+      //   Device +Z=screen-out → Three.js +Y=up
+      //   Device +Y=top   → Three.js +Z=toward camera
+      // Accelerometer reads reaction force (the "up" direction).
+      const tx = -g.x;
+      const ty = g.z;
+      const tz = g.y;
+      const tlen = Math.sqrt(tx * tx + ty * ty + tz * tz);
+      if (tlen > 0.01) {
+        const nx = tx / tlen;
+        const ny = ty / tlen;
+        const nz = tz / tlen;
+
+        // Quaternion that rotates reference UP (0,1,0) to measured UP (nx,ny,nz)
+        // q = (cross, 1 + dot) normalized.  cross = (0,1,0) × (nx,ny,nz) = (nz, 0, -nx)
+        const dot = ny; // (0,1,0)·(nx,ny,nz)
+        let tqx = nz;
+        let tqy = 0;
+        let tqz = -nx;
+        let tqw = 1 + dot;
+
+        // Handle the degenerate case where gravity is exactly opposite to reference
+        // (device held perfectly upside-down: dot ≈ -1, quaternion near zero)
+        const qlen = Math.sqrt(tqx * tqx + tqy * tqy + tqz * tqz + tqw * tqw);
+        if (qlen < 0.0001) {
+          // 180° rotation — pick any perpendicular axis (Z works)
+          tqx = 0; tqy = 0; tqz = 1; tqw = 0;
+        } else {
+          tqx /= qlen; tqy /= qlen; tqz /= qlen; tqw /= qlen;
+        }
+
+        // Apply yaw as rotation around Three.js Y axis
+        // yawQuat = (0, sin(yaw/2), 0, cos(yaw/2))
+        // finalQuat = yawQuat * tiltQuat
+        const halfYaw = g.yaw * 0.5;
+        const sy = Math.sin(halfYaw);
+        const cy = Math.cos(halfYaw);
+        // Quaternion multiply: yawQ * tiltQ
+        // (0, sy, 0, cy) * (tqx, tqy, tqz, tqw)
+        g.qx = cy * tqx + sy * tqz;
+        g.qy = cy * tqy + sy * tqw;
+        g.qz = cy * tqz - sy * tqx;
+        g.qw = cy * tqw - sy * tqy;
+      }
 
       const accelDotG = s.ax * gnx + s.ay * gny + s.az * (g.z / gMag);
       let linX = s.ax - accelDotG * gnx;

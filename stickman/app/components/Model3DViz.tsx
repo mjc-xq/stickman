@@ -19,7 +19,6 @@ import { useOrientation, useToss } from "@/app/hooks/stickman";
 //   Device +Y → Three.js +Z  (device top → toward camera)
 
 const _targetQuat = new THREE.Quaternion();
-const _euler = new THREE.Euler();
 
 // Toss animation — maps real device height to 3D scene units
 const HEIGHT_SCALE = 8; // meters to scene units
@@ -193,10 +192,8 @@ function PigModel() {
       groupRef.current.scale.setScalar(1);
     }
 
-    // --- Orientation from pre-computed tilt + yaw (useOrientation hook) ---
-    // tiltLR/tiltFB: NXP AN3461 from accel. yaw: gyro Z integrated when flat.
-    _euler.set(o.tiltFB, o.yaw, o.tiltLR, "XYZ");
-    _targetQuat.setFromEuler(_euler);
+    // --- Orientation from pre-computed quaternion (no gimbal lock) ---
+    _targetQuat.set(o.qx, o.qy, o.qz, o.qw);
 
     const alpha = 1 - Math.exp(-12 * delta);
     smoothQuat.current.slerp(_targetQuat, alpha);

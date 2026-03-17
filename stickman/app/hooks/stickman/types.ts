@@ -1,6 +1,6 @@
 // Device axes (M5StickC Plus 2, portrait, USB at bottom):
-//   +X = right edge    (flat on back: ax ≈ 0)
-//   +Y = toward USB    (flat on back: ay ≈ 0)
+//   +X = LEFT edge     (tilt right → ax ≈ -1)
+//   +Y = toward TOP    (standing upright → ay ≈ +1)
 //   +Z = out of screen (flat on back: az ≈ +1g)
 // Accelerometer reads reaction force — axis pointing up reads +1g at rest.
 
@@ -84,6 +84,11 @@ export interface GravityState {
   tiltLR: number;  // left/right: atan2(ax, sqrt(ay² + az²))
   tiltFB: number;  // forward/back: atan2(-ay, sqrt(ax² + az²))
   yaw: number;     // spin around screen-normal (radians, from gyro Z)
+  // Quaternion orientation (Three.js space) — eliminates gimbal lock
+  qx: number;
+  qy: number;
+  qz: number;
+  qw: number;
 }
 
 export interface SmoothedIMUState {
@@ -103,6 +108,11 @@ export interface OrientationState {
   tiltLR: number;  // left/right tilt in radians (NXP AN3461)
   tiltFB: number;  // forward/back tilt in radians (NXP AN3461)
   yaw: number;     // spin around screen-normal axis (radians, from gyro Z)
+  // Quaternion orientation (Three.js space) — eliminates gimbal lock
+  qx: number;
+  qy: number;
+  qz: number;
+  qw: number;
 }
 
 export type TossPhase = "idle" | "airborne" | "landed" | "lost";
