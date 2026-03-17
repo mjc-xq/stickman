@@ -43,9 +43,12 @@
 #define LAYOUT_LINE2_Y   220
 
 // ── App Modes ────────────────────────────────────────────────────────
-// BtnB: toggle debug screen. BtnA: toggle joystick input mode.
+// BtnB: toggle debug screen. BtnA: cycle BLE mode (off → wand → game → off)
 enum AppMode { MODE_ACTIVE, MODE_DEBUG };
-static bool joystickMode = false; // when true, tilt sends analog stick
+// bleMode: 0=off, 1=wand (BLE tap only), 2=game (BLE tap + tilt arrows)
+static uint8_t bleMode = 0;
+static bool joystickMode = false; // derived: bleMode == 2
+
 
 // ── Gesture ──────────────────────────────────────────────────────────
 // Single gesture: wand tap (sharp flick in any direction)
@@ -155,32 +158,41 @@ static void nvsWriteBleEnabled(bool on) {
   }
 }
 
-static void bleInit() {
-  nvs_flash_init();
-  bleEnabled = nvsReadBleEnabled();
-  if (bleEnabled) {
-    bleKb.begin();
-    bleStarted = true;
-    Serial.println("BLE: ON '" BLE_DEVICE_NAME "'");
-  } else {
-    Serial.println("BLE: OFF (double-tap side btn to enable)");
+static uint8_t nvsReadBleMode() {
+  nvs_handle_t h;
+  uint8_t val = 0;
+  if (nvs_open("stickman", NVS_READONLY, &h) == ESP_OK) {
+    nvs_get_u8(h, "ble_mode", &val);
+    nvs_close(h);
+  }
+  return val > 2 ? 0 : val;
+}
+
+static void nvsWriteBleMode(uint8_t mode) {
+  nvs_handle_t h;
+  if (nvs_open("stickman", NVS_READWRITE, &h) == ESP_OK) {
+    nvs_set_u8(h, "ble_mode", mode);
+    nvs_commit(h);
+    nvs_close(h);
   }
 }
 
-// Toggle BLE on/off and persist to NVS
-static void bleToggle() {
-  bleEnabled = !bleEnabled;
-  nvsWriteBleEnabled(bleEnabled);
-  if (bleEnabled && !bleStarted) {
-    bleKb.begin();
-    bleStarted = true;
-    Serial.println("BLE: turned ON");
-  } else if (!bleEnabled && bleStarted) {
-    bleKb.end();
-    bleStarted = false;
-    Serial.println("BLE: turned OFF");
-  }
+static void applyBleMode() {
+  bleEnabled = bleMode > 0;
+  joystickMode = bleMode == 2;
+  if (bleEnabled && !bleStarted) { bleKb.begin(); bleStarted = true; }
+  else if (!bleEnabled && bleStarted) { bleKb.end(); bleStarted = false; }
+  for (int i = 0; i < 4; i++) arrowHeld[i] = false;
 }
+
+static void bleInit() {
+  nvs_flash_init();
+  bleMode = nvsReadBleMode();
+  applyBleMode();
+  const char* modeNames[] = {"OFF", "WAND", "GAME"};
+  Serial.printf("BLE: %s '" BLE_DEVICE_NAME "'\n", modeNames[bleMode]);
+}
+
 
 static const char* bleStatusStr() {
   if (!bleEnabled) return "OFF";
@@ -317,6 +329,8 @@ static void publishIMU() {
   }
 }
 
+static void drawModeIndicator(const char* label = nullptr);
+
 // ── Sprite Drawing ───────────────────────────────────────────────────
 
 static SpriteIdx currentSprite = SPRITE_IDLE_STANDING;
@@ -450,6 +464,7 @@ static void drawSprite(SpriteIdx sprite) {
   StickCP2.Display.setSwapBytes(true);
   StickCP2.Display.pushImage(0, LAYOUT_GFX_Y, SPRITE_W, SPRITE_H, data);
   StickCP2.Display.setSwapBytes(false);
+  drawModeIndicator();
 }
 
 static void clearTextArea() { StickCP2.Display.fillRect(0, LAYOUT_TEXT_Y, 135, LAYOUT_TEXT_H, COLOR_BG); }
@@ -470,11 +485,21 @@ static void showSprite(SpriteIdx sprite, const char* m1, const char* m2 = nullpt
   drawSprite(sprite); showMessage(m1, m2);
 }
 
-static void drawModeIndicator() {
+static void drawModeIndicator(const char* label) {
   StickCP2.Display.fillRect(0, LAYOUT_TITLE_Y, 135, LAYOUT_TITLE_H, COLOR_INNER);
   StickCP2.Display.setTextColor(COLOR_BG, COLOR_INNER);
   StickCP2.Display.setTextDatum(TC_DATUM);
-  StickCP2.Display.drawString(mode == MODE_ACTIVE ? "~ Stickman ~" : "# Debug #", 67, 2, 2);
+  if (label) {
+    StickCP2.Display.drawString(label, 67, 2, 2);
+  } else if (mode == MODE_DEBUG) {
+    StickCP2.Display.drawString("# Debug #", 67, 2, 2);
+  } else {
+    const char* labels[] = {"~ Cece ~", "~ Wand ~", "~ Game ~"};
+    StickCP2.Display.drawString(labels[bleMode], 67, 2, 2);
+  }
+  // Mode dot: blue = wand, green = game
+  if (bleMode == 1) StickCP2.Display.fillCircle(125, 8, 4, BLUE);
+  else if (bleMode == 2) StickCP2.Display.fillCircle(125, 8, 4, GREEN);
 }
 
 // ── Debug Screen ─────────────────────────────────────────────────────
@@ -648,8 +673,14 @@ static void enterSleep() {
 static void showReady() {
   StickCP2.Display.fillScreen(COLOR_BG);
   drawModeIndicator();
-  if (mode == MODE_ACTIVE) showSprite(pick(IDLE_SPRITES, IDLE_SPRITE_N), pick(IDLE_TEXTS, IDLE_TEXT_N));
-  else drawDebugScreen();
+  if (mode == MODE_ACTIVE) {
+    if (joystickMode) {
+      showSprite(SPRITE_JOYSTICK, "Game mode!");
+      StickCP2.Display.fillCircle(125, 8, 4, GREEN);
+    } else {
+      showSprite(pick(IDLE_SPRITES, IDLE_SPRITE_N), pick(IDLE_TEXTS, IDLE_TEXT_N));
+    }
+  } else drawDebugScreen();
 }
 
 // ── Setup ────────────────────────────────────────────────────────────
@@ -672,6 +703,7 @@ void setup() {
 
   // BLE first with NimBLE (lightweight, leaves room for SSL)
   bleInit();
+
 
   // Then WiFi + Ably
   WiFi.mode(WIFI_STA); WiFi.begin(WIFI_SSID, WIFI_PASS);
@@ -704,49 +736,30 @@ void loop() {
   bleUpdate(); // handle BLE button release timing
   unsigned long now = millis();
 
-  // BtnA: toggle joystick mode (front button)
+  // BtnA: cycle BLE mode (off → wand → game → off)
   if (M5.BtnA.wasPressed()) {
     lastButtonPress = now;
-    joystickMode = !joystickMode;
+    bleMode = (bleMode + 1) % 3;
+    nvsWriteBleMode(bleMode);
+    applyBleMode();
     publishEvent("btn", "{\\\"button\\\":\\\"A\\\",\\\"state\\\":\\\"down\\\"}");
-    // Reset arrow state when toggling
-    for (int i = 0; i < 4; i++) arrowHeld[i] = false;
-    Serial.printf("Joystick mode %s\n", joystickMode ? "ON" : "OFF");
-    if (joystickMode) showSprite(SPRITE_JOYSTICK, "Game mode!");
-    else showSprite(pick(IDLE_SPRITES, IDLE_SPRITE_N), pick(IDLE_TEXTS, IDLE_TEXT_N));
-    // Draw small indicator dot in top-right corner
-    StickCP2.Display.fillCircle(125, 8, 4, joystickMode ? GREEN : COLOR_INNER);
+    if (bleMode == 0) {
+      showSprite(pick(BLE_OFF_SPRITES, BLE_OFF_SPRITE_N), pick(BLE_OFF_TEXTS, BLE_OFF_TEXT_N));
+    } else if (bleMode == 1) {
+      showSprite(pick(BLE_ON_SPRITES, BLE_ON_SPRITE_N), "Wand mode!");
+    } else {
+      showSprite(SPRITE_JOYSTICK, "Game mode!");
+    }
+    const char* modeNames[] = {"OFF", "WAND", "GAME"};
+    Serial.printf("BLE mode: %s\n", modeNames[bleMode]);
+    state = STATE_RESULT; resultTime = now;
   }
   if (M5.BtnA.wasReleased()) publishEvent("btn", "{\\\"button\\\":\\\"A\\\",\\\"state\\\":\\\"up\\\"}");
 
-  // BtnB: single tap = debug mode, double tap = toggle BLE on/off
-  static unsigned long lastBtnBTime = 0;
-  static bool btnBWaiting = false; // waiting to see if it's a double tap
-
+  // BtnB: toggle debug mode
   if (M5.BtnB.wasPressed()) {
     lastButtonPress = now;
     publishEvent("btn", "{\\\"button\\\":\\\"B\\\",\\\"state\\\":\\\"down\\\"}");
-
-    if (btnBWaiting && now - lastBtnBTime < 400) {
-      // Double tap! Toggle BLE
-      btnBWaiting = false;
-      bleToggle();
-      showSprite(bleEnabled ? pick(BLE_ON_SPRITES, BLE_ON_SPRITE_N) : pick(BLE_OFF_SPRITES, BLE_OFF_SPRITE_N),
-                 bleEnabled ? pick(BLE_ON_TEXTS, BLE_ON_TEXT_N) : pick(BLE_OFF_TEXTS, BLE_OFF_TEXT_N));
-      state = STATE_RESULT; resultTime = now;
-      Serial.printf("BLE toggled: %s\n", bleEnabled ? "ON" : "OFF");
-      return;
-    }
-
-    // First tap — wait to see if a second comes
-    lastBtnBTime = now;
-    btnBWaiting = true;
-    return;
-  }
-
-  // After 400ms with no second tap, execute the single-tap action (debug toggle)
-  if (btnBWaiting && now - lastBtnBTime >= 400) {
-    btnBWaiting = false;
     mode = (mode == MODE_ACTIVE) ? MODE_DEBUG : MODE_ACTIVE;
     publishEvent("mode", mode == MODE_ACTIVE ? "{\\\"mode\\\":\\\"active\\\"}" : "{\\\"mode\\\":\\\"debug\\\"}");
     prevAccMag = 1.0f; prevPrevAccMag = 1.0f;
@@ -792,8 +805,8 @@ void loop() {
           static int8_t prevTilt = 0;
           if (tilt != prevTilt) {
             prevTilt = tilt;
-            if (tilt == 1) showSprite(SPRITE_TILT_LEFT, pick(TILT_TEXTS, TILT_TEXT_N));
-            else if (tilt == 2) showSprite(SPRITE_TILT_RIGHT, pick(TILT_TEXTS, TILT_TEXT_N));
+            if (tilt == 1) showSprite(SPRITE_TILT_RIGHT, pick(TILT_TEXTS, TILT_TEXT_N));
+            else if (tilt == 2) showSprite(SPRITE_TILT_LEFT, pick(TILT_TEXTS, TILT_TEXT_N));
             else if (tilt == 3) showSprite(SPRITE_TILT_UP, pick(TILT_UP_TEXTS, TILT_UP_TEXT_N));
             else { showSprite(pick(IDLE_SPRITES, IDLE_SPRITE_N), pick(IDLE_TEXTS, IDLE_TEXT_N)); lastBlink = now; }
           }
