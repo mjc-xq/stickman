@@ -88,11 +88,11 @@ static bool readIMUFull() {
   imuGx = (int16_t)((buf[8] << 8) | buf[9]) * (2000.0f / 32768.0f);
   imuGy = (int16_t)((buf[10] << 8) | buf[11]) * (2000.0f / 32768.0f);
   imuGz = (int16_t)((buf[12] << 8) | buf[13]) * (2000.0f / 32768.0f);
-  // Wand mount: device is flipped screen-down (180° around X axis)
-  // Correct Y/Z so all downstream code sees normal orientation
+  // Wand mount: device is flipped screen-down (180° around Y axis)
+  // Left/right mirror + screen normal inverts
   if (wandMount) {
-    imuAy = -imuAy; imuAz = -imuAz;
-    imuGy = -imuGy; imuGz = -imuGz;
+    imuAx = -imuAx; imuAz = -imuAz;
+    imuGx = -imuGx; imuGz = -imuGz;
   }
   return true;
 }
@@ -133,7 +133,7 @@ static float prevSentAx = 0, prevSentAy = 0, prevSentAz = 0;
 
 static BleKeyboard bleKb(BLE_DEVICE_NAME, "Stickman", 100);
 static bool bleStarted = false;
-static bool bleEnabled = true;  // persisted in NVS — double-tap BtnB to toggle
+static bool bleEnabled = false;  // derived from bleMode in applyBleMode()
 static unsigned long blePressTime = 0;
 static uint8_t blePressedKey = 0;
 
@@ -145,34 +145,14 @@ static unsigned long lastJoySend = 0;
 static unsigned long lastArrowTime[4] = {0,0,0,0};
 static bool arrowHeld[4] = {false,false,false,false};
 
-// Read BLE enabled state from NVS (persists across power cycles)
-static bool nvsReadBleEnabled() {
-  nvs_handle_t h;
-  uint8_t val = 1;
-  if (nvs_open("stickman", NVS_READONLY, &h) == ESP_OK) {
-    nvs_get_u8(h, "ble_on", &val);
-    nvs_close(h);
-  }
-  return val != 0;
-}
-
-static void nvsWriteBleEnabled(bool on) {
-  nvs_handle_t h;
-  if (nvs_open("stickman", NVS_READWRITE, &h) == ESP_OK) {
-    nvs_set_u8(h, "ble_on", on ? 1 : 0);
-    nvs_commit(h);
-    nvs_close(h);
-  }
-}
-
 static uint8_t nvsReadBleMode() {
   nvs_handle_t h;
-  uint8_t val = 0;
+  uint8_t val = 1;  // default: wand mode (BLE on, tap only)
   if (nvs_open("stickman", NVS_READONLY, &h) == ESP_OK) {
-    nvs_get_u8(h, "ble_mode", &val);
+    if (nvs_get_u8(h, "ble_mode", &val) != ESP_OK) val = 1;
     nvs_close(h);
   }
-  return val > 2 ? 0 : val;
+  return val > 2 ? 1 : val;
 }
 
 static void nvsWriteBleMode(uint8_t mode) {
@@ -535,7 +515,7 @@ static void drawModeIndicator(const char* label) {
   } else if (mode == MODE_DEBUG) {
     StickCP2.Display.drawString("# Debug #", 67, 2, 2);
   } else {
-    const char* labels[] = {"~ Cece ~", "~ Wand ~", "~ Game ~"};
+    const char* labels[] = {"~ Cece ~", "~ Remote ~", "~ Game ~"};
     StickCP2.Display.drawString(labels[bleMode], 67, 2, 2);
   }
   // Mode dot: blue = wand, green = game
@@ -721,7 +701,6 @@ static void showReady() {
   if (mode == MODE_ACTIVE) {
     if (joystickMode) {
       showSprite(SPRITE_JOYSTICK, "Game mode!");
-      StickCP2.Display.fillCircle(125, 8, 4, GREEN);
     } else {
       showSprite(pick(IDLE_SPRITES, IDLE_SPRITE_N), pick(IDLE_TEXTS, IDLE_TEXT_N));
     }
@@ -802,7 +781,7 @@ void loop() {
       if (bleMode == 0) {
         showSprite(pick(BLE_OFF_SPRITES, BLE_OFF_SPRITE_N), pick(BLE_OFF_TEXTS, BLE_OFF_TEXT_N));
       } else if (bleMode == 1) {
-        showSprite(pick(BLE_ON_SPRITES, BLE_ON_SPRITE_N), "Wand mode!");
+        showSprite(pick(BLE_ON_SPRITES, BLE_ON_SPRITE_N), "Remote on!");
       } else {
         showSprite(SPRITE_JOYSTICK, "Game mode!");
       }
