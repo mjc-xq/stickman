@@ -195,6 +195,11 @@ function PigModel() {
     // --- Orientation from pre-computed quaternion (no gimbal lock) ---
     _targetQuat.set(o.qx, o.qy, o.qz, o.qw);
 
+    // Ensure shortest-path slerp: negate target if dot < 0
+    if (smoothQuat.current.dot(_targetQuat) < 0) {
+      _targetQuat.set(-o.qx, -o.qy, -o.qz, -o.qw);
+    }
+
     const alpha = 1 - Math.exp(-12 * delta);
     smoothQuat.current.slerp(_targetQuat, alpha);
     groupRef.current.quaternion.copy(smoothQuat.current);

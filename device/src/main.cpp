@@ -43,11 +43,12 @@
 #define LAYOUT_LINE2_Y   220
 
 // ── App Modes ────────────────────────────────────────────────────────
-// BtnB: toggle debug screen. BtnA: cycle BLE mode (off → wand → game → off)
+// BtnB: toggle debug screen. BtnA: cycle BLE mode / toggle wand mount
 enum AppMode { MODE_ACTIVE, MODE_DEBUG };
 // bleMode: 0=off, 1=wand (BLE tap only), 2=game (BLE tap + tilt arrows)
 static uint8_t bleMode = 0;
 static bool joystickMode = false; // derived: bleMode == 2
+static bool wandMount = false;    // device mounted screen-down on wand — inverts Y/Z axes
 
 
 // ── Gesture ──────────────────────────────────────────────────────────
@@ -87,6 +88,12 @@ static bool readIMUFull() {
   imuGx = (int16_t)((buf[8] << 8) | buf[9]) * (2000.0f / 32768.0f);
   imuGy = (int16_t)((buf[10] << 8) | buf[11]) * (2000.0f / 32768.0f);
   imuGz = (int16_t)((buf[12] << 8) | buf[13]) * (2000.0f / 32768.0f);
+  // Wand mount: device is flipped screen-down (180° around X axis)
+  // Correct Y/Z so all downstream code sees normal orientation
+  if (wandMount) {
+    imuAy = -imuAy; imuAz = -imuAz;
+    imuGy = -imuGy; imuGz = -imuGz;
+  }
   return true;
 }
 
@@ -172,6 +179,25 @@ static void nvsWriteBleMode(uint8_t mode) {
   nvs_handle_t h;
   if (nvs_open("stickman", NVS_READWRITE, &h) == ESP_OK) {
     nvs_set_u8(h, "ble_mode", mode);
+    nvs_commit(h);
+    nvs_close(h);
+  }
+}
+
+static bool nvsReadWandMount() {
+  nvs_handle_t h;
+  uint8_t val = 0;
+  if (nvs_open("stickman", NVS_READONLY, &h) == ESP_OK) {
+    nvs_get_u8(h, "wand_mt", &val);
+    nvs_close(h);
+  }
+  return val != 0;
+}
+
+static void nvsWriteWandMount(bool on) {
+  nvs_handle_t h;
+  if (nvs_open("stickman", NVS_READWRITE, &h) == ESP_OK) {
+    nvs_set_u8(h, "wand_mt", on ? 1 : 0);
     nvs_commit(h);
     nvs_close(h);
   }
@@ -560,7 +586,11 @@ static void drawDebugScreen() {
   snprintf(buf, sizeof(buf), "BLE: %s", bleStatusStr());
   StickCP2.Display.drawString(buf, 4, y, 2); y += lh;
   StickCP2.Display.setTextColor(CYAN, BLACK);
-  StickCP2.Display.drawString(BLE_DEVICE_NAME, 4, y, 2);
+  StickCP2.Display.drawString(BLE_DEVICE_NAME, 4, y, 2); y += lh;
+  // Wand mount toggle (BtnA in debug mode)
+  StickCP2.Display.setTextColor(wandMount ? GREEN : WHITE, BLACK);
+  snprintf(buf, sizeof(buf), "Mount: %s", wandMount ? "WAND" : "Normal");
+  StickCP2.Display.drawString(buf, 4, y, 2);
 }
 
 // ── Tap Detection ────────────────────────────────────────────────────
@@ -719,6 +749,10 @@ void setup() {
   // BLE first with NimBLE (lightweight, leaves room for SSL)
   bleInit();
 
+  // Wand mount mode (toggle in debug screen via BtnA)
+  wandMount = nvsReadWandMount();
+  if (wandMount) Serial.println("Wand mount: ON (axes inverted)");
+
 
   // Then WiFi + Ably
   WiFi.mode(WIFI_STA); WiFi.begin(WIFI_SSID, WIFI_PASS);
@@ -751,23 +785,31 @@ void loop() {
   bleUpdate(); // handle BLE button release timing
   unsigned long now = millis();
 
-  // BtnA: cycle BLE mode (off → wand → game → off)
+  // BtnA: in debug mode → toggle wand mount; in active mode → cycle BLE
   if (M5.BtnA.wasPressed()) {
     lastButtonPress = now;
-    bleMode = (bleMode + 1) % 3;
-    nvsWriteBleMode(bleMode);
-    applyBleMode();
     publishEvent("btn", "{\\\"button\\\":\\\"A\\\",\\\"state\\\":\\\"down\\\"}");
-    if (bleMode == 0) {
-      showSprite(pick(BLE_OFF_SPRITES, BLE_OFF_SPRITE_N), pick(BLE_OFF_TEXTS, BLE_OFF_TEXT_N));
-    } else if (bleMode == 1) {
-      showSprite(pick(BLE_ON_SPRITES, BLE_ON_SPRITE_N), "Wand mode!");
+    if (mode == MODE_DEBUG) {
+      // Toggle wand mount (device mounted screen-down on wand)
+      wandMount = !wandMount;
+      nvsWriteWandMount(wandMount);
+      Serial.printf("Wand mount: %s\n", wandMount ? "ON" : "OFF");
+      drawDebugScreen(); // refresh debug display
     } else {
-      showSprite(SPRITE_JOYSTICK, "Game mode!");
+      bleMode = (bleMode + 1) % 3;
+      nvsWriteBleMode(bleMode);
+      applyBleMode();
+      if (bleMode == 0) {
+        showSprite(pick(BLE_OFF_SPRITES, BLE_OFF_SPRITE_N), pick(BLE_OFF_TEXTS, BLE_OFF_TEXT_N));
+      } else if (bleMode == 1) {
+        showSprite(pick(BLE_ON_SPRITES, BLE_ON_SPRITE_N), "Wand mode!");
+      } else {
+        showSprite(SPRITE_JOYSTICK, "Game mode!");
+      }
+      const char* modeNames[] = {"OFF", "WAND", "GAME"};
+      Serial.printf("BLE mode: %s\n", modeNames[bleMode]);
+      state = STATE_RESULT; resultTime = now;
     }
-    const char* modeNames[] = {"OFF", "WAND", "GAME"};
-    Serial.printf("BLE mode: %s\n", modeNames[bleMode]);
-    state = STATE_RESULT; resultTime = now;
   }
   if (M5.BtnA.wasReleased()) publishEvent("btn", "{\\\"button\\\":\\\"A\\\",\\\"state\\\":\\\"up\\\"}");
 
