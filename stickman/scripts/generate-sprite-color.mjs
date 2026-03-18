@@ -45,6 +45,12 @@ const SPRITES = [
   // Tap (bonked)
   { name: "tap-annoyed", frame: f, desc: "Flinching with one eye squinted shut in pain, one hand rubbing the top of her wizard hat where she was bonked, annoyed scrunched expression" },
   { name: "tap-angry", frame: f, desc: "Puffed out cheeks, deeply furrowed angry eyebrows, wizard hat knocked sideways on her head, fuming mad expression" },
+  { name: "tap-shocked", frame: f, desc: "Eyes comically wide open in total shock, mouth a huge perfect O, hands pressed against both cheeks like the Home Alone kid, wizard hat popping straight up off her head from the surprise impact, little impact stars around the hat" },
+  { name: "tap-dizzy", frame: f, desc: "Spiral swirl eyes spinning dizzily, tongue hanging out to one side, head wobbling, wizard hat spinning on top of her head at an angle, little stars and birds circling around her, completely dazed and bonked silly" },
+  { name: "tap-cry", frame: f, desc: "Big cartoon tears streaming from her eyes like waterfalls, mouth wide open wailing dramatically, wizard hat drooping sadly, an exaggerated over-the-top crying tantrum face — clearly being dramatic about it, not genuinely hurt" },
+  { name: "tap-glare", frame: f, desc: "Arms crossed defiantly (visible at bottom of frame), chin tucked down, glaring directly at the viewer with an intense judgy stare through her glasses, one eyebrow raised, wizard hat pulled low. A 'really? you did that?' expression" },
+  { name: "tap-dodge", frame: f, desc: "Ducking and covering her wizard hat with both hands protectively, eyes squeezed shut bracing for another hit, leaning away to one side, teeth gritted. Full defensive flinch posture — she's had ENOUGH" },
+  { name: "tap-revenge", frame: f, desc: "Pointing her wand directly at the viewer with a mischievous vengeful grin, one eye narrowed, wizard hat perfectly straight and glowing at the tip, sparks crackling from the wand. A 'you're gonna get it' expression" },
   // Tilt / Orientation
   { name: "tilt-left", frame: f, desc: "Head and face tilting to the LEFT as if falling sideways, locs swinging to the left, startled wide worried eyes, wizard hat sliding off to the left, off-balance expression" },
   { name: "tilt-right", frame: f, desc: "Head and face tilting to the RIGHT as if falling sideways, locs swinging to the right, startled wide worried eyes, wizard hat sliding off to the right, off-balance expression" },

@@ -438,6 +438,8 @@ static SpriteIdx currentSprite = SPRITE_IDLE_STANDING;
 static unsigned long lastRandomSpriteChange = 0;
 static unsigned long lastAnimSwap = 0;  // 2-frame animation cycling
 static int8_t prevTilt = 0;             // tilt detection state (0=neutral, 1=left, 2=right, 3=up)
+static unsigned long lastTiltChange = 0; // cooldown for tilt sprite changes
+#define TILT_CHANGE_MS 800               // minimum ms between tilt sprite changes
 
 static SpriteIdx pick(const SpriteIdx* list, int n) { return list[random(n)]; }
 static const char* pick(const char* const* list, int n) { return list[random(n)]; }
@@ -493,9 +495,11 @@ static const char* const TILT_UP_TEXTS[] = {
 #define TILT_UP_TEXT_N 10
 
 static const SpriteIdx TAP_SPRITES[] = {
-  SPRITE_TAP_ANNOYED, SPRITE_TAP_ANGRY
+  SPRITE_TAP_ANNOYED, SPRITE_TAP_ANGRY,
+  SPRITE_TAP_SHOCKED, SPRITE_TAP_DIZZY, SPRITE_TAP_CRY,
+  SPRITE_TAP_GLARE, SPRITE_TAP_DODGE, SPRITE_TAP_REVENGE
 };
-#define TAP_SPRITE_N 2
+#define TAP_SPRITE_N 8
 
 static const char* const TAP_TEXTS[] = {
   "Oww!", "Hey!", "Oof!", "Rude!", "Bonk!", "Ouch!",
@@ -1167,8 +1171,9 @@ void loop() {
           if (imuAx > 0.5f) tilt = 1;       // tilted left
           else if (imuAx < -0.5f) tilt = 2;  // tilted right
           if (imuAy < -0.3f) tilt = 3;       // upside down (overrides L/R)
-          if (tilt != prevTilt) {
+          if (tilt != prevTilt && (now - lastTiltChange > TILT_CHANGE_MS)) {
             prevTilt = tilt;
+            lastTiltChange = now;
             if (tilt == 1) showSprite(pick(TILT_LEFT_SPRITES, TILT_LEFT_SPRITE_N), pick(TILT_TEXTS, TILT_TEXT_N));
             else if (tilt == 2) showSprite(pick(TILT_RIGHT_SPRITES, TILT_RIGHT_SPRITE_N), pick(TILT_TEXTS, TILT_TEXT_N));
             else if (tilt == 3) showSprite(pick(TILT_UP_SPRITES, TILT_UP_SPRITE_N), pick(TILT_UP_TEXTS, TILT_UP_TEXT_N));
