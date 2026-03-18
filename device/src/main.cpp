@@ -97,10 +97,25 @@ static bool readIMUFull() {
 }
 
 // ── Tap Detection State ──────────────────────────────────────────────
-static float prevAccMag = 1.0f;
-static float prevPrevAccMag = 1.0f;  // two-sample history for spike shape
+// High-pass filtered jerk detection with duration gate.
+// Layer 1: IIR high-pass filter removes gravity + tilt (cutoff ~4Hz)
+// Layer 2: Jerk (derivative) of filtered magnitude — taps produce huge jerk
+// Layer 3: Duration gate — tap energy dissipates within 50ms, tilts don't
+#define TAP_HP_ALPHA       0.8f   // high-pass filter coefficient (0.8 → ~4Hz cutoff at 100Hz)
+#define TAP_JERK_THRESH    0.6f   // minimum jerk to trigger candidate (g/sample)
+#define TAP_HP_MAG_THRESH  0.4f   // minimum HP-filtered magnitude at trigger (g)
+#define TAP_SETTLE_WINDOW  5      // samples to wait for energy to dissipate
+#define TAP_SETTLE_THRESH  0.15f  // HP magnitude must drop below this to confirm tap
+#define TAP_COOLDOWN_MS    500    // cooldown after confirmed tap (ms)
+
+// High-pass filter state (per-axis)
+static float hpPrevRaw[3] = {0, 0, 0};  // previous raw accel values
+static float hpState[3]   = {0, 0, 0};  // filter output state
+
+// Detection state
+static float prevHpMag = 0;
 static unsigned long lastTapTime = 0;
-static const unsigned long TAP_COOLDOWN_MS = 800;
+static int tapSettleCount = -1;  // -1 = no candidate, 0..N = counting settle samples
 
 // ── Toss State ───────────────────────────────────────────────────────
 static TossState tossState = TOSS_IDLE;
@@ -566,38 +581,62 @@ static void drawDebugScreen() {
 }
 
 // ── Tap Detection ────────────────────────────────────────────────────
-// Detects a sharp flick/tap in any direction using accel magnitude.
-// Spike-shape detection: magnitude must rise sharply THEN fall (a peak).
-// Prevents false triggers from sustained motion, drops, or excited handling.
-// ── Tune these thresholds for sensitivity ──
-#define TAP_RISE_THRESH  0.12f  // minimum rise delta to start spike (g)
-#define TAP_PEAK_THRESH  1.15f  // minimum peak magnitude (g) — just above resting 1g
-#define TAP_FALL_THRESH  0.10f  // minimum fall delta to confirm spike (g)
+// Uses high-pass filtered acceleration to isolate tap impulses from
+// gravity/tilt, then checks jerk (derivative) and impulse brevity.
+//
+// Why this rejects tilts:
+//   1. HP filter removes gravity rotation (DC) and slow tilt (<4Hz)
+//   2. Jerk threshold requires rapid change — tilts are gradual
+//   3. Duration gate requires energy to dissipate in <50ms — tilts are sustained
 
-static bool detectTap(float accMag) {
+static bool detectTap(float rawAx, float rawAy, float rawAz) {
   unsigned long now = millis();
+  float raw[3] = {rawAx, rawAy, rawAz};
 
-  // Compute deltas from history
-  float prevDelta = prevAccMag - prevPrevAccMag;  // was it rising?
-  float delta = accMag - prevAccMag;               // is it now falling?
-  float peakMag = prevAccMag;                      // the potential peak
+  // Layer 1: Single-pole IIR high-pass filter on each axis
+  // hp[n] = alpha * (hp[n-1] + raw[n] - raw[n-1])
+  // Removes DC (gravity) and frequencies below ~4Hz (tilts)
+  float hpAcc[3];
+  for (int i = 0; i < 3; i++) {
+    hpState[i] = TAP_HP_ALPHA * (hpState[i] + raw[i] - hpPrevRaw[i]);
+    hpPrevRaw[i] = raw[i];
+    hpAcc[i] = hpState[i];
+  }
 
-  // Shift history (always, even during cooldown)
-  prevPrevAccMag = prevAccMag;
-  prevAccMag = accMag;
+  // Filtered magnitude (gravity-free, tilt-free)
+  float hpMag = sqrtf(hpAcc[0]*hpAcc[0] + hpAcc[1]*hpAcc[1] + hpAcc[2]*hpAcc[2]);
+
+  // Layer 2: Jerk = magnitude change between consecutive filtered samples
+  float jerk = hpMag - prevHpMag;
+  prevHpMag = hpMag;
+
+  // Layer 3: Duration gate — track settle after candidate trigger
+  if (tapSettleCount >= 0) {
+    tapSettleCount++;
+    if (hpMag < TAP_SETTLE_THRESH) {
+      // Energy dissipated quickly — confirmed tap
+      int settled = tapSettleCount;
+      tapSettleCount = -1;
+      lastTapTime = now;
+      Serial.printf("TAP! hpMag=%.2f settled@%d samples\n", hpMag, settled);
+      return true;
+    }
+    if (tapSettleCount > TAP_SETTLE_WINDOW) {
+      // Energy sustained too long — not a tap (it's a tilt or shake)
+      tapSettleCount = -1;
+      Serial.printf("TAP rejected: sustained motion (hpMag=%.2f)\n", hpMag);
+      return false;
+    }
+    return false; // still waiting to settle
+  }
 
   // Skip during cooldown or active toss
   if (now - lastTapTime < TAP_COOLDOWN_MS) return false;
   if (tossState != TOSS_IDLE) return false;
 
-  // Spike shape: previous sample was a peak (rose then fell)
-  // prevDelta > threshold = was rising sharply
-  // delta < -threshold = is now falling
-  // peakMag > threshold = peak was high enough
-  if (prevDelta > TAP_RISE_THRESH && delta < -TAP_FALL_THRESH && peakMag > TAP_PEAK_THRESH) {
-    lastTapTime = now;
-    Serial.printf("TAP! peak=%.2fg rise=%.2f fall=%.2f\n", peakMag, prevDelta, delta);
-    return true;
+  // Trigger candidate: large positive jerk AND significant filtered magnitude
+  if (jerk > TAP_JERK_THRESH && hpMag > TAP_HP_MAG_THRESH) {
+    tapSettleCount = 0; // start duration gate
   }
 
   return false;
@@ -785,7 +824,8 @@ void loop() {
     publishEvent("btn", "{\\\"button\\\":\\\"B\\\",\\\"state\\\":\\\"down\\\"}");
     mode = (mode == MODE_ACTIVE) ? MODE_DEBUG : MODE_ACTIVE;
     publishEvent("mode", mode == MODE_ACTIVE ? "{\\\"mode\\\":\\\"active\\\"}" : "{\\\"mode\\\":\\\"debug\\\"}");
-    prevAccMag = 1.0f; prevPrevAccMag = 1.0f;
+    prevHpMag = 0; tapSettleCount = -1;
+    for (int i = 0; i < 3; i++) { hpState[i] = 0; hpPrevRaw[i] = 0; }
     tossState = TOSS_IDLE; state = STATE_READY;
     showReady();
     return;
@@ -835,14 +875,14 @@ void loop() {
         }
       }
 
-      // Joystick mode: tilt sends arrow keys (only in READY, not during result)
+      // Remote mode: tilt sends arrow keys (only in READY, not during result)
       if (bleEnabled && now - lastJoySend >= JOY_SEND_INTERVAL_MS) {
         bleSendArrows();
         lastJoySend = now;
       }
 
       // Detect tap → show bonk sprite + send BLE select + publish
-      if (detectTap(accMag)) {
+      if (detectTap(imuAx, imuAy, imuAz)) {
         state = STATE_RESULT; resultTime = now;
         publishEvent("gesture", "{\\\"gesture\\\":\\\"Tap\\\"}");
         bleSendKey(KEY_RETURN); // Apple TV select/enter

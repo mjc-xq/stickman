@@ -112,7 +112,7 @@ In Game BLE mode, tilt also sends arrow keys via BLE HID keyboard at 180ms repea
 ### Active Mode
 Simultaneously detects taps and toss events.
 
-**Tap**: Spike-shape detection on accel magnitude — rise > 0.8g, peak > 1.8g, fall > 0.3g, 500ms cooldown. Disabled during joystick mode and active toss. Sends BLE KEY_RETURN when BLE is on.
+**Tap**: High-pass filtered jerk detection with duration gate. IIR HP filter (alpha=0.8, ~4Hz cutoff) removes gravity/tilt from each axis, then checks jerk (>0.6g/sample) + filtered magnitude (>0.4g) + impulse brevity (must settle <0.15g within 5 samples/50ms). 500ms cooldown. Disabled during active toss. Sends BLE KEY_RETURN when BLE is on.
 
 **Toss** (runs alongside tap detection):
 - Launch: accel magnitude > 2.5g
