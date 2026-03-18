@@ -73,6 +73,11 @@ const SPRITE_NAMES = [
   "idle-spell-practice",
   "idle-yawn",
   "idle-wave",
+  "feed-1",
+  "feed-2",
+  "pet",
+  "sad-1",
+  "sad-2",
 ];
 
 function toEnumName(name) {

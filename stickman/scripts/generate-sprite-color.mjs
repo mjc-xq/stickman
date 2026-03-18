@@ -84,6 +84,14 @@ const SPRITES = [
   { name: "idle-spell-practice", frame: f, desc: "Hands near her face with small sparkle dots floating between them, fingers wiggling, deeply concentrating expression, wizard hat on" },
   { name: "idle-yawn", frame: f, desc: "Mid-yawn with one hand covering her mouth, wizard hat drooping to one side, sleepy half-shut eyes" },
   { name: "idle-wave", frame: f, desc: "Big warm friendly smile looking directly at the viewer, one hand waving near her face, wizard hat sitting neatly" },
+  // Tomagotchi — feed
+  { name: "feed-1", frame: f, desc: "Cece holding a big green leaf in both hands, looking at it with wide excited eyes and an open-mouth smile, about to take a bite, wizard hat on" },
+  { name: "feed-2", frame: f, desc: "Cece mid-bite, munching on a leaf with puffy cheeks, eyes squeezed shut with delight, small crumbs and leaf bits around mouth, wizard hat on" },
+  // Tomagotchi — pet
+  { name: "pet", frame: f, desc: "Cece with eyes gently closed, peaceful dreamy smile, head slightly tilted, looking deeply content and cozy as if being rocked gently, wizard hat on" },
+  // Tomagotchi — sad
+  { name: "sad-1", frame: f, desc: "Cece with big droopy sad eyes looking slightly up at the viewer, mouth in a small frown, eyebrows tilted up in the middle, lonely expression, wizard hat drooping" },
+  { name: "sad-2", frame: f, desc: "Cece looking down and to the side, eyes half-closed, one hand on cheek, heavy sigh expression, slightly slouched posture, wizard hat on" },
 ];
 
 const FRAMING = {

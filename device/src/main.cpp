@@ -61,6 +61,12 @@ static AppMode mode = MODE_ACTIVE;
 static AppState state = STATE_READY;
 static unsigned long resultTime = 0;
 
+// ── Happiness (tomagotchi) ───────────────────────────────────────────
+static uint8_t happiness = 50;
+static uint32_t lastHappinessTs = 0;  // unix timestamp of last happiness update
+static bool ntpSynced = false;
+static bool ntpDecayApplied = false;
+
 // ── Idle face animation ──────────────────────────────────────────────
 static unsigned long lastBlink = 0;
 static unsigned long blinkInterval = 4000;
@@ -191,6 +197,45 @@ static void nvsWriteWandMount(bool on) {
   nvs_handle_t h;
   if (nvs_open("stickman", NVS_READWRITE, &h) == ESP_OK) {
     nvs_set_u8(h, "wand_mt", on ? 1 : 0);
+    nvs_commit(h);
+    nvs_close(h);
+  }
+}
+
+// ── NVS: Happiness ──
+static uint8_t nvsReadHappiness() {
+  nvs_handle_t h;
+  uint8_t val = 50;
+  if (nvs_open("stickman", NVS_READONLY, &h) == ESP_OK) {
+    nvs_get_u8(h, "happiness", &val);
+    nvs_close(h);
+  }
+  return val > 100 ? 50 : val;
+}
+
+static void nvsWriteHappiness(uint8_t val) {
+  nvs_handle_t h;
+  if (nvs_open("stickman", NVS_READWRITE, &h) == ESP_OK) {
+    nvs_set_u8(h, "happiness", val);
+    nvs_commit(h);
+    nvs_close(h);
+  }
+}
+
+static uint32_t nvsReadLastTs() {
+  nvs_handle_t h;
+  uint32_t val = 0;
+  if (nvs_open("stickman", NVS_READONLY, &h) == ESP_OK) {
+    nvs_get_u32(h, "last_ts", &val);
+    nvs_close(h);
+  }
+  return val;
+}
+
+static void nvsWriteLastTs(uint32_t val) {
+  nvs_handle_t h;
+  if (nvs_open("stickman", NVS_READWRITE, &h) == ESP_OK) {
+    nvs_set_u32(h, "last_ts", val);
     nvs_commit(h);
     nvs_close(h);
   }
@@ -344,6 +389,48 @@ static void publishIMU() {
 }
 
 static void drawModeIndicator(const char* label = nullptr);
+static void publishEvent(const char* name, const char* data);
+
+// ── Happiness helpers ────────────────────────────────────────────────
+
+static int getMoodTier() {
+  if (happiness >= 80) return 3;  // happy
+  if (happiness >= 50) return 2;  // content
+  if (happiness >= 20) return 1;  // grumpy
+  return 0;                       // sad
+}
+
+static void changeHappiness(int8_t delta, const char* cause) {
+  int16_t val = (int16_t)happiness + delta;
+  if (val < 0) val = 0;
+  if (val > 100) val = 100;
+  happiness = (uint8_t)val;
+
+  struct tm ti;
+  if (ntpSynced && getLocalTime(&ti, 0)) {
+    time_t now;
+    time(&now);
+    lastHappinessTs = (uint32_t)now;
+    nvsWriteLastTs(lastHappinessTs);
+  }
+  nvsWriteHappiness(happiness);
+
+  const char* mood = happiness >= 80 ? "happy" : happiness >= 50 ? "content" : happiness >= 20 ? "grumpy" : "sad";
+  char buf[96];
+  snprintf(buf, sizeof(buf), "{\\\"value\\\":%d,\\\"mood\\\":\\\"%s\\\",\\\"cause\\\":\\\"%s\\\"}", happiness, mood, cause);
+  publishEvent("happiness", buf);
+}
+
+// ── Petting detection ────────────────────────────────────────────────
+static int rockCrossings = 0;
+static bool rockPositive = false;
+static unsigned long rockWindowStart = 0;
+static unsigned long lastPetTime = 0;
+#define PET_COOLDOWN_MS 30000
+#define ROCK_WINDOW_MS 4000
+#define ROCK_MIN_CROSSINGS 6  // 3 oscillations = 6 zero crossings
+#define ROCK_MAG_MIN 0.2f
+#define ROCK_MAG_MAX 0.6f
 
 // ── Sprite Drawing ───────────────────────────────────────────────────
 
@@ -486,6 +573,44 @@ static const char* const BLE_OFF_TEXTS[] = {
   "BLE Off!", "Unplugged~", "Going dark", "Sleepy...", "Offline~"
 };
 #define BLE_OFF_TEXT_N 5
+
+// ── Feed sprites + texts ──
+static const SpriteIdx FEED_SPRITES[] = { SPRITE_FEED_1, SPRITE_FEED_2 };
+#define FEED_SPRITE_N 2
+
+static const char* const FEED_TEXTS[] = {
+  "Yum!", "Nom nom!", "Tasty~", "More leaves!", "*munch munch*", "So good!"
+};
+#define FEED_TEXT_N 6
+
+// ── Pet texts ──
+static const char* const PET_TEXTS[] = {
+  "Mmmm...", "That's nice~", "Cozy...", "*purrs*", "More please!"
+};
+#define PET_TEXT_N 5
+
+// ── Sad idle texts ──
+static const char* const SAD_TEXTS[] = {
+  "...", "*sigh*", "Lonely...", "Hello?", "*sniff*"
+};
+#define SAD_TEXT_N 5
+
+// ── Mood-filtered idle sprite pools ──
+static const SpriteIdx HAPPY_IDLE_SPRITES[] = {
+  SPRITE_IDLE_WAVE, SPRITE_IDLE_HUMMING_1, SPRITE_IDLE_HUMMING_2,
+  SPRITE_IDLE_SPELL_PRACTICE, SPRITE_IDLE_WAND_TWIRL
+};
+#define HAPPY_IDLE_SPRITE_N 5
+
+static const SpriteIdx GRUMPY_IDLE_SPRITES[] = {
+  SPRITE_IDLE_YAWN, SPRITE_IDLE_SITTING, SPRITE_IDLE_LOOKING_LEFT, SPRITE_IDLE_LOOKING_RIGHT
+};
+#define GRUMPY_IDLE_SPRITE_N 4
+
+static const SpriteIdx SAD_IDLE_SPRITES[] = {
+  SPRITE_SAD_1, SPRITE_SAD_2, SPRITE_IDLE_YAWN
+};
+#define SAD_IDLE_SPRITE_N 3
 
 static void drawSprite(SpriteIdx sprite) {
   currentSprite = sprite;
@@ -642,6 +767,32 @@ static bool detectTap(float rawAx, float rawAy, float rawAz) {
   return false;
 }
 
+// ── Petting Detection (gentle rocking) ───────────────────────────────
+
+static bool detectPetting(float ax) {
+  if (tossState != TOSS_IDLE) { rockCrossings = 0; return false; }
+  unsigned long now = millis();
+  if (now - lastPetTime < PET_COOLDOWN_MS) return false;
+
+  float mag = fabsf(ax);
+  if (mag < ROCK_MAG_MIN || mag > ROCK_MAG_MAX) { rockCrossings = 0; return false; }
+
+  bool nowPositive = ax > 0;
+  if (nowPositive != rockPositive) {
+    rockPositive = nowPositive;
+    if (rockCrossings == 0) rockWindowStart = now;
+    rockCrossings++;
+    if (now - rockWindowStart > ROCK_WINDOW_MS) {
+      rockCrossings = 1; rockWindowStart = now;
+    }
+    if (rockCrossings >= ROCK_MIN_CROSSINGS) {
+      rockCrossings = 0; lastPetTime = now;
+      return true;
+    }
+  }
+  return false;
+}
+
 // ── Toss Detection (always active, runs alongside gestures) ──────────
 
 static void updateToss(float accMag, unsigned long now) {
@@ -680,6 +831,7 @@ static void updateToss(float accMag, unsigned long now) {
         char cd[96];
         snprintf(cd, sizeof(cd), "{\\\"state\\\":\\\"landed\\\",\\\"heightIn\\\":%.1f,\\\"heightM\\\":%.3f,\\\"freefallMs\\\":%.0f}", hi, hi * 0.0254f, fs*1000);
         publishEvent("toss", cd);
+        changeHappiness(10, "catch");
         tossResultTime = now;
         resultTime = now; state = STATE_RESULT;
       }
@@ -687,6 +839,7 @@ static void updateToss(float accMag, unsigned long now) {
         tossState = TOSS_IDLE;
         showSprite(pick(TOSS_LOST_SPRITES, TOSS_LOST_SPRITE_N), pick(TOSS_LOST_TEXTS, TOSS_LOST_N));
         publishEvent("toss", "{\\\"state\\\":\\\"lost\\\"}");
+        changeHappiness(-15, "lost");
         tossResultTime = now; resultTime = now; state = STATE_RESULT;
       }
       break;
@@ -707,8 +860,27 @@ static bool checkShouldSleep(unsigned long now) {
   return (now - lastMotionTime > MOTION_SLEEP_MS) || (now - lastButtonPress > BUTTON_SLEEP_MS);
 }
 
+static void drawStatsOverlay() {
+  const char* moods[] = {"Sad", "Grumpy", "Content", "Happy"};
+  int tier = getMoodTier();
+  int barY = LAYOUT_TEXT_Y + 4;
+  int barW = (int)(happiness * 1.15f);  // scale 0-100 to ~0-115px
+  int barX = (135 - 115) / 2;
+
+  clearTextArea();
+  StickCP2.Display.drawRect(barX - 1, barY - 1, 117, 12, COLOR_FACE);
+  uint16_t barColor = tier == 3 ? 0x07E0 : tier == 2 ? 0xFFE0 : tier == 1 ? 0xFD20 : 0xF800;
+  if (barW > 0) StickCP2.Display.fillRect(barX, barY, barW, 10, barColor);
+  StickCP2.Display.setTextColor(COLOR_FACE, COLOR_BG);
+  StickCP2.Display.setTextDatum(BC_DATUM);
+  StickCP2.Display.drawString(moods[tier], 67, LAYOUT_TEXT_Y + LAYOUT_TEXT_H - 2, 2);
+}
+
 static void enterSleep() {
   state = STATE_SLEEPING;
+  // Save happiness before sleeping
+  nvsWriteHappiness(happiness);
+  if (ntpSynced) { time_t t; time(&t); nvsWriteLastTs((uint32_t)t); }
   webSocket.disconnect(); WiFi.disconnect(true);
   showSprite(SPRITE_SLEEP_1,"*yaaawn*"); delay(800);
   showSprite(SPRITE_SLEEP_2,"Zzz..."); delay(600);
@@ -761,9 +933,14 @@ void setup() {
   wandMount = nvsReadWandMount();
   if (wandMount) Serial.println("Wand mount: ON (axes inverted)");
 
+  // Happiness (tomagotchi)
+  happiness = nvsReadHappiness();
+  lastHappinessTs = nvsReadLastTs();
+  Serial.printf("Happiness: %d (last_ts: %lu)\n", happiness, lastHappinessTs);
 
-  // WiFi + Ably
+  // WiFi + Ably + NTP
   WiFi.mode(WIFI_STA); WiFi.begin(WIFI_SSID, WIFI_PASS);
+  configTime(0, 0, "pool.ntp.org", "time.nist.gov");
   char wsPath[256];
   snprintf(wsPath, sizeof(wsPath), "/?key=%s&format=json&v=1.2&clientId=stickman", ABLY_KEY);
   webSocket.beginSSL("realtime.ably.io", 443, wsPath);
@@ -793,17 +970,16 @@ void loop() {
   bleUpdate(); // handle BLE button release timing
   unsigned long now = millis();
 
-  // BtnA: in debug mode → toggle wand mount; in active mode → cycle BLE
+  // ── BtnA: short=feed (active) or wand-mount (debug), long=BLE toggle ──
+  static bool btnAHeld = false, btnALongFired = false;
   if (M5.BtnA.wasPressed()) {
     lastButtonPress = now;
+    btnAHeld = true; btnALongFired = false;
     publishEvent("btn", "{\\\"button\\\":\\\"A\\\",\\\"state\\\":\\\"down\\\"}");
-    if (mode == MODE_DEBUG) {
-      // Toggle wand mount (device mounted screen-down on wand)
-      wandMount = !wandMount;
-      nvsWriteWandMount(wandMount);
-      Serial.printf("Wand mount: %s\n", wandMount ? "ON" : "OFF");
-      drawDebugScreen(); // refresh debug display
-    } else {
+  }
+  if (btnAHeld && !btnALongFired && M5.BtnA.pressedFor(1500)) {
+    btnALongFired = true;
+    if (mode == MODE_ACTIVE) {
       bleMode = bleMode ? 0 : 1;
       nvsWriteBleMode(bleMode);
       applyBleMode();
@@ -816,21 +992,66 @@ void loop() {
       state = STATE_RESULT; resultTime = now;
     }
   }
-  if (M5.BtnA.wasReleased()) publishEvent("btn", "{\\\"button\\\":\\\"A\\\",\\\"state\\\":\\\"up\\\"}");
+  if (M5.BtnA.wasReleased()) {
+    publishEvent("btn", "{\\\"button\\\":\\\"A\\\",\\\"state\\\":\\\"up\\\"}");
+    if (btnAHeld && !btnALongFired) {
+      if (mode == MODE_ACTIVE && tossState == TOSS_IDLE) {
+        // Feed Cece
+        if (happiness < 80) {
+          changeHappiness(8, "feed");
+          drawSprite(SPRITE_FEED_1);
+          showMessage(pick(FEED_TEXTS, FEED_TEXT_N));
+          delay(600);
+          drawSprite(SPRITE_FEED_2);
+          showMessage("Yum!");
+          state = STATE_RESULT; resultTime = now;
+        }
+      } else if (mode == MODE_DEBUG) {
+        wandMount = !wandMount;
+        nvsWriteWandMount(wandMount);
+        Serial.printf("Wand mount: %s\n", wandMount ? "ON" : "OFF");
+        drawDebugScreen();
+      }
+    }
+    btnAHeld = false;
+  }
 
-  // BtnB: toggle debug mode
+  // ── BtnB: short=stats (active) or exit debug, long=enter debug ──
+  static bool btnBHeld = false, btnBLongFired = false;
   if (M5.BtnB.wasPressed()) {
     lastButtonPress = now;
+    btnBHeld = true; btnBLongFired = false;
     publishEvent("btn", "{\\\"button\\\":\\\"B\\\",\\\"state\\\":\\\"down\\\"}");
-    mode = (mode == MODE_ACTIVE) ? MODE_DEBUG : MODE_ACTIVE;
-    publishEvent("mode", mode == MODE_ACTIVE ? "{\\\"mode\\\":\\\"active\\\"}" : "{\\\"mode\\\":\\\"debug\\\"}");
-    prevHpMag = 0; tapSettleCount = -1;
-    for (int i = 0; i < 3; i++) { hpState[i] = 0; hpPrevRaw[i] = 0; }
-    tossState = TOSS_IDLE; state = STATE_READY;
-    showReady();
-    return;
   }
-  if (M5.BtnB.wasReleased()) publishEvent("btn", "{\\\"button\\\":\\\"B\\\",\\\"state\\\":\\\"up\\\"}");
+  if (btnBHeld && !btnBLongFired && M5.BtnB.pressedFor(1500)) {
+    btnBLongFired = true;
+    if (mode == MODE_ACTIVE) {
+      mode = MODE_DEBUG;
+      publishEvent("mode", "{\\\"mode\\\":\\\"debug\\\"}");
+      tossState = TOSS_IDLE; prevHpMag = 0; tapSettleCount = -1;
+      for (int i = 0; i < 3; i++) { hpState[i] = 0; hpPrevRaw[i] = 0; }
+      state = STATE_READY;
+      showReady();
+    }
+  }
+  if (M5.BtnB.wasReleased()) {
+    publishEvent("btn", "{\\\"button\\\":\\\"B\\\",\\\"state\\\":\\\"up\\\"}");
+    if (btnBHeld && !btnBLongFired) {
+      if (mode == MODE_ACTIVE) {
+        // Show stats overlay
+        drawStatsOverlay();
+        state = STATE_RESULT; resultTime = now;
+      } else if (mode == MODE_DEBUG) {
+        mode = MODE_ACTIVE;
+        publishEvent("mode", "{\\\"mode\\\":\\\"active\\\"}");
+        tossState = TOSS_IDLE; prevHpMag = 0; tapSettleCount = -1;
+        for (int i = 0; i < 3; i++) { hpState[i] = 0; hpPrevRaw[i] = 0; }
+        state = STATE_READY;
+        showReady();
+      }
+    }
+    btnBHeld = false;
+  }
 
   // IMU — [C8] skip frame if I2C read fails
   if (!readIMUFull()) { delay(1); return; }
@@ -851,11 +1072,60 @@ void loop() {
         break;
       }
 
+      // NTP time decay (run once after WiFi connects)
+      if (!ntpDecayApplied && WiFi.status() == WL_CONNECTED) {
+        struct tm ti;
+        if (getLocalTime(&ti, 0)) {
+          ntpSynced = true;
+          time_t tnow; time(&tnow);
+          uint32_t nowTs = (uint32_t)tnow;
+          if (lastHappinessTs > 0 && nowTs > lastHappinessTs) {
+            uint32_t hoursElapsed = (nowTs - lastHappinessTs) / 3600;
+            if (hoursElapsed > 0) {
+              int16_t val = (int16_t)happiness - (int16_t)hoursElapsed;
+              if (val < 20) val = 20;  // wake clamp — never devastated
+              happiness = (uint8_t)val;
+              nvsWriteHappiness(happiness);
+              Serial.printf("Time decay: -%lu hrs, happiness now %d\n", hoursElapsed, happiness);
+            }
+          }
+          lastHappinessTs = nowTs;
+          nvsWriteLastTs(lastHappinessTs);
+          ntpDecayApplied = true;
+        }
+      }
+
+      // Periodic NVS save (every 10 min)
+      {
+        static unsigned long lastNvsSave = 0;
+        if (now - lastNvsSave > 600000) {
+          lastNvsSave = now;
+          nvsWriteHappiness(happiness);
+          if (ntpSynced) { time_t t; time(&t); nvsWriteLastTs((uint32_t)t); }
+        }
+      }
+
       // Idle sprite animation (skip during active toss)
       if (tossState == TOSS_IDLE) {
-        // Swap idle sprite + text periodically
+        // Swap idle sprite + text periodically — mood-filtered
         if (now - lastBlink > blinkInterval) {
-          showSprite(pick(IDLE_SPRITES, IDLE_SPRITE_N), pick(IDLE_TEXTS, IDLE_TEXT_N));
+          int tier = getMoodTier();
+          SpriteIdx idleSprite;
+          const char* idleText;
+          if (tier == 3) {
+            idleSprite = pick(HAPPY_IDLE_SPRITES, HAPPY_IDLE_SPRITE_N);
+            idleText = pick(IDLE_TEXTS, IDLE_TEXT_N);
+          } else if (tier == 2) {
+            idleSprite = pick(IDLE_SPRITES, IDLE_SPRITE_N);
+            idleText = pick(IDLE_TEXTS, IDLE_TEXT_N);
+          } else if (tier == 1) {
+            idleSprite = pick(GRUMPY_IDLE_SPRITES, GRUMPY_IDLE_SPRITE_N);
+            idleText = pick(IDLE_TEXTS, IDLE_TEXT_N);
+          } else {
+            idleSprite = pick(SAD_IDLE_SPRITES, SAD_IDLE_SPRITE_N);
+            idleText = pick(SAD_TEXTS, SAD_TEXT_N);
+          }
+          showSprite(idleSprite, idleText);
           lastBlink = now;
           blinkInterval = random(5000, 12000);
         }
@@ -881,12 +1151,20 @@ void loop() {
         lastJoySend = now;
       }
 
-      // Detect tap → show bonk sprite + send BLE select + publish
+      // Detect petting (gentle rocking)
+      if (tossState == TOSS_IDLE && detectPetting(imuAx)) {
+        changeHappiness(3, "pet");
+        showSprite(SPRITE_PET, pick(PET_TEXTS, PET_TEXT_N));
+        state = STATE_RESULT; resultTime = now;
+      }
+
+      // Detect tap → show bonk sprite + send BLE select + publish + happiness
       if (detectTap(imuAx, imuAy, imuAz)) {
         state = STATE_RESULT; resultTime = now;
         publishEvent("gesture", "{\\\"gesture\\\":\\\"Tap\\\"}");
         bleSendKey(KEY_RETURN); // Apple TV select/enter
         showSprite(pick(TAP_SPRITES, TAP_SPRITE_N), pick(TAP_TEXTS, TAP_TEXT_N));
+        changeHappiness(-5, "tap");
       }
       updateToss(accMag, now);
       break;
