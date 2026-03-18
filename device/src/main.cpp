@@ -100,7 +100,7 @@ static bool readIMUFull() {
 static float prevAccMag = 1.0f;
 static float prevPrevAccMag = 1.0f;  // two-sample history for spike shape
 static unsigned long lastTapTime = 0;
-static const unsigned long TAP_COOLDOWN_MS = 500;
+static const unsigned long TAP_COOLDOWN_MS = 800;
 
 // ── Toss State ───────────────────────────────────────────────────────
 static TossState tossState = TOSS_IDLE;
@@ -131,8 +131,7 @@ static float prevSentAx = 0, prevSentAy = 0, prevSentAz = 0;
 #define BLE_PRESS_MS 80
 
 static BleKeyboard bleKb(BLE_DEVICE_NAME, "Stickman", 100);
-static bool bleStarted = false;
-static bool bleEnabled = false;  // derived from bleMode in applyBleMode()
+static bool bleEnabled = false;  // controls whether keys are sent (BLE stack always runs)
 static unsigned long blePressTime = 0;
 static uint8_t blePressedKey = 0;
 
@@ -184,25 +183,21 @@ static void nvsWriteWandMount(bool on) {
 
 static void applyBleMode() {
   bleEnabled = bleMode > 0;
-  if (bleEnabled && !bleStarted) { bleKb.begin(); bleStarted = true; }
-  else if (!bleEnabled && bleStarted) { bleKb.end(); bleStarted = false; }
   for (int i = 0; i < 4; i++) arrowHeld[i] = false;
 }
 
 static void bleInit() {
   nvs_flash_init();
   bleMode = nvsReadBleMode();
-  applyBleMode();
-  const char* modeNames[] = {"OFF", "ON"};
-  Serial.printf("BLE: %s '" BLE_DEVICE_NAME "'\n", modeNames[bleMode]);
+  bleEnabled = bleMode > 0;
+  bleKb.begin();  // always start BLE — keeps Apple TV connection stable
+  Serial.printf("BLE: %s '" BLE_DEVICE_NAME "'\n", bleEnabled ? "ON" : "OFF");
 }
 
 
 static const char* bleStatusStr() {
-  if (!bleEnabled) return "OFF";
-  if (bleKb.isConnected()) return "CONNECTED";
-  if (bleStarted) return "PAIRING";
-  return "OFF";
+  if (bleKb.isConnected()) return bleEnabled ? "CONNECTED" : "IDLE";
+  return "PAIRING";
 }
 
 static void bleSendKey(uint8_t key) {
@@ -559,7 +554,7 @@ static void drawDebugScreen() {
 
   // BLE status
   bool bleCon = bleKb.isConnected();
-  StickCP2.Display.setTextColor(bleCon ? GREEN : bleStarted ? YELLOW : RED, BLACK);
+  StickCP2.Display.setTextColor(bleCon ? GREEN : YELLOW, BLACK);
   snprintf(buf, sizeof(buf), "BLE: %s", bleStatusStr());
   StickCP2.Display.drawString(buf, 4, y, 2); y += lh;
   StickCP2.Display.setTextColor(CYAN, BLACK);
@@ -575,9 +570,9 @@ static void drawDebugScreen() {
 // Spike-shape detection: magnitude must rise sharply THEN fall (a peak).
 // Prevents false triggers from sustained motion, drops, or excited handling.
 // ── Tune these thresholds for sensitivity ──
-#define TAP_RISE_THRESH  0.4f   // minimum rise delta to start spike (g)
-#define TAP_PEAK_THRESH  1.3f   // minimum peak magnitude (g)
-#define TAP_FALL_THRESH  0.2f   // minimum fall delta to confirm spike (g)
+#define TAP_RISE_THRESH  0.12f  // minimum rise delta to start spike (g)
+#define TAP_PEAK_THRESH  1.15f  // minimum peak magnitude (g) — just above resting 1g
+#define TAP_FALL_THRESH  0.10f  // minimum fall delta to confirm spike (g)
 
 static bool detectTap(float accMag) {
   unsigned long now = millis();
