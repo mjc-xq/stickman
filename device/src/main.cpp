@@ -45,9 +45,8 @@
 // ── App Modes ────────────────────────────────────────────────────────
 // BtnB: toggle debug screen. BtnA: cycle BLE mode / toggle wand mount
 enum AppMode { MODE_ACTIVE, MODE_DEBUG };
-// bleMode: 0=off, 1=wand (BLE tap only), 2=game (BLE tap + tilt arrows)
+// bleMode: 0=off, 1=on (BLE tap select + tilt arrows)
 static uint8_t bleMode = 0;
-static bool joystickMode = false; // derived: bleMode == 2
 static bool wandMount = false;    // device mounted screen-down on wand — inverts Y/Z axes
 
 
@@ -147,12 +146,12 @@ static bool arrowHeld[4] = {false,false,false,false};
 
 static uint8_t nvsReadBleMode() {
   nvs_handle_t h;
-  uint8_t val = 1;  // default: wand mode (BLE on, tap only)
+  uint8_t val = 1;  // default: on
   if (nvs_open("stickman", NVS_READONLY, &h) == ESP_OK) {
     if (nvs_get_u8(h, "ble_mode", &val) != ESP_OK) val = 1;
     nvs_close(h);
   }
-  return val > 2 ? 1 : val;
+  return val > 1 ? 1 : val;
 }
 
 static void nvsWriteBleMode(uint8_t mode) {
@@ -185,7 +184,6 @@ static void nvsWriteWandMount(bool on) {
 
 static void applyBleMode() {
   bleEnabled = bleMode > 0;
-  joystickMode = bleMode == 2;
   if (bleEnabled && !bleStarted) { bleKb.begin(); bleStarted = true; }
   else if (!bleEnabled && bleStarted) { bleKb.end(); bleStarted = false; }
   for (int i = 0; i < 4; i++) arrowHeld[i] = false;
@@ -195,7 +193,7 @@ static void bleInit() {
   nvs_flash_init();
   bleMode = nvsReadBleMode();
   applyBleMode();
-  const char* modeNames[] = {"OFF", "WAND", "GAME"};
+  const char* modeNames[] = {"OFF", "ON"};
   Serial.printf("BLE: %s '" BLE_DEVICE_NAME "'\n", modeNames[bleMode]);
 }
 
@@ -516,12 +514,10 @@ static void drawModeIndicator(const char* label) {
   } else if (mode == MODE_DEBUG) {
     StickCP2.Display.drawString("# Debug #", 67, 2, 2);
   } else {
-    const char* labels[] = {"~ Cece ~", "~ Remote ~", "~ Game ~"};
+    const char* labels[] = {"~ Cece ~", "~ Remote ~"};
     StickCP2.Display.drawString(labels[bleMode], 67, 2, 2);
   }
-  // Mode dot: blue = wand, green = game
   if (bleMode == 1) StickCP2.Display.fillCircle(125, 8, 4, BLUE);
-  else if (bleMode == 2) StickCP2.Display.fillCircle(125, 8, 4, GREEN);
 }
 
 // ── Debug Screen ─────────────────────────────────────────────────────
@@ -579,9 +575,9 @@ static void drawDebugScreen() {
 // Spike-shape detection: magnitude must rise sharply THEN fall (a peak).
 // Prevents false triggers from sustained motion, drops, or excited handling.
 // ── Tune these thresholds for sensitivity ──
-#define TAP_RISE_THRESH  0.8f   // minimum rise delta to start spike (g)
-#define TAP_PEAK_THRESH  1.8f   // minimum peak magnitude (g)
-#define TAP_FALL_THRESH  0.3f   // minimum fall delta to confirm spike (g)
+#define TAP_RISE_THRESH  0.4f   // minimum rise delta to start spike (g)
+#define TAP_PEAK_THRESH  1.3f   // minimum peak magnitude (g)
+#define TAP_FALL_THRESH  0.2f   // minimum fall delta to confirm spike (g)
 
 static bool detectTap(float accMag) {
   unsigned long now = millis();
@@ -594,9 +590,6 @@ static bool detectTap(float accMag) {
   // Shift history (always, even during cooldown)
   prevPrevAccMag = prevAccMag;
   prevAccMag = accMag;
-
-  // [C5 FIX] No taps in joystick mode — would send conflicting inputs
-  if (joystickMode) return false;
 
   // Skip during cooldown or active toss
   if (now - lastTapTime < TAP_COOLDOWN_MS) return false;
@@ -701,8 +694,8 @@ static void showReady() {
   StickCP2.Display.fillScreen(COLOR_BG);
   drawModeIndicator();
   if (mode == MODE_ACTIVE) {
-    if (joystickMode) {
-      showSprite(SPRITE_JOYSTICK, "Game mode!");
+    if (bleEnabled) {
+      showSprite(SPRITE_JOYSTICK, "Remote on!");
     } else {
       showSprite(pick(IDLE_SPRITES, IDLE_SPRITE_N), pick(IDLE_TEXTS, IDLE_TEXT_N));
     }
@@ -777,18 +770,15 @@ void loop() {
       Serial.printf("Wand mount: %s\n", wandMount ? "ON" : "OFF");
       drawDebugScreen(); // refresh debug display
     } else {
-      bleMode = (bleMode + 1) % 3;
+      bleMode = bleMode ? 0 : 1;
       nvsWriteBleMode(bleMode);
       applyBleMode();
       if (bleMode == 0) {
         showSprite(pick(BLE_OFF_SPRITES, BLE_OFF_SPRITE_N), pick(BLE_OFF_TEXTS, BLE_OFF_TEXT_N));
-      } else if (bleMode == 1) {
-        showSprite(pick(BLE_ON_SPRITES, BLE_ON_SPRITE_N), "Remote on!");
       } else {
-        showSprite(SPRITE_JOYSTICK, "Game mode!");
+        showSprite(pick(BLE_ON_SPRITES, BLE_ON_SPRITE_N), "Remote on!");
       }
-      const char* modeNames[] = {"OFF", "WAND", "GAME"};
-      Serial.printf("BLE mode: %s\n", modeNames[bleMode]);
+      Serial.printf("BLE mode: %s\n", bleMode ? "ON" : "OFF");
       state = STATE_RESULT; resultTime = now;
     }
   }
@@ -851,7 +841,7 @@ void loop() {
       }
 
       // Joystick mode: tilt sends arrow keys (only in READY, not during result)
-      if (joystickMode && now - lastJoySend >= JOY_SEND_INTERVAL_MS) {
+      if (bleEnabled && now - lastJoySend >= JOY_SEND_INTERVAL_MS) {
         bleSendArrows();
         lastJoySend = now;
       }
