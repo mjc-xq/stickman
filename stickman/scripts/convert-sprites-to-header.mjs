@@ -85,6 +85,10 @@ const SPRITE_NAMES = [
   "alex-spell",
   "alex-teach",
   "alex-high-five",
+  "tilt-huey-left",
+  "tilt-huey-right",
+  "tilt-alex-left",
+  "tilt-alex-right",
 ];
 
 function toEnumName(name) {

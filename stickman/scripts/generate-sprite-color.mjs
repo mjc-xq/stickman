@@ -110,6 +110,15 @@ const SPRITES = [
     desc: "Close-up of the teen wizard girl from the reference photo (match EXACTLY — long dark brown hair, olive skin, confident expression) leaning in from the right side whispering a secret spell to Cece. The wizard girl cups one hand near Cece's ear conspiratorially. Cece's eyes are wide with amazement, mouth in a little O of wonder, wizard hat perked up with excitement. Small sparkle stars between them" },
   { name: "alex-high-five", frame: b, refs: ["alex"],
     desc: "Cece and the teen wizard girl from the reference photo (match EXACTLY — long dark brown hair, olive skin, wearing a colorful striped outfit) doing an enthusiastic mid-air high five with a big magical BURST of purple and gold sparkles exploding from where their hands meet. Both grinning ear to ear, slightly jumping. Cece in her purple wizard hat, the wizard girl's dark hair flowing with the energy" },
+  // Tilt companions — shown randomly during tilt events
+  { name: "tilt-huey-left", frame: f, refs: ["huey"],
+    desc: "Cece tilting hard to the LEFT with a worried face, while the chunky tan bully breed dog from the reference (match EXACTLY — fawn coat, wrinkly face, cropped ears, stocky build, pink tongue out) slides across the frame in the same direction, legs scrambling comically. Both off-balance and sliding left. Wizard hat flying off to the left" },
+  { name: "tilt-huey-right", frame: f, refs: ["huey"],
+    desc: "Cece tilting hard to the RIGHT with a startled expression, while the chunky tan bully breed dog from the reference (match EXACTLY — fawn coat, wrinkly face, cropped ears, stocky build, tongue hanging out) tumbles past her to the right, legs splayed. Both sliding right. Wizard hat slipping off to the right" },
+  { name: "tilt-alex-left", frame: f, refs: ["alex"],
+    desc: "Cece and the teen wizard girl from the reference (match EXACTLY — long dark brown hair, olive skin) both tilting dramatically to the LEFT as if the ground shifted. The wizard girl grabs Cece's arm for balance while Cece grabs her wizard hat. Both have panicked wide eyes. Their hair and clothes flowing to the left with the tilt" },
+  { name: "tilt-alex-right", frame: f, refs: ["alex"],
+    desc: "Cece and the teen wizard girl from the reference (match EXACTLY — long dark brown hair, olive skin) both tilting dramatically to the RIGHT as if the ground shifted. They lean on each other for balance, the wizard girl's wand pointing sideways. Both laughing nervously. Wizard hat askew, dark hair swinging right" },
 ];
 
 const FRAMING = {
