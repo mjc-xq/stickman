@@ -27,6 +27,8 @@ if (!process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
 
 const OUTPUT_DIR = path.join(ROOT, "public/images/sprite-color");
 const REFERENCE_IMAGE = path.join(ROOT, "public/images/reference-color.png");
+const HUEY_REFERENCE = path.join(ROOT, "public/images/huey-reference.jpg");
+const ALEX_REFERENCE = path.join(ROOT, "public/images/Alex-Russo-alex-russo-16110429-427-640.webp");
 const MODEL = "gemini-3.1-flash-image-preview";
 
 // f = "face" (head/shoulders close-up, face fills frame)
@@ -92,6 +94,22 @@ const SPRITES = [
   // Tomagotchi — sad
   { name: "sad-1", frame: f, desc: "Cece with big droopy sad eyes looking slightly up at the viewer, mouth in a small frown, eyebrows tilted up in the middle, lonely expression, wizard hat drooping" },
   { name: "sad-2", frame: f, desc: "Cece looking down and to the side, eyes half-closed, one hand on cheek, heavy sigh expression, slightly slouched posture, wizard hat on" },
+  // Companion: Huey the dog (chunky tan/fawn bully breed, wrinkly face, pink tongue)
+  { name: "huey-cuddle", frame: f, refs: ["huey"],
+    desc: "Cece hugging a chunky tan bully breed dog (matching the dog reference photo EXACTLY — same wrinkly face, fawn coat color, pink tongue, cropped ears, stocky muscular build). The dog is nestled against Cece's chest, tongue lolling out contentedly. Cece's eyes are closed with a huge loving smile, one arm wrapped around the dog. Wizard hat tilting from the snuggle" },
+  { name: "huey-nap", frame: b, refs: ["huey"],
+    desc: "Cece sitting on the ground with the chunky tan bully breed dog from the reference photo curled up sleeping in her lap (match the dog's appearance EXACTLY — fawn coat, wrinkly face, stocky build, pink tongue poking out even while sleeping). Cece is dozing off too with her head drooping, wizard hat sliding to one side. Both completely peaceful and cozy" },
+  { name: "huey-play", frame: b, refs: ["huey"],
+    desc: "Cece in a play bow stance, holding a purple ball out in front of her while the chunky tan bully breed dog from the reference photo (match EXACTLY — fawn coat, wrinkly face, cropped ears, stocky muscular body) is in an excited play stance with front legs down and butt up, tongue out, tail wagging. Both look thrilled. Wizard hat bouncing on Cece's head" },
+  { name: "huey-lick", frame: f, refs: ["huey"],
+    desc: "The chunky tan bully breed dog from the reference photo (match EXACTLY — fawn coat, big wrinkly face, pink tongue, cropped ears) is licking Cece's entire face with its huge pink tongue. Cece is laughing with eyes squeezed shut, mouth wide open in giggly delight, glasses askew from the slobber. Wizard hat knocked sideways. Gross but adorable" },
+  // Companion: Alex Russo (Wizards of Waverly Place — teen girl with long dark hair, wand)
+  { name: "alex-spell", frame: b, refs: ["alex"],
+    desc: "Cece and a teen wizard girl (matching the Alex Russo reference photo — long straight dark brown hair, olive skin, confident smirk) standing side by side, both pointing their wands forward. Cece has her wooden wand, the wizard girl has a red wand. Colorful magical sparkles burst from both wand tips meeting in the middle. Both wearing determined spell-casting expressions. Cece in her purple wizard hat, the wizard girl in a striped outfit" },
+  { name: "alex-teach", frame: f, refs: ["alex"],
+    desc: "Close-up of the teen wizard girl from the reference photo (match EXACTLY — long dark brown hair, olive skin, confident expression) leaning in from the right side whispering a secret spell to Cece. The wizard girl cups one hand near Cece's ear conspiratorially. Cece's eyes are wide with amazement, mouth in a little O of wonder, wizard hat perked up with excitement. Small sparkle stars between them" },
+  { name: "alex-high-five", frame: b, refs: ["alex"],
+    desc: "Cece and the teen wizard girl from the reference photo (match EXACTLY — long dark brown hair, olive skin, wearing a colorful striped outfit) doing an enthusiastic mid-air high five with a big magical BURST of purple and gold sparkles exploding from where their hands meet. Both grinning ear to ear, slightly jumping. Cece in her purple wizard hat, the wizard girl's dark hair flowing with the energy" },
 ];
 
 const FRAMING = {
@@ -160,15 +178,27 @@ function processImage(inputPath, outputPath, frame) {
   }
 }
 
-async function generateSprite(ai, refBase64, sprite) {
+async function generateSprite(ai, refBase64, sprite, extraRefs) {
   const prompt = BASE_PROMPT + FRAMING[sprite.frame] + "\n\nPOSE: " + sprite.desc;
+  const imageParts = [
+    { inlineData: { mimeType: "image/png", data: refBase64 } },
+  ];
+  // Add extra reference images (e.g., dog photo, wizard girl photo)
+  if (sprite.refs && extraRefs) {
+    for (const refKey of sprite.refs) {
+      if (extraRefs[refKey]) {
+        const ext = extraRefs[refKey].path.endsWith(".webp") ? "image/webp" : "image/jpeg";
+        imageParts.push({ inlineData: { mimeType: ext, data: extraRefs[refKey].base64 } });
+      }
+    }
+  }
   const response = await ai.models.generateContent({
     model: MODEL,
     contents: [
       {
         role: "user",
         parts: [
-          { inlineData: { mimeType: "image/png", data: refBase64 } },
+          ...imageParts,
           { text: prompt },
         ],
       },
@@ -202,6 +232,15 @@ async function main() {
     process.exit(1);
   }
   const refBase64 = fs.readFileSync(REFERENCE_IMAGE).toString("base64");
+
+  // Load extra reference images for companion sprites
+  const extraRefs = {};
+  if (fs.existsSync(HUEY_REFERENCE)) {
+    extraRefs.huey = { path: HUEY_REFERENCE, base64: fs.readFileSync(HUEY_REFERENCE).toString("base64") };
+  }
+  if (fs.existsSync(ALEX_REFERENCE)) {
+    extraRefs.alex = { path: ALEX_REFERENCE, base64: fs.readFileSync(ALEX_REFERENCE).toString("base64") };
+  }
 
   let sprites = SPRITES;
   if (startFrom) {
@@ -266,7 +305,7 @@ async function main() {
     console.log(`${progress} Generating: ${sprite.name}...`);
 
     try {
-      const imageBase64 = await generateSprite(ai, refBase64, sprite);
+      const imageBase64 = await generateSprite(ai, refBase64, sprite, extraRefs);
       if (!imageBase64) {
         console.log(`${progress} FAIL - no image returned for ${sprite.name}`);
         fail++;

@@ -612,6 +612,25 @@ static const SpriteIdx SAD_IDLE_SPRITES[] = {
 };
 #define SAD_IDLE_SPRITE_N 3
 
+// ── Companion sprites (bonus idle pool for happy tier) ──
+static const SpriteIdx COMPANION_SPRITES[] = {
+  SPRITE_HUEY_CUDDLE, SPRITE_HUEY_NAP, SPRITE_HUEY_PLAY, SPRITE_HUEY_LICK,
+  SPRITE_ALEX_SPELL, SPRITE_ALEX_TEACH, SPRITE_ALEX_HIGH_FIVE
+};
+#define COMPANION_SPRITE_N 7
+
+// ── Motivational texts (shown periodically in happy/content tiers) ──
+static const char* const MOTIV_TEXTS[] = {
+  "Your dad loves u!", "You are AMAZING!", "You're so smart!",
+  "Be kind today~", "You can do it!", "Believe in you!",
+  "You're a star!", "Dream big!", "You are enough!",
+  "So proud of you!", "You're magic!", "Stay curious!",
+  "You're beautiful!", "Never give up!", "You rock!",
+  "Love yourself~", "You matter!", "Shine bright!",
+  "Dad is proud!", "You're the best!"
+};
+#define MOTIV_TEXT_N 20
+
 static void drawSprite(SpriteIdx sprite) {
   currentSprite = sprite;
   const uint16_t* data = (const uint16_t*)pgm_read_ptr(&SPRITE_DATA[sprite]);
@@ -1113,11 +1132,17 @@ void loop() {
           SpriteIdx idleSprite;
           const char* idleText;
           if (tier == 3) {
-            idleSprite = pick(HAPPY_IDLE_SPRITES, HAPPY_IDLE_SPRITE_N);
-            idleText = pick(IDLE_TEXTS, IDLE_TEXT_N);
+            // Happy: mix in companion sprites (30% chance) and motivational texts (25% chance)
+            if (random(100) < 30) {
+              idleSprite = pick(COMPANION_SPRITES, COMPANION_SPRITE_N);
+            } else {
+              idleSprite = pick(HAPPY_IDLE_SPRITES, HAPPY_IDLE_SPRITE_N);
+            }
+            idleText = (random(100) < 25) ? pick(MOTIV_TEXTS, MOTIV_TEXT_N) : pick(IDLE_TEXTS, IDLE_TEXT_N);
           } else if (tier == 2) {
+            // Content: normal pool, occasional motivational text (15% chance)
             idleSprite = pick(IDLE_SPRITES, IDLE_SPRITE_N);
-            idleText = pick(IDLE_TEXTS, IDLE_TEXT_N);
+            idleText = (random(100) < 15) ? pick(MOTIV_TEXTS, MOTIV_TEXT_N) : pick(IDLE_TEXTS, IDLE_TEXT_N);
           } else if (tier == 1) {
             idleSprite = pick(GRUMPY_IDLE_SPRITES, GRUMPY_IDLE_SPRITE_N);
             idleText = pick(IDLE_TEXTS, IDLE_TEXT_N);
@@ -1137,8 +1162,8 @@ void loop() {
           if (imuAy < -0.3f) tilt = 3;       // upside down (overrides L/R)
           if (tilt != prevTilt) {
             prevTilt = tilt;
-            if (tilt == 1) showSprite(pick(TILT_RIGHT_SPRITES, TILT_RIGHT_SPRITE_N), pick(TILT_TEXTS, TILT_TEXT_N));
-            else if (tilt == 2) showSprite(pick(TILT_LEFT_SPRITES, TILT_LEFT_SPRITE_N), pick(TILT_TEXTS, TILT_TEXT_N));
+            if (tilt == 1) showSprite(pick(TILT_LEFT_SPRITES, TILT_LEFT_SPRITE_N), pick(TILT_TEXTS, TILT_TEXT_N));
+            else if (tilt == 2) showSprite(pick(TILT_RIGHT_SPRITES, TILT_RIGHT_SPRITE_N), pick(TILT_TEXTS, TILT_TEXT_N));
             else if (tilt == 3) showSprite(pick(TILT_UP_SPRITES, TILT_UP_SPRITE_N), pick(TILT_UP_TEXTS, TILT_UP_TEXT_N));
             else { showSprite(pick(IDLE_SPRITES, IDLE_SPRITE_N), pick(IDLE_TEXTS, IDLE_TEXT_N)); lastBlink = now; }
           }

@@ -78,6 +78,13 @@ const SPRITE_NAMES = [
   "pet",
   "sad-1",
   "sad-2",
+  "huey-cuddle",
+  "huey-nap",
+  "huey-play",
+  "huey-lick",
+  "alex-spell",
+  "alex-teach",
+  "alex-high-five",
 ];
 
 function toEnumName(name) {
