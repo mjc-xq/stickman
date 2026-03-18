@@ -577,8 +577,10 @@ static const char* const BLE_OFF_TEXTS[] = {
 #define BLE_OFF_TEXT_N 5
 
 // ── Feed sprites + texts ──
-static const SpriteIdx FEED_SPRITES[] = { SPRITE_FEED_1, SPRITE_FEED_2 };
-#define FEED_SPRITE_N 2
+static const SpriteIdx FEED_SPRITES[] = {
+  SPRITE_FEED_1, SPRITE_FEED_2, SPRITE_FEED_3, SPRITE_FEED_4, SPRITE_FEED_5, SPRITE_FEED_SHRIMP
+};
+#define FEED_SPRITE_N 6
 
 static const char* const FEED_TEXTS[] = {
   "Yum!", "Nom nom!", "Tasty~", "More leaves!", "*munch munch*", "So good!"
@@ -1020,10 +1022,13 @@ void loop() {
         // Feed Cece
         if (happiness < 80) {
           changeHappiness(8, "feed");
-          drawSprite(SPRITE_FEED_1);
+          // Show eating sprite, then satisfied sprite
+          SpriteIdx eatSprite = pick(FEED_SPRITES, 4);  // first 4 are eating poses (leaf, munch, apple, shrimp)
+          drawSprite(eatSprite);
           showMessage(pick(FEED_TEXTS, FEED_TEXT_N));
           delay(600);
-          drawSprite(SPRITE_FEED_2);
+          SpriteIdx doneSprite = (random(100) < 50) ? SPRITE_FEED_4 : SPRITE_FEED_5;  // stuffed or satisfied
+          drawSprite(doneSprite);
           showMessage("Yum!");
           state = STATE_RESULT; resultTime = now;
         }
