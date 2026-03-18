@@ -36,22 +36,48 @@ Floor: 0. Ceiling: 100.
 ### Gentle Rocking / Petting Detection
 
 Detect slow, rhythmic tilting via IMU:
-- Monitor `imuAx` for oscillation crossing zero repeatedly
+- Monitor `imuAx` (side-to-side rocking in portrait orientation) for oscillation crossing zero repeatedly
 - Require 3+ oscillations within ~4 seconds at gentle magnitude (0.2–0.6g range)
 - Distinct from tap (which is a sharp impulse) and toss (which is high-g)
+- **Disabled during active toss states** (TOSS_LAUNCHED, TOSS_FREEFALL, TOSS_CAUGHT) to avoid false triggers from tumbling
 - 30-second cooldown between petting rewards
-- Shows `pet` sprite + affectionate text
+- Shows `pet` sprite + affectionate text ("Mmmm...", "That's nice~", "Cozy...", "*purrs*", "More please!")
+
+### Feed Cap Semantics
+
+"No effect above 80" means: if `happiness >= 80`, feeding does nothing (no sprite, no text, no change). If `happiness < 80`, feeding adds +8 and the result is clamped to 100 (so feeding at 75 → 83, feeding at 78 → 86). The cap prevents spam-feeding to max, not clamping the result to 80.
+
+### Text Pools for New States
+
+**Feed texts**: "Yum!", "Nom nom!", "Tasty~", "More leaves!", "*munch munch*", "So good!"
+**Pet texts**: "Mmmm...", "That's nice~", "Cozy...", "*purrs*", "More please!"
+**Sad mood idle texts**: "...", "*sigh*", "Lonely...", "Hello?", "*sniff*"
 
 ## Button Mapping
+
+### Press Detection Strategy
+
+Short press vs long press requires firing short-press actions **on release** (not on press). Use M5Unified's `wasReleaseFor(ms)` to detect short release (<1.5s) and `pressedFor(1500)` for long press. This is a change from current `wasPressed()` pattern.
+
+- **Short press**: fires when button is released AND was held <1.5s
+- **Long press**: fires when `pressedFor(1500)` becomes true (while still held)
 
 ### Active Mode (default)
 
 | Input | Action |
 |-------|--------|
-| BtnA short press | Feed Cece — feeding animation, +8 happiness (capped at 80) |
+| BtnA short press (release <1.5s) | Feed Cece — feeding animation, +8 happiness (ignored if happiness >= 80, ignored during active toss) |
 | BtnA long press (>1.5s) | Toggle BLE on/off (persisted in NVS) |
-| BtnB short press | Show stats — happiness bar + mood text for 3s |
+| BtnB short press (release <1.5s) | Show stats — happiness bar + mood text for 3s |
 | BtnB long press (>1.5s) | Enter Debug mode |
+
+### Feed Animation Sequence
+
+1. Show `feed-1` sprite for 600ms + text from feed pool
+2. Show `feed-2` sprite for 800ms + "Yum!" or similar
+3. Return to idle
+
+Feed is ignored during active toss states (TOSS_LAUNCHED, TOSS_FREEFALL, TOSS_CAUGHT).
 
 ### Debug Mode
 
@@ -92,16 +118,20 @@ Two new keys in existing `"stickman"` namespace:
 - Every 10 minutes during idle (guards against unexpected power loss)
 
 ### Time decay on boot
+Time decay is computed **after WiFi connects and NTP succeeds** (not at boot start). WiFi connects asynchronously, so decay calculation is deferred until NTP time is available.
+
 1. Read `happiness` and `last_ts` from NVS
-2. Get current time via NTP (WiFi connects on boot)
-3. `hours_elapsed = (now - last_ts) / 3600`
-4. `happiness -= hours_elapsed` (clamped to 0)
-5. Clamp to minimum 20 on wake
-6. Write updated values back
+2. Wait for NTP time (via `configTime()` + `getLocalTime()` after WiFi connects)
+3. Guard: if `now < last_ts` (clock went backwards from NTP correction), skip decay
+4. `hours_elapsed = (now - last_ts) / 3600` (integer truncation is intentional — generous for a kid)
+5. `happiness -= hours_elapsed` (clamped to 0)
+6. Clamp to minimum 20 on wake
+7. Write updated values back
 
 ### Edge cases
 - NTP fails (no WiFi) → skip time decay, use stored happiness as-is
 - First boot (no NVS keys) → initialize happiness=50, last_ts=now
+- `now < last_ts` (NTP clock correction) → skip time decay
 - Overflow → clamp 0–100 always
 
 ## Ably Streaming
