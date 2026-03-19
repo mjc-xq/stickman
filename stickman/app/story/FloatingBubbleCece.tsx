@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import gsap from "gsap";
+import { usePointer } from "@/app/hooks/stickman";
 
 const BUBBLE_SPRITES = [
   "/images/story/split/s05-bubble-wave.png",
@@ -11,12 +12,13 @@ const BUBBLE_SPRITES = [
 ];
 
 /**
- * Tiny bubble Cece pops out of the wand area, floats around the top
- * of the screen with bubbly bobbing motion, cycles sprites.
- * Stays visible until slide changes (parent unmounts this component).
+ * Tiny bubble Cece pops out of the wand, floats around the top of the screen.
+ * Wand input nudges the bubble's position — tilt the wand to push her around.
+ * Falls back to autonomous floating when no wand input.
  */
 export function FloatingBubbleCece() {
   const bubbleRef = useRef<HTMLDivElement>(null);
+  const pointer = usePointer();
   const [spriteIdx, setSpriteIdx] = useState(0);
 
   useEffect(() => {
@@ -25,50 +27,86 @@ export function FloatingBubbleCece() {
 
     const vw = window.innerWidth;
     const vh = window.innerHeight;
+    const bubbleSize = 80;
+    const half = bubbleSize / 2;
 
-    // Start at wand position (center of screen) at tiny scale
+    // Current bubble position (tracked for wand blending)
+    const pos = { x: vw * 0.5 - half, y: vh * 0.4 - half };
+
+    // Start at wand position, tiny
     gsap.set(el, {
-      x: vw * 0.5 - 40,
-      y: vh * 0.4 - 40,
-      scaleX: 0, scaleY: 0,
-      opacity: 0,
-      force3D: true,
+      x: pos.x, y: pos.y,
+      scaleX: 0, scaleY: 0, opacity: 0, force3D: true,
     });
 
-    // Pop out of wand with a bounce
+    // Pop out of wand
     const entranceTl = gsap.timeline();
     entranceTl.to(el, {
       scaleX: 1, scaleY: 1, opacity: 1,
       duration: 0.8, ease: "back.out(2.5)",
     });
-    // Float up to the safe zone (top of screen)
     entranceTl.to(el, {
-      x: vw * 0.5 - 40,
-      y: vh * 0.1 - 40,
+      x: vw * 0.5 - half, y: vh * 0.12 - half,
       duration: 1.2, ease: "power2.out", force3D: true,
+      onUpdate() { pos.x = gsap.getProperty(el, "x") as number; pos.y = gsap.getProperty(el, "y") as number; },
     }, 0.4);
 
-    // After entrance, start floating randomly in top zone
-    let floatTween: gsap.core.Tween | null = null;
-    const floatLoop = () => {
-      // Bubbly path: top area only (3-22% of screen height)
-      const tx = vw * (0.12 + Math.random() * 0.76) - 40;
-      const ty = vh * (0.03 + Math.random() * 0.19) - 40;
-      const dur = 3 + Math.random() * 2;
+    // After entrance: rAF loop blends autonomous float + wand input
+    let animId = 0;
+    let floatTarget = { x: vw * 0.5 - half, y: vh * 0.12 - half };
+    let floatTimer = 0;
+    let entranceDone = false;
 
-      floatTween = gsap.to(el, {
-        x: tx, y: ty,
-        scaleX: 0.75 + Math.random() * 0.4,
-        scaleY: 0.75 + Math.random() * 0.4,
-        rotation: (Math.random() - 0.5) * 10,
-        duration: dur,
-        ease: "sine.inOut",
-        force3D: true,
-        onComplete: floatLoop,
-      });
+    entranceTl.call(() => { entranceDone = true; }, [], 1.6);
+
+    const pickNewTarget = () => {
+      floatTarget = {
+        x: vw * (0.12 + Math.random() * 0.76) - half,
+        y: vh * (0.03 + Math.random() * 0.19) - half,
+      };
+    };
+    pickNewTarget();
+
+    const animate = () => {
+      if (!entranceDone) { animId = requestAnimationFrame(animate); return; }
+
+      // Pick a new float target every ~3.5s
+      floatTimer++;
+      if (floatTimer > 210) { // ~3.5s at 60fps
+        pickNewTarget();
+        floatTimer = 0;
+      }
+
+      // Wand influence: map pointer (-2..2) to screen offset
+      const norm = pointer.current;
+      const wandX = vw * 0.5 + norm.x * (vw * 0.3) - half;
+      const wandY = vh * 0.12 + norm.y * (vh * 0.15) - half;
+      const hasWandInput = Math.abs(norm.x) > 0.1 || Math.abs(norm.y) > 0.1;
+
+      // Blend: if wand is active, follow wand; otherwise drift to float target
+      const targetX = hasWandInput ? wandX : floatTarget.x;
+      const targetY = hasWandInput ? wandY : floatTarget.y;
+      const smoothing = hasWandInput ? 0.08 : 0.015; // wand is responsive, float is lazy
+
+      pos.x += (targetX - pos.x) * smoothing;
+      pos.y += (targetY - pos.y) * smoothing;
+
+      // Clamp to safe zone (don't go over characters)
+      pos.x = Math.max(-half, Math.min(vw - half, pos.x));
+      pos.y = Math.max(vh * -0.02 - half, Math.min(vh * 0.25 - half, pos.y));
+
+      gsap.set(el, { x: pos.x, y: pos.y, force3D: true });
+
+      // Gentle scale wobble
+      const t = performance.now() * 0.001;
+      const wobbleScale = 0.9 + Math.sin(t * 1.5) * 0.1;
+      const wobbleRot = Math.sin(t * 0.8) * 5;
+      gsap.set(el, { scaleX: wobbleScale, scaleY: wobbleScale, rotation: wobbleRot });
+
+      animId = requestAnimationFrame(animate);
     };
 
-    entranceTl.call(floatLoop, [], 1.6);
+    animId = requestAnimationFrame(animate);
 
     // Cycle sprites
     const spriteInterval = setInterval(() => {
@@ -77,10 +115,11 @@ export function FloatingBubbleCece() {
 
     return () => {
       entranceTl.kill();
-      if (floatTween) floatTween.kill();
+      cancelAnimationFrame(animId);
       gsap.killTweensOf(el);
       clearInterval(spriteInterval);
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (
