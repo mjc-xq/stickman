@@ -34,8 +34,8 @@ export const STORY_SLIDES: Slide[] = [
   },
   {
     lines: [
-      '"She\'ll live in here and help your wishes come true.',
-      'But you have to feed her to keep her happy!"',
+      '"All the love from your family — that\'s what powers the magic.',
+      'Take care of the tiny you inside. Feed her and she\'ll help you with anything!"',
     ],
     image: "/images/story/slide-05.png",
   },

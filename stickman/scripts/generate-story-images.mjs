@@ -95,7 +95,9 @@ SCENE: A single beautiful scene showing Cece holding a glowing magical wand in f
     refs: ["cece", "alex"],
     prompt: `${BASE_STYLE}${CHARACTER_CECE}${CHARACTER_ALEX}
 
-SCENE: Alex pointing at the tiny Cece who lives inside the glowing wand. The tiny Cece looks up adorably, surrounded by little hearts and sparkles. Big Cece holds the wand carefully, listening to Alex's instructions. Alex has one finger up in a "remember this!" teaching gesture. Little food icons (apple, leaf, cookie) float nearby as hints about feeding. Warm magical glow surrounds them.`,
+IMPORTANT: Generate ONE SINGLE illustration — NOT multiple panels, NOT a comic strip, NOT a grid of images. ONE cohesive scene.
+
+SCENE: A warm, magical moment. Alex has her arm around Cece's shoulders protectively. Cece holds the glowing wand between them. Inside the wand's glow, the tiny fairy-sized Cece is visible, looking up happily with little hearts floating around her. Alex is explaining something important — one hand gestures at the wand's glow. Around them, translucent ghostly images of a loving family (abstract warm silhouettes, hearts, and golden light) float like memories, representing the love that powers the magic. Warm golden and purple glow. A small apple and leaf float near the tiny Cece as hints about feeding. Deep magical night sky with stars behind them. ONE single scene.`,
   },
   {
     name: "slide-06",
