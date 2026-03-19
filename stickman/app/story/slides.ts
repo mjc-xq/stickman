@@ -121,19 +121,20 @@ export const STORY_SLIDES: Slide[] = [
   },
   {
     lines: [
-      "\"And hold the button down to turn it into a REMOTE.",
-      "Then tap the wand to control the TV. Tilt it to pick what you want!\"",
+      "\"Hold the button to go Remote Mode — tap to control the TV!\"",
+      "\"But first... try the stars.\"",
     ],
     bg: "/images/story/slide-07-bg.png",
     fg: "/images/story/slide-07-fg.png",
   },
   {
     lines: [
-      "Cece held the button. The wand hummed — \"Remote Mode.\"",
-      "She tapped it once. Dragons exploded out of the TV.",
+      "Cece waved the wand, and the stars obeyed.",
+      "They swirled. They danced. They were hers.",
     ],
     bg: "/images/story/slide-06-bg.png",
     fg: "/images/story/slide-06-fg.png",
+    effect: "sparkle-burst",
   },
   {
     lines: [
@@ -142,5 +143,31 @@ export const STORY_SLIDES: Slide[] = [
     ],
     bg: "/images/story/slide-10-bg.png",
     fg: "/images/story/slide-10-fg.png",
+    splitFg: [
+      {
+        // Cece: starts with wand held tenderly, then swaps to hero pose
+        src: "/images/story/split/finale-cece-wand.png",
+        toX: 0, toY: 5, toScale: 1,
+        fromX: 0, fromY: 120, fromScale: 0.7, fromRotate: 0,
+        delay: 0, duration: 2.0, ease: "power3.out",
+        maxH: "50dvh",
+      },
+      {
+        // Alex: walks in from the left, proud
+        src: "/images/story/split/finale-alex-proud.png",
+        toX: -35, toY: 10, toScale: 0.85,
+        fromX: -350, fromY: 20, fromScale: 0.8, fromRotate: -3,
+        delay: 2.5, duration: 2.0, ease: "power2.out",
+        maxH: "45dvh",
+      },
+      {
+        // Huey: bounds in from the right
+        src: "/images/story/split/finale-huey-run.png",
+        toX: 35, toY: 20, toScale: 0.75,
+        fromX: 400, fromY: 30, fromScale: 0.6, fromRotate: 5,
+        delay: 3.2, duration: 1.8, ease: "back.out(1.5)",
+        maxH: "35dvh",
+      },
+    ],
   },
 ];

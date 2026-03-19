@@ -35,7 +35,9 @@ export function StoryView() {
     // Lock taps for 2.5s while entrance animation plays
     animatingRef.current = true;
     if (animTimerRef.current) clearTimeout(animTimerRef.current);
-    animTimerRef.current = setTimeout(() => { animatingRef.current = false; }, 4000);
+    // Longer lockout for finale slide (has 3 characters entering)
+    const lockoutMs = activeSlide === STORY_SLIDES.length - 1 ? 7000 : 4000;
+    animTimerRef.current = setTimeout(() => { animatingRef.current = false; }, lockoutMs);
   }, [activeSlide]);
 
   // Draw starfield background (fixed, behind everything)
