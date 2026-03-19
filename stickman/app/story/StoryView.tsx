@@ -149,6 +149,17 @@ export function StoryView() {
   }, [goToSlide]);
 
   // Don't show wand pointer on the finale slide (it has its own particle pointer)
+  // Preload adjacent slide images for smooth GSAP transitions
+  useEffect(() => {
+    const preload = (src: string) => { const img = new Image(); img.src = src; };
+    [activeSlide, activeSlide + 1].forEach((i) => {
+      if (i >= 0 && i < STORY_SLIDES.length) {
+        preload(STORY_SLIDES[i].bg);
+        preload(STORY_SLIDES[i].fg);
+      }
+    });
+  }, [activeSlide]);
+
   const showWandPointer = activeSlide < STORY_SLIDES.length;
 
   return (
@@ -237,19 +248,6 @@ export function StoryView() {
         @keyframes fadeInUp {
           from { opacity: 0; transform: translateY(20px); }
           to { opacity: 1; transform: translateY(0); }
-        }
-        @keyframes slideShootingStar {
-          0% { transform: translateX(0) translateY(0); opacity: 1; }
-          80% { opacity: 1; }
-          100% { transform: translateX(75vw) translateY(30vh); opacity: 0; }
-        }
-        @keyframes flashBang {
-          0% { opacity: 0.9; }
-          100% { opacity: 0; }
-        }
-        @keyframes sparkleBurst {
-          0% { transform: rotate(var(--angle, 0deg)) translateX(0px); opacity: 1; }
-          100% { transform: rotate(var(--angle, 0deg)) translateX(40vw); opacity: 0; }
         }
       `}</style>
     </div>
