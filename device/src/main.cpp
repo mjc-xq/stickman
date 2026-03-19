@@ -1017,33 +1017,14 @@ void loop() {
   bleUpdate(); // handle BLE button release timing
   unsigned long now = millis();
 
-  // ── BtnA: click=feed (active) or wand-mount (debug), hold=BLE toggle ──
-  // Hold threshold = 1500ms so normal presses aren't misread as holds
-  static bool btnAHoldFired = false;
-  if (M5.BtnA.wasPressed()) { lastButtonPress = now; btnAHoldFired = false; publishEvent("btn", "{\\\"button\\\":\\\"A\\\",\\\"state\\\":\\\"down\\\"}"); }
-  if (M5.BtnA.wasReleased()) {
-    publishEvent("btn", "{\\\"button\\\":\\\"A\\\",\\\"state\\\":\\\"up\\\"}");
-    if (!btnAHoldFired) {
-      // Short press released — feed or wand mount
-      if (mode == MODE_ACTIVE) {
-        if (tossState != TOSS_FREEFALL) {
-          if (happiness < 90) {
-            changeHappiness(8, "feed");
-          }
-          // Always show a feed sprite + text, even if capped (so button always responds visually)
-          showSprite(pick(FEED_SPRITES, FEED_EAT_N), pick(FEED_TEXTS, FEED_TEXT_N));
-          state = STATE_RESULT; resultTime = now;
-          Serial.printf("Feed! happiness=%d\n", happiness);
-        }
-      } else if (mode == MODE_DEBUG) {
-        wandMount = !wandMount;
-        nvsWriteWandMount(wandMount);
-        Serial.printf("Wand mount: %s\n", wandMount ? "ON" : "OFF");
-        drawDebugScreen();
-      }
-    }
+  // ── BtnA: short=feed (active) or wand-mount (debug), hold=BLE toggle ──
+  static bool btnAHeld = false, btnAHoldFired = false;
+  if (M5.BtnA.wasPressed()) {
+    lastButtonPress = now;
+    btnAHeld = true; btnAHoldFired = false;
+    publishEvent("btn", "{\\\"button\\\":\\\"A\\\",\\\"state\\\":\\\"down\\\"}");
   }
-  if (!btnAHoldFired && M5.BtnA.pressedFor(1500)) {
+  if (btnAHeld && !btnAHoldFired && M5.BtnA.pressedFor(1500)) {
     btnAHoldFired = true;
     if (mode == MODE_ACTIVE) {
       bleMode = bleMode ? 0 : 1;
@@ -1058,13 +1039,46 @@ void loop() {
       state = STATE_RESULT; resultTime = now;
     }
   }
+  if (M5.BtnA.wasReleased()) {
+    publishEvent("btn", "{\\\"button\\\":\\\"A\\\",\\\"state\\\":\\\"up\\\"}");
+    if (btnAHeld && !btnAHoldFired) {
+      // Short press — feed or wand mount
+      if (mode == MODE_ACTIVE && tossState != TOSS_FREEFALL) {
+        if (happiness < 90) changeHappiness(8, "feed");
+        showSprite(pick(FEED_SPRITES, FEED_EAT_N), pick(FEED_TEXTS, FEED_TEXT_N));
+        state = STATE_RESULT; resultTime = now;
+        Serial.printf("Feed! happiness=%d\n", happiness);
+      } else if (mode == MODE_DEBUG) {
+        wandMount = !wandMount;
+        nvsWriteWandMount(wandMount);
+        Serial.printf("Wand mount: %s\n", wandMount ? "ON" : "OFF");
+        drawDebugScreen();
+      }
+    }
+    btnAHeld = false; btnAHoldFired = false;  // always clear on release
+  }
 
   // ── BtnB: short=stats (active) or exit debug, hold=enter debug ──
-  static bool btnBHoldFired = false;
-  if (M5.BtnB.wasPressed()) { lastButtonPress = now; btnBHoldFired = false; publishEvent("btn", "{\\\"button\\\":\\\"B\\\",\\\"state\\\":\\\"down\\\"}"); }
+  static bool btnBHeld = false, btnBHoldFired = false;
+  if (M5.BtnB.wasPressed()) {
+    lastButtonPress = now;
+    btnBHeld = true; btnBHoldFired = false;
+    publishEvent("btn", "{\\\"button\\\":\\\"B\\\",\\\"state\\\":\\\"down\\\"}");
+  }
+  if (btnBHeld && !btnBHoldFired && M5.BtnB.pressedFor(1500)) {
+    btnBHoldFired = true;
+    if (mode == MODE_ACTIVE) {
+      mode = MODE_DEBUG;
+      publishEvent("mode", "{\\\"mode\\\":\\\"debug\\\"}");
+      tossState = TOSS_IDLE; prevHpMag = 0; tapSettleCount = -1;
+      for (int i = 0; i < 3; i++) { hpState[i] = 0; hpPrevRaw[i] = 0; }
+      state = STATE_READY;
+      showReady();
+    }
+  }
   if (M5.BtnB.wasReleased()) {
     publishEvent("btn", "{\\\"button\\\":\\\"B\\\",\\\"state\\\":\\\"up\\\"}");
-    if (!btnBHoldFired) {
+    if (btnBHeld && !btnBHoldFired) {
       if (mode == MODE_ACTIVE) {
         drawStatsOverlay();
         state = STATE_RESULT; resultTime = now;
@@ -1077,17 +1091,7 @@ void loop() {
         showReady();
       }
     }
-  }
-  if (!btnBHoldFired && M5.BtnB.pressedFor(1500)) {
-    btnBHoldFired = true;
-    if (mode == MODE_ACTIVE) {
-      mode = MODE_DEBUG;
-      publishEvent("mode", "{\\\"mode\\\":\\\"debug\\\"}");
-      tossState = TOSS_IDLE; prevHpMag = 0; tapSettleCount = -1;
-      for (int i = 0; i < 3; i++) { hpState[i] = 0; hpPrevRaw[i] = 0; }
-      state = STATE_READY;
-      showReady();
-    }
+    btnBHeld = false; btnBHoldFired = false;  // always clear on release
   }
 
   // IMU — [C8] skip frame if I2C read fails
