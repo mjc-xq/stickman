@@ -1038,8 +1038,10 @@ void loop() {
     publishEvent("btn", "{\\\"button\\\":\\\"A\\\",\\\"state\\\":\\\"up\\\"}");
     if (btnAHeld && !btnALongFired) {
       if (mode == MODE_ACTIVE && tossState != TOSS_FREEFALL) {
-        // Feed Cece — always shows sprite, even if happiness capped
+        // Feed Cece — green flash + sprite so it's super obvious
         if (happiness < 90) changeHappiness(8, "feed");
+        StickCP2.Display.fillScreen(0x2EC4);  // soft green tint
+        drawModeIndicator();
         showSprite(pick(FEED_SPRITES, FEED_SPRITE_N), pick(FEED_TEXTS, FEED_TEXT_N));
         state = STATE_RESULT; resultTime = now;
       } else if (mode == MODE_DEBUG) {
