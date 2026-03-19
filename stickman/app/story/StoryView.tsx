@@ -203,6 +203,7 @@ export function StoryView() {
               index={index}
               isActive={activeSlide === index}
               effect={slide.effect}
+              effectTriggerWord={slide.effectTriggerWord}
             />
           </div>
         ))}

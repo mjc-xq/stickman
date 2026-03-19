@@ -3,6 +3,7 @@ export interface Slide {
   bg: string;
   fg: string;
   effect?: "shooting-star" | "flash" | "sparkle-burst";
+  effectTriggerWord?: string; // effect fires when typewriter types this word
 }
 
 export const STORY_SLIDES: Slide[] = [
@@ -40,6 +41,7 @@ export const STORY_SLIDES: Slide[] = [
     bg: "/images/story/slide-04-bg.png",
     fg: "/images/story/slide-04-fg.png",
     effect: "flash",
+    effectTriggerWord: "FLASH",
   },
   {
     lines: [

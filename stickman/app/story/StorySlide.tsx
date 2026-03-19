@@ -10,24 +10,31 @@ interface StorySlideProps {
   index: number;
   isActive: boolean;
   effect?: Slide["effect"];
+  effectTriggerWord?: string;
 }
 
-export function StorySlide({ lines, bgSrc, fgSrc, index, isActive, effect }: StorySlideProps) {
+export function StorySlide({ lines, bgSrc, fgSrc, index, isActive, effect, effectTriggerWord }: StorySlideProps) {
   const [phase, setPhase] = useState<"hidden" | "bg" | "fg" | "text">("hidden");
   const [line1Text, setLine1Text] = useState("");
   const [line2Text, setLine2Text] = useState("");
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [showEffect, setShowEffect] = useState(false);
+  const effectFiredRef = useRef(false);
 
   useEffect(() => {
     if (!isActive) return;
     let cancelled = false;
 
     setPhase("bg");
+    effectFiredRef.current = false;
 
-    const effectTimer = setTimeout(() => {
-      if (!cancelled) setShowEffect(true);
-    }, 300);
+    // Effects without a trigger word fire early; word-triggered effects fire from the typewriter
+    let effectTimer: ReturnType<typeof setTimeout> | undefined;
+    if (effect && !effectTriggerWord) {
+      effectTimer = setTimeout(() => {
+        if (!cancelled) setShowEffect(true);
+      }, 300);
+    }
 
     const fgTimer = setTimeout(() => {
       if (!cancelled) setPhase("fg");
@@ -44,7 +51,13 @@ export function StorySlide({ lines, bgSrc, fgSrc, index, isActive, effect }: Sto
       const type = () => {
         if (cancelled) return;
         if (i <= fullLine1.length) {
-          setLine1Text(fullLine1.slice(0, i));
+          const currentText = fullLine1.slice(0, i);
+          setLine1Text(currentText);
+          // Fire effect when trigger word appears
+          if (effectTriggerWord && !effectFiredRef.current && currentText.includes(effectTriggerWord)) {
+            effectFiredRef.current = true;
+            setShowEffect(true);
+          }
           i++;
           timerRef.current = setTimeout(type, 35);
         } else {
@@ -65,7 +78,7 @@ export function StorySlide({ lines, bgSrc, fgSrc, index, isActive, effect }: Sto
 
     return () => {
       cancelled = true;
-      clearTimeout(effectTimer);
+      if (effectTimer) clearTimeout(effectTimer);
       clearTimeout(fgTimer);
       clearTimeout(textTimer);
       if (timerRef.current) clearTimeout(timerRef.current);
