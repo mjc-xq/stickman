@@ -106,20 +106,6 @@ export function MontageSlide({ frames, isActive, cycleDuration = 3.5 }: MontageS
         ))}
       </div>
 
-      {/* Frame dots indicator */}
-      <div className="absolute bottom-[15%] flex gap-2 z-20">
-        {frames.map((_, i) => (
-          <div
-            key={i}
-            className="w-2 h-2 rounded-full transition-all duration-300"
-            style={{
-              background: i === activeFrame ? "#ffd700" : "rgba(255,255,255,0.3)",
-              boxShadow: i === activeFrame ? "0 0 8px #ffd700" : "none",
-              transform: i === activeFrame ? "scale(1.3)" : "scale(1)",
-            }}
-          />
-        ))}
-      </div>
     </div>
   );
 }
