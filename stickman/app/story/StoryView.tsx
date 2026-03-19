@@ -102,13 +102,24 @@ export function StoryView() {
     slideRefs.current[index] = el;
   }, []);
 
-  // Navigate to a specific slide — instant jump (no scroll animation needed
-  // since GSAP handles all visual transitions via entrance/exit timelines)
+  // Navigate to a specific slide
   const goToSlide = useCallback((index: number) => {
     const container = scrollRef.current;
-    if (!container) return;
-    const slideHeight = container.clientHeight;
-    container.scrollTop = index * slideHeight;
+    const el = slideRefs.current[index];
+    if (!container || !el) return;
+    // Disable snap during programmatic scroll, re-enable after
+    container.style.scrollSnapType = "none";
+    el.scrollIntoView({ behavior: "smooth", block: "start" });
+    let restored = false;
+    const restore = () => {
+      if (restored) return;
+      restored = true;
+      container.style.scrollSnapType = "y mandatory";
+      container.removeEventListener("scrollend", restore);
+      clearTimeout(t);
+    };
+    container.addEventListener("scrollend", restore, { once: true });
+    const t = setTimeout(restore, 1000);
   }, []);
 
   // Wand tap -> advance to next slide (ignored during animations — no queuing)
@@ -188,17 +199,20 @@ export function StoryView() {
       {/* Shooting stars */}
       <ShootingStars />
 
-      {/* Scroll container — overflow hidden, navigation only via tap/keyboard */}
+      {/* Scroll container — snap prevents skipping multiple slides */}
       <div
         ref={scrollRef}
-        className="relative z-10 w-full h-full overflow-hidden"
-        style={{}}
+        className="relative z-10 w-full h-full overflow-y-auto"
+        style={{
+          scrollSnapType: "y mandatory",
+          WebkitOverflowScrolling: "touch",
+        }}
       >
         {STORY_SLIDES.map((slide, index) => (
           <div
             key={index}
             ref={setSlideRef(index)}
-            className="h-[100dvh] w-full"
+            className="h-[100dvh] w-full snap-start"
           >
             <StorySlide
               lines={slide.lines}

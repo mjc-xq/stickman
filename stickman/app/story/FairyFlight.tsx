@@ -18,6 +18,8 @@ interface TrailDot {
 
 export function FairyFlight({ onComplete }: { onComplete?: () => void }) {
   const fairyRef = useRef<HTMLDivElement>(null);
+  const onCompleteRef = useRef(onComplete);
+  onCompleteRef.current = onComplete;
   const [spriteIdx, setSpriteIdx] = useState(0);
   const [trail, setTrail] = useState<TrailDot[]>([]);
   const trailIdRef = useRef(0);
@@ -51,7 +53,7 @@ export function FairyFlight({ onComplete }: { onComplete?: () => void }) {
       force3D: true,
     });
 
-    const tl = gsap.timeline({ onComplete });
+    const tl = gsap.timeline({ onComplete: () => onCompleteRef.current?.() });
 
     // ---------------------------------------------------------------
     // Segment 1 — Fly in from right to left (fly-right sprite, flipped)
@@ -154,7 +156,7 @@ export function FairyFlight({ onComplete }: { onComplete?: () => void }) {
       clearInterval(trailInterval);
       clearInterval(flushInterval);
     };
-  }, [onComplete, size]);
+  }, [size]); // onComplete via ref — no rebuild on parent re-render
 
   return (
     <div className="fixed inset-0 z-30 pointer-events-none">

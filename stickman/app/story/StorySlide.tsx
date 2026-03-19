@@ -111,7 +111,7 @@ export function StorySlide({
     };
     type();
     return () => { cancelled = true; };
-  }, [lines, effectTriggerWord]);
+  }, [lines, effectTriggerWord, fairyTriggerWord]);
 
   // Build GSAP entrance timeline ONCE on mount.
   // Elements start hidden via CSS inline styles (see JSX below), so no flash.
@@ -227,26 +227,30 @@ export function StorySlide({
       // Reset the timeline to beginning and play
       tl.restart();
 
-      // Ken Burns: slow continuous drift on background
+      // Ken Burns: start AFTER bg entrance completes (1.5s) to avoid scale conflict
       if (kbRef.current) kbRef.current.kill();
-      kbRef.current = gsap.to(bg, {
-        xPercent: parseFloat(kb.x), yPercent: parseFloat(kb.y), scale: kb.scale,
-        duration: 15, ease: "none", force3D: true, delay: 1.0,
-      });
+      kbRef.current = gsap.fromTo(bg,
+        { xPercent: 0, yPercent: 0, scale: 1.06 },
+        {
+          xPercent: parseFloat(kb.x), yPercent: parseFloat(kb.y), scale: kb.scale,
+          duration: 15, ease: "none", force3D: true, delay: 1.5,
+        }
+      );
 
-      // Idle float on foreground (starts after fg settles — later for split slides)
-      const idleDelay = hasSplit ? 3.5 : 2.5;
+      // Idle float — only on single fg slides (not split, where it bobs all pieces)
       if (idleRef.current) idleRef.current.kill();
-      idleRef.current = gsap.to(fg, {
-        y: -8, rotation: 0.5,
-        duration: 3, ease: "sine.inOut", yoyo: true, repeat: -1,
-        delay: idleDelay, force3D: true,
-      });
+      if (!hasSplit) {
+        idleRef.current = gsap.to(fg, {
+          y: -8, rotation: 0.5,
+          duration: 3, ease: "sine.inOut", yoyo: true, repeat: -1,
+          delay: 2.5, force3D: true,
+        });
+      }
       if (idleGlowRef.current) idleGlowRef.current.kill();
       idleGlowRef.current = gsap.to(glow, {
         y: -6, scale: 1.03,
         duration: 3.4, ease: "sine.inOut", yoyo: true, repeat: -1,
-        delay: idleDelay,
+        delay: hasSplit ? 3.5 : 2.5,
       });
     } else if (!isActive && wasActiveRef.current) {
       // --- EXIT ---
@@ -263,6 +267,15 @@ export function StorySlide({
       if (kbRef.current) { kbRef.current.kill(); kbRef.current = null; }
       if (idleRef.current) { idleRef.current.kill(); idleRef.current = null; }
       if (idleGlowRef.current) { idleGlowRef.current.kill(); idleGlowRef.current = null; }
+
+      // Kill any tweens on managed elements to prevent orphaned exit tweens
+      gsap.killTweensOf(bg);
+      gsap.killTweensOf(fg);
+      gsap.killTweensOf(glow);
+      gsap.killTweensOf(text);
+      if (hasSplit && splitContainerRef.current) {
+        splitContainerRef.current.querySelectorAll(".split-piece").forEach(el => gsap.killTweensOf(el));
+      }
 
       // Staggered exit: text -> fg -> bg, then reset to initial hidden state
       gsap.to(text, { y: 16, opacity: 0, duration: 0.25, ease: "power3.in", force3D: true });
