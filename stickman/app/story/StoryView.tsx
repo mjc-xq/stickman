@@ -35,7 +35,7 @@ export function StoryView() {
     // Lock taps for 2.5s while entrance animation plays
     animatingRef.current = true;
     if (animTimerRef.current) clearTimeout(animTimerRef.current);
-    animTimerRef.current = setTimeout(() => { animatingRef.current = false; }, 2500);
+    animTimerRef.current = setTimeout(() => { animatingRef.current = false; }, 4000);
   }, [activeSlide]);
 
   // Draw starfield background (fixed, behind everything)

@@ -108,58 +108,59 @@ export function StorySlide({
     // Build entrance timeline (paused — played when isActive becomes true)
     const tl = gsap.timeline({ paused: true });
 
-    // t=0: Background fades in and slides up from below
+    // t=0: Background fades in and slides up from below (slow, cinematic)
     tl.to(bg, {
       y: 0, scale: 1.06, opacity: 1,
-      duration: 1.0, ease: "power2.out", force3D: true,
+      duration: 1.5, ease: "power2.out", force3D: true,
     }, 0);
 
-    // t=0.2: Glow fades in
+    // t=0.4: Glow fades in
     tl.to(glow, {
-      opacity: 1, scale: 1, duration: 0.8, ease: "power1.out",
-    }, 0.2);
+      opacity: 1, scale: 1, duration: 1.2, ease: "power1.out",
+    }, 0.4);
 
     if (hasSplit && splitContainerRef.current) {
-      // SPLIT FOREGROUND: each piece animated individually.
-      // Initial positions are set via inline styles in the JSX.
+      // SPLIT FOREGROUND: each piece animated to its own final position
       const pieces = splitContainerRef.current.querySelectorAll<HTMLElement>(".split-piece");
       pieces.forEach((el, i) => {
         const piece = splitFg![i];
         if (!piece) return;
+        // Animate FROM inline-style start position TO final resting position
         tl.to(el, {
-          x: 0, y: 0, scale: 1, rotation: 0, opacity: 1,
+          xPercent: piece.toX, yPercent: piece.toY,
+          scale: piece.toScale, rotation: 0, opacity: 1,
           duration: piece.duration, ease: piece.ease, force3D: true,
-        }, 0.4 + piece.delay);
+        }, 0.8 + piece.delay);
       });
     } else {
       // SINGLE FOREGROUND: spring up from below
       tl.to(fg, {
         y: 0, scale: 1, opacity: 1,
-        duration: 1.0, ease: "back.out(1.4)", force3D: true,
-      }, 0.4);
+        duration: 1.4, ease: "back.out(1.4)", force3D: true,
+      }, 0.8);
 
       if (fgImg) {
         tl.to(fgImg, {
           rotateX: 0, rotateY: 0,
-          duration: 1.2, ease: "power2.out", force3D: true,
-        }, 0.4);
+          duration: 1.5, ease: "power2.out", force3D: true,
+        }, 0.8);
       }
     }
 
     // Non-word-triggered effects
     if (effect && !effectTriggerWord) {
-      tl.call(() => setShowEffect(true), [], 0.8);
+      tl.call(() => setShowEffect(true), [], 1.2);
     }
 
-    // Text slides up
+    // Text slides up (later for split slides since pieces take longer)
     tl.to(text, {
       y: 0, opacity: 1,
-      duration: 0.5, ease: "expo.out", force3D: true,
-    }, hasSplit ? 1.4 : 1.1);
+      duration: 0.7, ease: "expo.out", force3D: true,
+    }, hasSplit ? 2.8 : 2.0);
 
     // Start typewriter
     let cancelType: (() => void) | null = null;
-    tl.call(() => { cancelType = startTypewriter(); }, [], hasSplit ? 1.6 : 1.3);
+    tl.call(() => { cancelType = startTypewriter(); }, [], hasSplit ? 3.0 : 2.2);
 
     entranceTlRef.current = tl;
 
@@ -201,18 +202,19 @@ export function StorySlide({
         duration: 15, ease: "none", force3D: true, delay: 1.0,
       });
 
-      // Idle float on foreground (starts after fg settles)
+      // Idle float on foreground (starts after fg settles — later for split slides)
+      const idleDelay = hasSplit ? 3.5 : 2.5;
       if (idleRef.current) idleRef.current.kill();
       idleRef.current = gsap.to(fg, {
         y: -8, rotation: 0.5,
         duration: 3, ease: "sine.inOut", yoyo: true, repeat: -1,
-        delay: 1.8, force3D: true,
+        delay: idleDelay, force3D: true,
       });
       if (idleGlowRef.current) idleGlowRef.current.kill();
       idleGlowRef.current = gsap.to(glow, {
         y: -6, scale: 1.03,
         duration: 3.4, ease: "sine.inOut", yoyo: true, repeat: -1,
-        delay: 1.8,
+        delay: idleDelay,
       });
     } else if (!isActive && wasActiveRef.current) {
       // --- EXIT ---
@@ -251,7 +253,7 @@ export function StorySlide({
           // Reset all elements back to their initial hidden positions so
           // the next entrance plays cleanly from the start.
           tl.progress(0).pause();
-          // Also reset split pieces back to their starting transforms
+          // Reset split pieces to their CSS initial state
           if (hasSplit && splitContainerRef.current) {
             const pieces = splitContainerRef.current.querySelectorAll<HTMLElement>(".split-piece");
             pieces.forEach((el, i) => {
@@ -259,6 +261,7 @@ export function StorySlide({
               if (!piece) return;
               gsap.set(el, {
                 x: piece.fromX, y: piece.fromY,
+                xPercent: 0, yPercent: 0,
                 scale: piece.fromScale, rotation: piece.fromRotate,
                 opacity: 0, force3D: true,
               });
@@ -360,12 +363,12 @@ export function StorySlide({
             </div>
           )}
 
-          {/* Split foreground pieces — each starts at its fromX/fromY/etc via inline styles */}
+          {/* Split foreground pieces — positioned absolutely, each starts offset from its final spot */}
           {hasSplit && (
             <div
               ref={splitContainerRef}
-              className="relative flex items-center justify-center"
-              style={{ minHeight: "40dvh" }}
+              className="relative w-full"
+              style={{ height: "55dvh" }}
             >
               {splitFg!.map((piece, i) => (
                 <img
@@ -375,10 +378,15 @@ export function StorySlide({
                   className="split-piece absolute h-auto object-contain"
                   loading="eager"
                   style={{
-                    maxHeight: i === splitFg!.length - 1 ? "25dvh" : "50dvh",
-                    maxWidth: "45vw",
+                    maxHeight: piece.maxH,
+                    maxWidth: "48vw",
+                    // Position at center of container, GSAP will move to toX/toY
+                    left: "50%",
+                    top: "50%",
+                    marginLeft: "-24vw", // offset half of maxWidth to center
+                    marginTop: `-${parseInt(piece.maxH) / 2}dvh`,
                     filter: "drop-shadow(0 8px 30px rgba(0,0,0,0.6)) drop-shadow(0 0 40px rgba(168,85,247,0.15))",
-                    // Initial hidden state — set via CSS so there's no flash
+                    // Start hidden at offset position — GSAP animates to toX/toY
                     opacity: 0,
                     transform: `translate3d(${piece.fromX}px, ${piece.fromY}px, 0) scale(${piece.fromScale}) rotate(${piece.fromRotate}deg)`,
                     willChange: "transform, opacity",

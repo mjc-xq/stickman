@@ -1,7 +1,11 @@
 export interface SplitPiece {
   src: string;
-  // Where the piece starts (before animation)
-  fromX: number;  // px offset from final position
+  // Where the piece ENDS (final resting position, % of container)
+  toX: number;     // final left position as % (0 = center, -40 = far left, 40 = far right)
+  toY: number;     // final top position as % (0 = center)
+  toScale: number; // final scale
+  // Where the piece STARTS (before animation, offset from final position)
+  fromX: number;   // px offset from final position
   fromY: number;
   fromScale: number;
   fromRotate: number;
@@ -9,6 +13,7 @@ export interface SplitPiece {
   delay: number;   // seconds delay from fg entrance start
   duration: number; // seconds
   ease: string;    // GSAP ease name
+  maxH: string;    // max-height CSS value
 }
 
 export interface Slide {
@@ -50,18 +55,24 @@ export const STORY_SLIDES: Slide[] = [
     splitFg: [
       {
         src: "/images/story/split/s03-alex.png",
-        fromX: 200, fromY: 40, fromScale: 0.85, fromRotate: 3,
-        delay: 0, duration: 1.2, ease: "back.out(1.2)",
+        toX: 28, toY: 0, toScale: 1,
+        fromX: 250, fromY: 60, fromScale: 0.7, fromRotate: 5,
+        delay: 0, duration: 1.8, ease: "back.out(1.2)",
+        maxH: "50dvh",
       },
       {
         src: "/images/story/split/s03-cece.png",
-        fromX: -200, fromY: 40, fromScale: 0.85, fromRotate: -3,
-        delay: 0.15, duration: 1.2, ease: "back.out(1.2)",
+        toX: -28, toY: 5, toScale: 1,
+        fromX: -250, fromY: 60, fromScale: 0.7, fromRotate: -5,
+        delay: 0.3, duration: 1.8, ease: "back.out(1.2)",
+        maxH: "45dvh",
       },
       {
         src: "/images/story/split/s03-sparkles.png",
+        toX: 0, toY: -5, toScale: 0.8,
         fromX: 0, fromY: 0, fromScale: 0, fromRotate: 0,
-        delay: 0.6, duration: 0.8, ease: "elastic.out(1, 0.5)",
+        delay: 1.2, duration: 1.2, ease: "elastic.out(1, 0.5)",
+        maxH: "20dvh",
       },
     ],
   },
@@ -85,18 +96,24 @@ export const STORY_SLIDES: Slide[] = [
     splitFg: [
       {
         src: "/images/story/split/s05-alex.png",
-        fromX: -180, fromY: 30, fromScale: 0.9, fromRotate: -2,
-        delay: 0, duration: 1.1, ease: "back.out(1.3)",
+        toX: -25, toY: 0, toScale: 1,
+        fromX: -220, fromY: 50, fromScale: 0.7, fromRotate: -4,
+        delay: 0, duration: 1.8, ease: "back.out(1.3)",
+        maxH: "50dvh",
       },
       {
         src: "/images/story/split/s05-cece.png",
-        fromX: 180, fromY: 30, fromScale: 0.9, fromRotate: 2,
-        delay: 0.12, duration: 1.1, ease: "back.out(1.3)",
+        toX: 25, toY: 5, toScale: 1,
+        fromX: 220, fromY: 50, fromScale: 0.7, fromRotate: 4,
+        delay: 0.25, duration: 1.8, ease: "back.out(1.3)",
+        maxH: "45dvh",
       },
       {
         src: "/images/story/split/s05-tinycece.png",
-        fromX: 0, fromY: -50, fromScale: 0, fromRotate: 0,
-        delay: 0.7, duration: 1.0, ease: "elastic.out(1, 0.4)",
+        toX: 0, toY: -20, toScale: 0.7,
+        fromX: 0, fromY: -100, fromScale: 0, fromRotate: 0,
+        delay: 1.0, duration: 1.5, ease: "elastic.out(1, 0.4)",
+        maxH: "22dvh",
       },
     ],
   },
