@@ -62,7 +62,7 @@ static AppState state = STATE_READY;
 static unsigned long resultTime = 0;
 
 // ── Happiness (tomagotchi) ───────────────────────────────────────────
-static uint8_t happiness = 50;
+static uint8_t happiness = 75;  // start happy!
 static uint32_t lastHappinessTs = 0;  // unix timestamp of last happiness update
 static bool ntpSynced = false;
 static bool ntpDecayApplied = false;
@@ -205,12 +205,12 @@ static void nvsWriteWandMount(bool on) {
 // ── NVS: Happiness ──
 static uint8_t nvsReadHappiness() {
   nvs_handle_t h;
-  uint8_t val = 50;
+  uint8_t val = 75;
   if (nvs_open("stickman", NVS_READONLY, &h) == ESP_OK) {
     nvs_get_u8(h, "happiness", &val);
     nvs_close(h);
   }
-  return val > 100 ? 50 : val;
+  return val > 100 ? 75 : val;
 }
 
 static void nvsWriteHappiness(uint8_t val) {
@@ -394,10 +394,10 @@ static void publishEvent(const char* name, const char* data);
 // ── Happiness helpers ────────────────────────────────────────────────
 
 static int getMoodTier() {
-  if (happiness >= 80) return 3;  // happy
-  if (happiness >= 50) return 2;  // content
-  if (happiness >= 20) return 1;  // grumpy
-  return 0;                       // sad
+  if (happiness >= 70) return 3;  // happy
+  if (happiness >= 40) return 2;  // content
+  if (happiness >= 15) return 1;  // sassy/bored (not sad)
+  return 0;                       // sad (very rare)
 }
 
 static void changeHappiness(int8_t delta, const char* cause) {
@@ -597,23 +597,35 @@ static const char* const PET_TEXTS[] = {
 };
 #define PET_TEXT_N 5
 
-// ── Sad idle texts ──
-static const char* const SAD_TEXTS[] = {
-  "...", "*sigh*", "Lonely...", "Hello?", "*sniff*"
+// ── Bored/sassy texts (grumpy tier — spunky not sad) ──
+static const char* const SASSY_TEXTS[] = {
+  "Hmph!", "I'm bored~", "Play with me!", "Ahem!", "*taps foot*",
+  "Excuse me?!", "Helloooo?", "Pay attention!", "I'm waiting...", "Boo!"
 };
-#define SAD_TEXT_N 5
+#define SASSY_TEXT_N 10
+
+// ── Hungry/needy texts (rare, still fun) ──
+static const char* const SAD_TEXTS[] = {
+  "So hungry!", "Feed me!", "Snack time?", "*tummy growl*", "Need food!",
+  "Starving~", "Got snacks?", "Pizza plz!", "Hangry!"
+};
+#define SAD_TEXT_N 9
 
 // ── Mood-filtered idle sprite pools ──
 static const SpriteIdx HAPPY_IDLE_SPRITES[] = {
   SPRITE_IDLE_WAVE, SPRITE_IDLE_HUMMING_1, SPRITE_IDLE_HUMMING_2,
-  SPRITE_IDLE_SPELL_PRACTICE, SPRITE_IDLE_WAND_TWIRL
+  SPRITE_IDLE_SPELL_PRACTICE, SPRITE_IDLE_WAND_TWIRL,
+  SPRITE_IDLE_STANDING, SPRITE_IDLE_HAT_ADJUST, SPRITE_IDLE_GLASSES_PUSH
 };
-#define HAPPY_IDLE_SPRITE_N 5
+#define HAPPY_IDLE_SPRITE_N 8
 
+// Grumpy = sassy/bored, NOT sad. Uses active looking-around sprites, not tired ones.
 static const SpriteIdx GRUMPY_IDLE_SPRITES[] = {
-  SPRITE_IDLE_YAWN, SPRITE_IDLE_SITTING, SPRITE_IDLE_LOOKING_LEFT, SPRITE_IDLE_LOOKING_RIGHT
+  SPRITE_IDLE_LOOKING_LEFT, SPRITE_IDLE_LOOKING_RIGHT,
+  SPRITE_IDLE_GLASSES_PUSH, SPRITE_IDLE_HAT_ADJUST,
+  SPRITE_IDLE_STANDING
 };
-#define GRUMPY_IDLE_SPRITE_N 4
+#define GRUMPY_IDLE_SPRITE_N 5
 
 static const SpriteIdx SAD_IDLE_SPRITES[] = {
   SPRITE_SAD_1, SPRITE_SAD_2, SPRITE_IDLE_YAWN
@@ -868,7 +880,7 @@ static void updateToss(float accMag, unsigned long now) {
         tossState = TOSS_IDLE;
         showSprite(pick(TOSS_LOST_SPRITES, TOSS_LOST_SPRITE_N), pick(TOSS_LOST_TEXTS, TOSS_LOST_N));
         publishEvent("toss", "{\\\"state\\\":\\\"lost\\\"}");
-        changeHappiness(-15, "lost");
+        changeHappiness(-5, "lost");
         tossResultTime = now; resultTime = now; state = STATE_RESULT;
       }
       break;
@@ -1026,7 +1038,7 @@ void loop() {
     if (btnAHeld && !btnALongFired) {
       if (mode == MODE_ACTIVE && tossState == TOSS_IDLE) {
         // Feed Cece
-        if (happiness < 80) {
+        if (happiness < 90) {
           changeHappiness(8, "feed");
           // Show eating sprite, then satisfied sprite
           SpriteIdx eatSprite = pick(FEED_SPRITES, 4);  // first 4 are eating poses (leaf, munch, apple, shrimp)
@@ -1112,13 +1124,13 @@ void loop() {
           time_t tnow; time(&tnow);
           uint32_t nowTs = (uint32_t)tnow;
           if (lastHappinessTs > 0 && nowTs > lastHappinessTs) {
-            uint32_t hoursElapsed = (nowTs - lastHappinessTs) / 3600;
-            if (hoursElapsed > 0) {
-              int16_t val = (int16_t)happiness - (int16_t)hoursElapsed;
-              if (val < 20) val = 20;  // wake clamp — never devastated
+            uint32_t twoHoursElapsed = (nowTs - lastHappinessTs) / 7200;  // decay every 2 hours (gentle)
+            if (twoHoursElapsed > 0) {
+              int16_t val = (int16_t)happiness - (int16_t)twoHoursElapsed;
+              if (val < 40) val = 40;  // wake clamp — always at least content
               happiness = (uint8_t)val;
               nvsWriteHappiness(happiness);
-              Serial.printf("Time decay: -%lu hrs, happiness now %d\n", hoursElapsed, happiness);
+              Serial.printf("Time decay: -%lu periods, happiness now %d\n", twoHoursElapsed, happiness);
             }
           }
           lastHappinessTs = nowTs;
@@ -1162,14 +1174,14 @@ void loop() {
             idleText = (random(100) < 15) ? pick(MOTIV_TEXTS, MOTIV_TEXT_N) : pick(IDLE_TEXTS, IDLE_TEXT_N);
           } else if (tier == 1) {
             idleSprite = pick(GRUMPY_IDLE_SPRITES, GRUMPY_IDLE_SPRITE_N);
-            idleText = pick(IDLE_TEXTS, IDLE_TEXT_N);
+            idleText = pick(SASSY_TEXTS, SASSY_TEXT_N);
           } else {
             idleSprite = pick(SAD_IDLE_SPRITES, SAD_IDLE_SPRITE_N);
             idleText = pick(SAD_TEXTS, SAD_TEXT_N);
           }
           showSprite(idleSprite, idleText);
           lastBlink = now;
-          blinkInterval = random(5000, 12000);
+          blinkInterval = random(3000, 7000);  // swap every 3-7s (was 5-12s)
         }
         // React to tilt — show orientation-reactive sprite
         {
@@ -1207,7 +1219,7 @@ void loop() {
         publishEvent("gesture", "{\\\"gesture\\\":\\\"Tap\\\"}");
         bleSendKey(KEY_RETURN); // Apple TV select/enter
         showSprite(pick(TAP_SPRITES, TAP_SPRITE_N), pick(TAP_TEXTS, TAP_TEXT_N));
-        changeHappiness(-5, "tap");
+        changeHappiness(-2, "tap");
       }
       updateToss(accMag, now);
       break;
