@@ -24,7 +24,7 @@ export const STORY_SLIDES: Slide[] = [
   {
     lines: [
       "She tracked the star straight to Cece.",
-      '"This wand was never really mine. The magic is in YOU."',
+      "\"This wand was never really mine. The magic is in YOU.\"",
     ],
     bg: "/images/story/slide-03-bg.png",
     fg: "/images/story/slide-03-fg.png",
@@ -39,43 +39,27 @@ export const STORY_SLIDES: Slide[] = [
   },
   {
     lines: [
-      '"That tiny you is powered by your family\'s love.',
-      'Feed her, keep her happy, and she\'ll help with ANYTHING."',
+      "\"That tiny you is powered by your family's love.",
+      "Feed her snacks, keep her happy, and she'll help with ANYTHING.\"",
     ],
     bg: "/images/story/slide-05-bg.png",
     fg: "/images/story/slide-05-fg.png",
   },
   {
     lines: [
-      "Cece had to test it. She aimed at the TV — ZAP!",
-      "Dragons exploded out of the screen. Dolphins backflipped across the ceiling.",
+      "\"Oh — and hold the big button to tell the wand what to do.",
+      "Start the TV. Stop the TV. It listens to YOUR voice.\"",
     ],
     bg: "/images/story/slide-06-bg.png",
     fg: "/images/story/slide-06-fg.png",
   },
   {
     lines: [
-      "Then she pointed the wand straight up.",
-      "The entire night sky rearranged into her name. In GOLD.",
+      "Cece had to test it. She held the button and said — \"TV, ON.\"",
+      "Dragons exploded out of the screen. Dolphins backflipped across the ceiling.",
     ],
     bg: "/images/story/slide-07-bg.png",
     fg: "/images/story/slide-07-fg.png",
-  },
-  {
-    lines: [
-      "Huey lost his mind. He launched himself at the sparkles,",
-      "full speed, tongue out, crashing into a bush. Classic Huey.",
-    ],
-    bg: "/images/story/slide-08-bg.png",
-    fg: "/images/story/slide-08-fg.png",
-  },
-  {
-    lines: [
-      'Alex crossed her arms and grinned.',
-      '"You might actually be better at this than me."',
-    ],
-    bg: "/images/story/slide-09-bg.png",
-    fg: "/images/story/slide-09-fg.png",
   },
   {
     lines: [
