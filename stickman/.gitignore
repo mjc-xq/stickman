@@ -39,4 +39,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
-stickman/public/videos/
+# raw video source + extracted frames (large, regeneratable)
+stickman/public/videos/raw/
+stickman/public/videos/frames/
