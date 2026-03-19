@@ -4,18 +4,6 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import gsap from "gsap";
 import { STORY_SLIDES, type Slide, type SplitPiece } from "./slides";
 
-// Each slide's background enters from a different direction for variety
-const BG_ENTER: Array<{ x: number; y: number }> = [
-  { x: 0, y: -30 },   // from above
-  { x: 30, y: 0 },    // from right
-  { x: -30, y: 0 },   // from left
-  { x: 0, y: 30 },    // from below
-  { x: -20, y: -20 }, // top-left
-  { x: 20, y: -20 },  // top-right
-  { x: -20, y: 20 },  // bottom-left
-  { x: 20, y: 20 },   // bottom-right
-];
-
 // Ken Burns drift — each slide zooms/pans to a different spot
 const KB_DRIFT: Array<{ x: string; y: string; scale: number }> = [
   { x: "-1.5%", y: "-1%", scale: 1.02 },
@@ -43,6 +31,7 @@ export function StorySlide({
   lines, bgSrc, fgSrc, index, isActive, effect, effectTriggerWord, splitFg,
 }: StorySlideProps) {
   const hasSplit = splitFg && splitFg.length > 0;
+  const isFirstSlide = index === 0;
 
   // GSAP target refs
   const bgRef = useRef<HTMLDivElement>(null);
@@ -51,10 +40,14 @@ export function StorySlide({
   const glowRef = useRef<HTMLDivElement>(null);
   const textRef = useRef<HTMLDivElement>(null);
   const splitContainerRef = useRef<HTMLDivElement>(null);
-  const tlRef = useRef<gsap.core.Timeline | null>(null);
+
+  // Animation refs
+  const entranceTlRef = useRef<gsap.core.Timeline | null>(null);
   const kbRef = useRef<gsap.core.Tween | null>(null);
   const idleRef = useRef<gsap.core.Tween | null>(null);
   const idleGlowRef = useRef<gsap.core.Tween | null>(null);
+  const wasActiveRef = useRef(false);
+  const hasPlayedOnceRef = useRef(false);
 
   // Typewriter state
   const [line1Text, setLine1Text] = useState("");
@@ -101,28 +94,23 @@ export function StorySlide({
     return () => { cancelled = true; };
   }, [lines, effectTriggerWord]);
 
-  // Build GSAP timeline on mount
+  // Build GSAP entrance timeline ONCE on mount.
+  // Elements start hidden via CSS inline styles (see JSX below), so no flash.
+  // The timeline animates FROM those hidden positions TO their visible final state.
   useEffect(() => {
     const bg = bgRef.current;
     const fg = fgRef.current;
     const fgImg = fgImgRef.current;
     const glow = glowRef.current;
     const text = textRef.current;
-    if (!bg || !fg || !fgImg || !glow || !text) return;
+    if (!bg || !fg || !glow || !text) return;
 
-    const dir = BG_ENTER[index % BG_ENTER.length];
-
-    // Initial hidden state — all GPU-composited
-    gsap.set(bg, { x: dir.x, y: dir.y, scale: 1.08, opacity: 0, force3D: true });
-    gsap.set(glow, { opacity: 0, scale: 0.8 });
-    gsap.set(text, { y: 30, opacity: 0, force3D: true });
-
-    // Entrance timeline (paused — played when isActive)
+    // Build entrance timeline (paused — played when isActive becomes true)
     const tl = gsap.timeline({ paused: true });
 
-    // t=0: Background fades/slides in
+    // t=0: Background fades in and slides up from below
     tl.to(bg, {
-      x: 0, y: 0, scale: 1.06, opacity: 1,
+      y: 0, scale: 1.06, opacity: 1,
       duration: 1.0, ease: "power2.out", force3D: true,
     }, 0);
 
@@ -132,38 +120,30 @@ export function StorySlide({
     }, 0.2);
 
     if (hasSplit && splitContainerRef.current) {
-      // SPLIT FOREGROUND: animate each piece individually
+      // SPLIT FOREGROUND: each piece animated individually.
+      // Initial positions are set via inline styles in the JSX.
       const pieces = splitContainerRef.current.querySelectorAll<HTMLElement>(".split-piece");
       pieces.forEach((el, i) => {
         const piece = splitFg![i];
         if (!piece) return;
-        gsap.set(el, {
-          x: piece.fromX, y: piece.fromY,
-          scale: piece.fromScale, rotation: piece.fromRotate,
-          opacity: 0, force3D: true,
-        });
         tl.to(el, {
           x: 0, y: 0, scale: 1, rotation: 0, opacity: 1,
           duration: piece.duration, ease: piece.ease, force3D: true,
         }, 0.4 + piece.delay);
       });
-      // Hide the single fg
-      gsap.set(fg, { opacity: 0 });
-      if (fgImg) gsap.set(fgImg, { opacity: 0 });
     } else {
-      // SINGLE FOREGROUND: normal spring-up
-      gsap.set(fg, { y: 80, scale: 0.92, opacity: 0, force3D: true });
-      if (fgImg) gsap.set(fgImg, { rotateX: 6, rotateY: -2, force3D: true });
-
+      // SINGLE FOREGROUND: spring up from below
       tl.to(fg, {
         y: 0, scale: 1, opacity: 1,
         duration: 1.0, ease: "back.out(1.4)", force3D: true,
       }, 0.4);
 
-      tl.to(fgImg, {
-        rotateX: 0, rotateY: 0,
-        duration: 1.2, ease: "power2.out", force3D: true,
-      }, 0.4);
+      if (fgImg) {
+        tl.to(fgImg, {
+          rotateX: 0, rotateY: 0,
+          duration: 1.2, ease: "power2.out", force3D: true,
+        }, 0.4);
+      }
     }
 
     // Non-word-triggered effects
@@ -181,7 +161,7 @@ export function StorySlide({
     let cancelType: (() => void) | null = null;
     tl.call(() => { cancelType = startTypewriter(); }, [], hasSplit ? 1.6 : 1.3);
 
-    tlRef.current = tl;
+    entranceTlRef.current = tl;
 
     return () => {
       tl.kill();
@@ -191,11 +171,12 @@ export function StorySlide({
       if (idleRef.current) idleRef.current.kill();
       if (idleGlowRef.current) idleGlowRef.current.kill();
     };
+    // These deps are all stable (derived from props that don't change per-slide)
   }, [index, effect, effectTriggerWord, hasSplit, splitFg, startTypewriter, stopTypewriter]);
 
-  // Play / exit based on isActive
+  // React to isActive changes: play entrance or exit
   useEffect(() => {
-    const tl = tlRef.current;
+    const tl = entranceTlRef.current;
     const bg = bgRef.current;
     const fg = fgRef.current;
     const glow = glowRef.current;
@@ -204,11 +185,16 @@ export function StorySlide({
 
     const kb = KB_DRIFT[index % KB_DRIFT.length];
 
-    if (isActive) {
+    if (isActive && !wasActiveRef.current) {
+      // --- ENTRANCE ---
+      wasActiveRef.current = true;
+      hasPlayedOnceRef.current = true;
       effectFiredRef.current = false;
+
+      // Reset the timeline to beginning and play
       tl.restart();
 
-      // Ken Burns: slow continuous drift (starts after bg entrance)
+      // Ken Burns: slow continuous drift on background
       if (kbRef.current) kbRef.current.kill();
       kbRef.current = gsap.to(bg, {
         xPercent: parseFloat(kb.x), yPercent: parseFloat(kb.y), scale: kb.scale,
@@ -228,8 +214,11 @@ export function StorySlide({
         duration: 3.4, ease: "sine.inOut", yoyo: true, repeat: -1,
         delay: 1.8,
       });
-    } else {
-      // Fast staggered exit: text → fg → bg (reverse of entrance)
+    } else if (!isActive && wasActiveRef.current) {
+      // --- EXIT ---
+      wasActiveRef.current = false;
+
+      // Stop running animations
       stopTypewriter();
       setLine1Text("");
       setLine2Text("");
@@ -240,8 +229,9 @@ export function StorySlide({
       if (idleRef.current) { idleRef.current.kill(); idleRef.current = null; }
       if (idleGlowRef.current) { idleGlowRef.current.kill(); idleGlowRef.current = null; }
 
-      // Staggered exit
+      // Staggered exit: text -> fg -> bg, then reset to initial hidden state
       gsap.to(text, { y: 16, opacity: 0, duration: 0.25, ease: "power3.in", force3D: true });
+
       if (hasSplit && splitContainerRef.current) {
         const pieces = splitContainerRef.current.querySelectorAll(".split-piece");
         pieces.forEach((el, i) => {
@@ -252,14 +242,32 @@ export function StorySlide({
           });
         });
       }
+
       gsap.to(fg, { scale: 0.9, opacity: 0, duration: 0.35, ease: "power3.in", delay: 0.08, force3D: true });
       gsap.to(glow, { opacity: 0, duration: 0.3, delay: 0.08 });
       gsap.to(bg, {
         opacity: 0, duration: 0.4, ease: "power2.in", delay: 0.12, force3D: true,
-        onComplete: () => { tl.progress(0).pause(); },
+        onComplete: () => {
+          // Reset all elements back to their initial hidden positions so
+          // the next entrance plays cleanly from the start.
+          tl.progress(0).pause();
+          // Also reset split pieces back to their starting transforms
+          if (hasSplit && splitContainerRef.current) {
+            const pieces = splitContainerRef.current.querySelectorAll<HTMLElement>(".split-piece");
+            pieces.forEach((el, i) => {
+              const piece = splitFg![i];
+              if (!piece) return;
+              gsap.set(el, {
+                x: piece.fromX, y: piece.fromY,
+                scale: piece.fromScale, rotation: piece.fromRotate,
+                opacity: 0, force3D: true,
+              });
+            });
+          }
+        },
       });
     }
-  }, [isActive, index, stopTypewriter]);
+  }, [isActive, index, hasSplit, splitFg, stopTypewriter]);
 
   return (
     <section className="h-[100dvh] w-full relative overflow-hidden">
@@ -268,9 +276,26 @@ export function StorySlide({
         {index + 1} / {STORY_SLIDES.length}
       </div>
 
-      {/* Background — GSAP entrance + Ken Burns */}
-      <div ref={bgRef} className="absolute inset-0 z-0" style={{}}>
-        <img src={bgSrc} alt="" className="w-full h-full object-cover" loading={index <= 1 ? "eager" : "lazy"} style={{ opacity: 0.8 }} />
+      {/* Background — starts hidden via inline styles, GSAP animates to visible.
+          First slide starts visible so the user sees something immediately. */}
+      <div
+        ref={bgRef}
+        className="absolute inset-0 z-0"
+        style={{
+          opacity: isFirstSlide ? 1 : 0,
+          transform: isFirstSlide
+            ? "translate3d(0, 0, 0) scale(1.06)"
+            : "translate3d(0, 30%, 0) scale(1.08)",
+          willChange: "transform, opacity",
+        }}
+      >
+        <img
+          src={bgSrc}
+          alt=""
+          className="w-full h-full object-cover"
+          loading={index <= 1 ? "eager" : "lazy"}
+          style={{ opacity: 0.8 }}
+        />
         <div className="absolute inset-0 bg-gradient-to-b from-black/10 via-transparent to-black/70" />
       </div>
 
@@ -279,27 +304,69 @@ export function StorySlide({
       {showEffect && effect === "flash" && <FlashEffect />}
       {showEffect && effect === "sparkle-burst" && <SparkleBurstEffect />}
 
-      {/* Foreground — single or split pieces */}
-      <div className="absolute inset-0 flex items-center justify-center z-10" style={{ perspective: "1000px" }}>
-        <div ref={fgRef} style={{ width: "90vw", maxWidth: "600px" }}>
-          <div ref={glowRef} className="absolute -inset-8 rounded-full blur-3xl" style={{
-            background: "radial-gradient(ellipse, rgba(168,85,247,0.3) 0%, rgba(59,130,246,0.15) 40%, transparent 70%)",
-          }} />
+      {/* Foreground — starts hidden via inline styles */}
+      <div
+        className="absolute inset-0 flex items-center justify-center z-10"
+        style={{ perspective: "1000px" }}
+      >
+        <div
+          ref={fgRef}
+          style={{
+            width: "90vw",
+            maxWidth: "600px",
+            // Single fg starts hidden below; split fg container starts visible
+            // (individual split pieces handle their own hidden state)
+            opacity: hasSplit ? 1 : (isFirstSlide ? 1 : 0),
+            transform: hasSplit
+              ? "translate3d(0, 0, 0) scale(1)"
+              : (isFirstSlide
+                ? "translate3d(0, 0, 0) scale(1)"
+                : "translate3d(0, 80px, 0) scale(0.92)"),
+            willChange: "transform, opacity",
+          }}
+        >
+          <div
+            ref={glowRef}
+            className="absolute -inset-8 rounded-full blur-3xl"
+            style={{
+              background: "radial-gradient(ellipse, rgba(168,85,247,0.3) 0%, rgba(59,130,246,0.15) 40%, transparent 70%)",
+              opacity: isFirstSlide ? 1 : 0,
+              transform: isFirstSlide ? "scale(1)" : "scale(0.8)",
+              willChange: "transform, opacity",
+            }}
+          />
 
           {/* Single foreground (default) */}
           {!hasSplit && (
-            <div ref={fgImgRef} style={{}}>
-              <img src={fgSrc} alt={`Scene ${index + 1}`} loading={index <= 1 ? "eager" : "lazy"}
-                className="relative w-full h-auto object-contain" style={{
+            <div
+              ref={fgImgRef}
+              style={{
+                transform: isFirstSlide
+                  ? "rotateX(0deg) rotateY(0deg)"
+                  : "rotateX(6deg) rotateY(-2deg)",
+                willChange: "transform",
+              }}
+            >
+              <img
+                src={fgSrc}
+                alt={`Scene ${index + 1}`}
+                loading={index <= 1 ? "eager" : "lazy"}
+                className="relative w-full h-auto object-contain"
+                style={{
                   maxHeight: "55dvh",
                   filter: "drop-shadow(0 8px 30px rgba(0,0,0,0.6)) drop-shadow(0 0 60px rgba(168,85,247,0.15))",
-                }} />
+                }}
+              />
             </div>
           )}
 
-          {/* Split foreground pieces — each animated independently by GSAP */}
+          {/* Split foreground pieces — each starts at its fromX/fromY/etc via inline styles */}
           {hasSplit && (
-            <div ref={splitContainerRef} className="relative flex items-center justify-center" style={{ minHeight: "40dvh" }}>
+            <div
+              ref={splitContainerRef}
+              className="relative flex items-center justify-center"
+              style={{ minHeight: "40dvh" }}
+            >
               {splitFg!.map((piece, i) => (
                 <img
                   key={i}
@@ -308,9 +375,13 @@ export function StorySlide({
                   className="split-piece absolute h-auto object-contain"
                   loading="eager"
                   style={{
-                    maxHeight: i === splitFg!.length - 1 ? "25dvh" : "50dvh", // sparkles/tiny pieces smaller
+                    maxHeight: i === splitFg!.length - 1 ? "25dvh" : "50dvh",
                     maxWidth: "45vw",
                     filter: "drop-shadow(0 8px 30px rgba(0,0,0,0.6)) drop-shadow(0 0 40px rgba(168,85,247,0.15))",
+                    // Initial hidden state — set via CSS so there's no flash
+                    opacity: 0,
+                    transform: `translate3d(${piece.fromX}px, ${piece.fromY}px, 0) scale(${piece.fromScale}) rotate(${piece.fromRotate}deg)`,
+                    willChange: "transform, opacity",
                   }}
                 />
               ))}
@@ -319,20 +390,40 @@ export function StorySlide({
         </div>
       </div>
 
-      {/* Text — GSAP entrance + typewriter */}
-      <div ref={textRef} className="absolute bottom-8 inset-x-0 z-20 px-6" style={{}}>
+      {/* Text — starts hidden via inline styles */}
+      <div
+        ref={textRef}
+        className="absolute bottom-8 inset-x-0 z-20 px-6"
+        style={{
+          opacity: isFirstSlide ? 1 : 0,
+          transform: isFirstSlide
+            ? "translate3d(0, 0, 0)"
+            : "translate3d(0, 30px, 0)",
+          willChange: "transform, opacity",
+        }}
+      >
         <div className="max-w-[700px] mx-auto text-center">
-          <p className="text-3xl md:text-4xl leading-snug tracking-wide font-bold" style={{
-            color: "#fff", textShadow: "0 2px 4px rgba(0,0,0,1), 0 0 20px rgba(0,0,0,0.8), 0 0 60px rgba(0,0,0,0.6)", minHeight: "1.5em",
-          }}>
+          <p
+            className="text-3xl md:text-4xl leading-snug tracking-wide font-bold"
+            style={{
+              color: "#fff",
+              textShadow: "0 2px 4px rgba(0,0,0,1), 0 0 20px rgba(0,0,0,0.8), 0 0 60px rgba(0,0,0,0.6)",
+              minHeight: "1.5em",
+            }}
+          >
             {line1Text}
             {line1Text.length > 0 && line1Text.length < lines[0].length && (
               <span className="inline-block w-[2px] h-[1.1em] bg-purple-300 align-middle ml-0.5 animate-pulse" />
             )}
           </p>
-          <p className="text-3xl md:text-4xl leading-snug tracking-wide font-bold mt-2" style={{
-            color: "#fff", textShadow: "0 2px 4px rgba(0,0,0,1), 0 0 20px rgba(0,0,0,0.8), 0 0 60px rgba(0,0,0,0.6)", minHeight: "1.5em",
-          }}>
+          <p
+            className="text-3xl md:text-4xl leading-snug tracking-wide font-bold mt-2"
+            style={{
+              color: "#fff",
+              textShadow: "0 2px 4px rgba(0,0,0,1), 0 0 20px rgba(0,0,0,0.8), 0 0 60px rgba(0,0,0,0.6)",
+              minHeight: "1.5em",
+            }}
+          >
             {line2Text}
             {line2Text.length > 0 && line2Text.length < lines[1].length && (
               <span className="inline-block w-[2px] h-[1.1em] bg-purple-300 align-middle ml-0.5 animate-pulse" />

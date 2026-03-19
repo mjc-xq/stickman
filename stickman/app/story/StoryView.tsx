@@ -71,7 +71,7 @@ export function StoryView() {
     return () => window.removeEventListener("resize", draw);
   }, []);
 
-  // Track active slide
+  // Track active slide via scroll position
   useEffect(() => {
     const container = scrollRef.current;
     if (!container) return;
@@ -115,7 +115,7 @@ export function StoryView() {
     const fallbackTimer = setTimeout(restore, 1000);
   }, []);
 
-  // Wand tap → advance to next slide (subscribe directly to bus for reliability)
+  // Wand tap -> advance to next slide
   useEffect(() => {
     const unsub = bus.subscribeType("gesture", (event) => {
       if (event.gesture !== "Tap") return;
@@ -148,8 +148,7 @@ export function StoryView() {
     return () => window.removeEventListener("keydown", handleKey);
   }, [goToSlide]);
 
-  // Don't show wand pointer on the finale slide (it has its own particle pointer)
-  // Preload adjacent slide images for smooth GSAP transitions
+  // Preload adjacent slide images
   useEffect(() => {
     const preload = (src: string) => { const img = new Image(); img.src = src; };
     [activeSlide, activeSlide + 1].forEach((i) => {
@@ -191,9 +190,7 @@ export function StoryView() {
       {/* Shooting stars */}
       <ShootingStars />
 
-      {/* Wand pointer removed — was a full-screen 60fps canvas for 6 dots, not worth the cost */}
-
-      {/* Scroll snap container */}
+      {/* Scroll snap container — ALL slides always rendered (only 8+1, no need to virtualize) */}
       <div
         ref={scrollRef}
         className="relative z-10 w-full h-full overflow-y-auto"
@@ -202,31 +199,32 @@ export function StoryView() {
           WebkitOverflowScrolling: "touch",
         }}
       >
-        {STORY_SLIDES.map((slide, index) => {
-          // Only render slides within 1 of active — saves GPU memory on iPad
-          const nearby = Math.abs(index - activeSlide) <= 1;
-          return (
-            <div key={index} ref={setSlideRef(index)} className="h-[100dvh] w-full snap-start" style={{ scrollSnapAlign: "start" }}>
-              {nearby && (
-                <StorySlide
-                  lines={slide.lines}
-                  bgSrc={slide.bg}
-                  fgSrc={slide.fg}
-                  index={index}
-                  isActive={activeSlide === index}
-                  effect={slide.effect}
-                  effectTriggerWord={slide.effectTriggerWord}
-                  splitFg={slide.splitFg}
-                />
-              )}
-            </div>
-          );
-        })}
+        {STORY_SLIDES.map((slide, index) => (
+          <div
+            key={index}
+            ref={setSlideRef(index)}
+            className="h-[100dvh] w-full snap-start"
+            style={{ scrollSnapAlign: "start" }}
+          >
+            <StorySlide
+              lines={slide.lines}
+              bgSrc={slide.bg}
+              fgSrc={slide.fg}
+              index={index}
+              isActive={activeSlide === index}
+              effect={slide.effect}
+              effectTriggerWord={slide.effectTriggerWord}
+              splitFg={slide.splitFg}
+            />
+          </div>
+        ))}
 
-        <div ref={setSlideRef(STORY_SLIDES.length)} className="h-[100dvh] w-full snap-start" style={{ scrollSnapAlign: "start" }}>
-          {Math.abs(STORY_SLIDES.length - activeSlide) <= 1 && (
-            <HappyBirthdaySlide isActive={activeSlide === STORY_SLIDES.length} />
-          )}
+        <div
+          ref={setSlideRef(STORY_SLIDES.length)}
+          className="h-[100dvh] w-full snap-start"
+          style={{ scrollSnapAlign: "start" }}
+        >
+          <HappyBirthdaySlide isActive={activeSlide === STORY_SLIDES.length} />
         </div>
       </div>
 
