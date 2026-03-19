@@ -78,7 +78,6 @@ export function StorySlide({ lines, bgSrc, fgSrc, index, isActive }: StorySlideP
     }
   }, [isActive]);
 
-  const bgVisible = phase !== "hidden";
   const fgVisible = phase === "fg" || phase === "text";
   const textVisible = phase === "text";
 
@@ -98,32 +97,31 @@ export function StorySlide({ lines, bgSrc, fgSrc, index, isActive }: StorySlideP
           src={bgSrc}
           alt=""
           className="w-full h-full object-cover"
-          style={{
-            opacity: bgVisible ? 0.75 : 0,
-            transition: "opacity 1s ease-out",
-          }}
+          style={{ opacity: 0.75 }}
         />
         {/* Darken bottom for text readability */}
         <div className="absolute inset-0 bg-gradient-to-b from-black/10 via-transparent to-black/70" />
       </div>
 
-      {/* Foreground characters — slides up from below */}
+      {/* Foreground characters — slides up from below with slight 3D float */}
       <div
-        className="absolute inset-0 flex items-center justify-center z-10"
-        style={{
-          opacity: fgVisible ? 1 : 0,
-          transform: fgVisible ? "translateY(0)" : "translateY(25%)",
-          transition: "opacity 0.8s ease-out, transform 1s cubic-bezier(0.16, 1, 0.3, 1)",
-        }}
+        className="absolute inset-0 flex items-center justify-center z-10 overflow-hidden"
+        style={{ perspective: "1200px" }}
       >
-        <div className="relative w-[90vw] max-w-[600px] max-h-[55dvh]">
+        <div
+          className="relative w-[90vw] max-w-[600px] max-h-[55dvh]"
+          style={{
+            transform: fgVisible
+              ? "translateY(0) translateZ(30px) rotateX(1deg)"
+              : "translateY(150vh)",
+            transition: fgVisible ? "transform 1.2s cubic-bezier(0.16, 1, 0.3, 1)" : "none",
+          }}
+        >
           {/* Glow behind characters */}
           <div
             className="absolute -inset-8 rounded-full blur-3xl"
             style={{
               background: "radial-gradient(ellipse, rgba(168,85,247,0.3) 0%, rgba(59,130,246,0.15) 40%, transparent 70%)",
-              opacity: fgVisible ? 1 : 0,
-              transition: "opacity 2s ease-out",
             }}
           />
           <img
@@ -141,9 +139,8 @@ export function StorySlide({ lines, bgSrc, fgSrc, index, isActive }: StorySlideP
       <div
         className="absolute bottom-8 inset-x-0 z-20 px-6"
         style={{
-          opacity: textVisible ? 1 : 0,
-          transform: textVisible ? "translateY(0)" : "translateY(15px)",
-          transition: "opacity 0.5s ease-out, transform 0.5s ease-out",
+          transform: textVisible ? "translateY(0)" : "translateY(30px)",
+          transition: "transform 0.5s ease-out",
         }}
       >
         <div className="max-w-[700px] mx-auto text-center">
