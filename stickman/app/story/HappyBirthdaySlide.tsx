@@ -262,8 +262,8 @@ export function HappyBirthdaySlide({ isActive }: HappyBirthdaySlideProps) {
       const t = performance.now() * 0.001;
       const elapsed = t - activatedAt;
 
-      // Draw moon behind particles
-      drawMoon(t);
+      // Draw moon behind particles (only after stars have settled into text, ~4s)
+      if (elapsed > 4) drawMoon(t);
 
       // Check if it's time to morph text → face
       if (!morphedToFace && elapsed > MORPH_DELAY_S && faceImg && faceLoaded) {

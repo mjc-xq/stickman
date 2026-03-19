@@ -118,6 +118,8 @@ SCENE: Cece standing on a grassy hilltop at night, pointing her glowing wand up 
     refs: ["cece", "huey"],
     prompt: `${BASE_STYLE}${CHARACTER_CECE}${CHARACTER_HUEY}
 
+IMPORTANT: Do NOT include any text, words, letters, captions, titles, or labels anywhere in the image. Pure illustration only.
+
 SCENE: A magical garden at night. Huey the chunky tan bully breed dog is leaping and bounding after a sparkly magical comet trail, tongue out, ears flapping, pure joy. The comet trail is made of golden and purple sparkles that loop and swirl through the air. Cece is behind him laughing hysterically, wand in hand, creating more sparkle trails for Huey to chase. Glowing flowers and fireflies surround them.`,
   },
   {

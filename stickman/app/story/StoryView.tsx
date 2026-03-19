@@ -92,12 +92,22 @@ export function StoryView() {
     slideRefs.current[index] = el;
   }, []);
 
-  // Navigate to a specific slide using scrollTo (works better with scroll-snap than scrollIntoView)
+  // Navigate to a specific slide
+  // iOS Safari: scroll-snap fights programmatic smooth scroll, so we
+  // temporarily disable snap, scroll, then re-enable after it settles.
   const goToSlide = useCallback((index: number) => {
     const container = scrollRef.current;
-    if (!container) return;
-    const slideHeight = container.clientHeight;
-    container.scrollTo({ top: index * slideHeight, behavior: "smooth" });
+    const el = slideRefs.current[index];
+    if (!container || !el) return;
+
+    container.style.scrollSnapType = "none";
+    el.scrollIntoView({ behavior: "smooth", block: "start" });
+
+    const restore = () => { container.style.scrollSnapType = "y mandatory"; };
+    // scrollend is ideal but not universally supported; timeout as fallback
+    const onEnd = () => { restore(); container.removeEventListener("scrollend", onEnd); };
+    container.addEventListener("scrollend", onEnd, { once: true });
+    setTimeout(restore, 1000);
   }, []);
 
   // Wand tap → advance to next slide (subscribe directly to bus for reliability)
