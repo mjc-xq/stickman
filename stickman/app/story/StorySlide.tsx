@@ -145,7 +145,7 @@ export function StorySlide({ lines, bgSrc, fgSrc, index, isActive }: StorySlideP
       >
         <div className="max-w-[700px] mx-auto text-center">
           <p
-            className="text-3xl md:text-5xl leading-snug tracking-wide font-bold"
+            className="text-3xl md:text-4xl leading-snug tracking-wide font-bold"
             style={{
               color: "#ffffff",
               textShadow: "0 2px 4px rgba(0,0,0,1), 0 0 20px rgba(0,0,0,0.8), 0 0 60px rgba(0,0,0,0.6), 0 0 10px rgba(168,85,247,0.3)",
