@@ -19,24 +19,20 @@ export function StorySlide({ lines, bgSrc, fgSrc, index, isActive, effect }: Sto
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [showEffect, setShowEffect] = useState(false);
 
-  // Staggered entrance: bg → effect → fg slides up → text types in
   useEffect(() => {
     if (!isActive) return;
     let cancelled = false;
 
     setPhase("bg");
 
-    // Trigger per-slide effect right after bg appears
     const effectTimer = setTimeout(() => {
       if (!cancelled) setShowEffect(true);
     }, 300);
 
-    // Foreground slides up
     const fgTimer = setTimeout(() => {
       if (!cancelled) setPhase("fg");
-    }, 600);
+    }, 800);
 
-    // Text types in
     const textTimer = setTimeout(() => {
       if (cancelled) return;
       setPhase("text");
@@ -65,7 +61,7 @@ export function StorySlide({ lines, bgSrc, fgSrc, index, isActive, effect }: Sto
         }
       };
       type();
-    }, 1500);
+    }, 1800);
 
     return () => {
       cancelled = true;
@@ -85,6 +81,7 @@ export function StorySlide({ lines, bgSrc, fgSrc, index, isActive, effect }: Sto
     }
   }, [isActive]);
 
+  const bgActive = phase !== "hidden";
   const fgVisible = phase === "fg" || phase === "text";
   const textVisible = phase === "text";
 
@@ -98,14 +95,25 @@ export function StorySlide({ lines, bgSrc, fgSrc, index, isActive, effect }: Sto
         {index + 1} / {STORY_SLIDES.length}
       </div>
 
-      {/* Background layer */}
-      <div className="absolute inset-0 z-0">
+      {/* Background — GPU-accelerated zoom-in from 1.15 → 1.05 (Ken Burns lite) */}
+      <div
+        className="absolute inset-0 z-0"
+        style={{
+          transform: bgActive
+            ? "translate3d(0,0,0) scale(1.05)"
+            : "translate3d(0,0,0) scale(1.15)",
+          transition: bgActive
+            ? "transform 8s cubic-bezier(0.25, 0.1, 0.25, 1)"
+            : "none",
+          willChange: "transform",
+        }}
+      >
         <img
           src={bgSrc}
           alt=""
           className="w-full h-full object-cover"
           loading={index === 0 ? "eager" : "lazy"}
-          style={{ opacity: 0.75 }}
+          style={{ opacity: 0.8 }}
         />
         <div className="absolute inset-0 bg-gradient-to-b from-black/10 via-transparent to-black/70" />
       </div>
@@ -115,20 +123,26 @@ export function StorySlide({ lines, bgSrc, fgSrc, index, isActive, effect }: Sto
       {showEffect && effect === "flash" && <FlashEffect />}
       {showEffect && effect === "sparkle-burst" && <SparkleBurstEffect />}
 
-      {/* Foreground characters — slides up from below */}
+      {/* Foreground — GPU-accelerated slide up from below viewport */}
       <div
-        className="absolute inset-0 flex items-center justify-center z-10 overflow-hidden"
-        style={{ perspective: "1200px" }}
+        className="absolute inset-0 flex items-center justify-center z-10"
+        style={{ perspective: "1000px" }}
       >
         <div
-          className="relative w-[90vw] max-w-[600px] max-h-[55dvh]"
           style={{
+            width: "90vw",
+            maxWidth: "600px",
+            maxHeight: "55dvh",
             transform: fgVisible
-              ? "translateY(0) translateZ(30px) rotateX(1deg)"
-              : "translateY(150vh)",
-            transition: fgVisible ? "transform 1.2s cubic-bezier(0.16, 1, 0.3, 1)" : "none",
+              ? "translate3d(0, 0, 40px) rotateX(0.5deg)"
+              : "translate3d(0, 100vh, 0)",
+            transition: fgVisible
+              ? "transform 1s cubic-bezier(0.34, 1.56, 0.64, 1)"
+              : "none",
+            willChange: "transform",
           }}
         >
+          {/* Glow */}
           <div
             className="absolute -inset-8 rounded-full blur-3xl"
             style={{
@@ -139,20 +153,27 @@ export function StorySlide({ lines, bgSrc, fgSrc, index, isActive, effect }: Sto
             src={fgSrc}
             alt={`Story scene ${index + 1}`}
             loading={index === 0 ? "eager" : "lazy"}
-            className="relative w-full h-auto max-h-[55dvh] object-contain"
+            className="relative w-full h-auto object-contain"
             style={{
-              filter: "drop-shadow(0 4px 20px rgba(0,0,0,0.5)) drop-shadow(0 0 40px rgba(168,85,247,0.2))",
+              maxHeight: "55dvh",
+              filter: "drop-shadow(0 8px 30px rgba(0,0,0,0.6)) drop-shadow(0 0 60px rgba(168,85,247,0.15))",
             }}
           />
         </div>
       </div>
 
-      {/* Text at bottom */}
+      {/* Text at bottom — slides up */}
       <div
         className="absolute bottom-8 inset-x-0 z-20 px-6"
         style={{
-          transform: textVisible ? "translateY(0)" : "translateY(30px)",
-          transition: "transform 0.5s ease-out",
+          transform: textVisible
+            ? "translate3d(0, 0, 0)"
+            : "translate3d(0, 40px, 0)",
+          opacity: textVisible ? 1 : 0,
+          transition: textVisible
+            ? "transform 0.6s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.4s ease-out"
+            : "none",
+          willChange: "transform, opacity",
         }}
       >
         <div className="max-w-[700px] mx-auto text-center">
@@ -205,7 +226,6 @@ function ShootingStarEffect() {
           animation: "slideShootingStar 2s ease-out forwards",
         }}
       />
-      {/* Trail sparkles */}
       {[0, 1, 2, 3, 4].map((i) => (
         <div
           key={i}
@@ -226,7 +246,7 @@ function ShootingStarEffect() {
   );
 }
 
-/** Quick white flash — for the FLASH moment */
+/** Quick white flash */
 function FlashEffect() {
   return (
     <div
@@ -239,7 +259,7 @@ function FlashEffect() {
   );
 }
 
-/** Sparkle burst — particles radiate outward from center */
+/** Sparkle burst from center */
 function SparkleBurstEffect() {
   return (
     <div className="absolute inset-0 z-[5] pointer-events-none flex items-center justify-center">
