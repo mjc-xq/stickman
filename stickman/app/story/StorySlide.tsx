@@ -332,7 +332,7 @@ export function StorySlide({
       {/* Fairy flight animation */}
       {showFairy && <FairyFlight onComplete={() => setShowFairy(false)} />}
 
-      {/* Floating bubble Cece — only when this slide is active */}
+      {/* Floating bubble Cece — mounts when active, stays until slide exits */}
       {floatingBubble && isActive && <FloatingBubbleCece />}
 
       {/* Montage: cycling Cece+Alex image pairs */}
@@ -372,8 +372,8 @@ export function StorySlide({
             }}
           />
 
-          {/* Single foreground (default) */}
-          {!hasSplit && (
+          {/* Single foreground (default) — hidden when montage or split is active */}
+          {!hasSplit && !montage && (
             <div
               ref={fgImgRef}
               style={{

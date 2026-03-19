@@ -12,10 +12,6 @@ const FAIRY_SPRITES = [
 
 interface TrailDot { id: number; x: number; y: number; }
 
-/**
- * Fairy Cece enters from off-screen, does one smooth swoop, then
- * shrinks into the wand. All motion on a single GSAP timeline for smoothness.
- */
 export function FairyFlight({ onComplete }: { onComplete?: () => void }) {
   const fairyRef = useRef<HTMLDivElement>(null);
   const [spriteIdx, setSpriteIdx] = useState(0);
@@ -29,38 +25,44 @@ export function FairyFlight({ onComplete }: { onComplete?: () => void }) {
     const vw = window.innerWidth;
     const vh = window.innerHeight;
     const size = Math.min(vw, vh) * 0.13;
-    const cx = (v: number) => v - size / 2; // center offset
 
-    // Single smooth timeline — no separate tweens that could conflict
+    // Start off-screen right, hidden
+    gsap.set(fairy, {
+      x: vw + 50, y: vh * 0.15,
+      scaleX: 0.5, scaleY: 0.5, // use explicit X/Y to avoid conflicts
+      opacity: 1, force3D: true,
+    });
+
     const tl = gsap.timeline({ onComplete });
 
-    // Start off-screen right
-    gsap.set(fairy, { x: vw + 50, y: vh * 0.15, scale: 0.5, opacity: 1, force3D: true });
-
-    // Segment 1: Fly in from right across to left (1.2s)
-    tl.call(() => setSpriteIdx(0), [], 0); // fly-right (but moving left, so flip)
-    tl.set(fairy, { scaleX: -1 }, 0);
+    // Segment 1: Fly in from right to left side (fly-right sprite, flipped)
+    tl.call(() => setSpriteIdx(0), [], 0);
     tl.to(fairy, {
-      x: cx(vw * 0.15), y: cx(vh * 0.25), scale: 1,
+      x: vw * 0.15 - size / 2,
+      y: vh * 0.25 - size / 2,
+      scaleX: -1, scaleY: 1, // negative X = flipped horizontally
       duration: 1.2, ease: "power1.out", force3D: true,
     }, 0);
 
-    // Segment 2: Arc up to top center (1.0s)
-    tl.call(() => setSpriteIdx(1), [], 1.2); // fly-up
-    tl.set(fairy, { scaleX: 1 }, 1.2);
+    // Segment 2: Arc up to top center (fly-up sprite, unflipped)
+    tl.call(() => setSpriteIdx(1), [], 1.2);
     tl.to(fairy, {
-      x: cx(vw * 0.5), y: cx(vh * 0.06),
+      x: vw * 0.5 - size / 2,
+      y: vh * 0.06 - size / 2,
+      scaleX: 1, scaleY: 1,
       duration: 1.0, ease: "sine.inOut", force3D: true,
     }, 1.2);
 
-    // Segment 3: Wave at top (0.6s hold)
-    tl.call(() => setSpriteIdx(3), [], 2.2); // wave
+    // Segment 3: Wave at top (hold position)
+    tl.call(() => setSpriteIdx(3), [], 2.2);
 
-    // Segment 4: Dive down into wand position (1.0s)
-    tl.call(() => setSpriteIdx(2), [], 2.8); // dive
+    // Segment 4: Dive into wand (dive sprite, shrinking)
+    tl.call(() => setSpriteIdx(2), [], 2.8);
     tl.to(fairy, {
-      x: cx(vw * 0.48), y: cx(vh * 0.38),
-      scale: 0.12, duration: 1.0, ease: "power2.in", force3D: true,
+      x: vw * 0.48 - size / 2,
+      y: vh * 0.38 - size / 2,
+      scaleX: 0.12, scaleY: 0.12,
+      duration: 1.0, ease: "power2.in", force3D: true,
     }, 2.8);
 
     // Segment 5: Disappear

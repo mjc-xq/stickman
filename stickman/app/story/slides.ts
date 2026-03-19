@@ -125,8 +125,8 @@ export const STORY_SLIDES: Slide[] = [
       "Press the button to feed her. Hold it to control the TV.",
       "But mostly — just have fun.",
     ],
-    bg: "/images/story/slide-07-bg.png",
-    fg: "/images/story/slide-07-fg.png",
+    bg: "/images/story/montage-bg.png",
+    fg: "/images/story/slide-06-fg.png",
     montage: [
       { ceceSrc: "/images/story/split/montage-cece-zap.png", alexSrc: "/images/story/split/montage-alex-wow.png" },
       { ceceSrc: "/images/story/split/montage-cece-levitate.png", alexSrc: "/images/story/split/montage-alex-laugh.png" },

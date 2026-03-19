@@ -11,9 +11,9 @@ const BUBBLE_SPRITES = [
 ];
 
 /**
- * Tiny bubble Cece floats around on smooth curved paths,
- * growing and shrinking, cycling through cute sprites.
- * Silly, playful feel.
+ * Tiny bubble Cece pops out of the wand area, floats around the top
+ * of the screen with bubbly bobbing motion, cycles sprites.
+ * Stays visible until slide changes (parent unmounts this component).
  */
 export function FloatingBubbleCece() {
   const bubbleRef = useRef<HTMLDivElement>(null);
@@ -25,36 +25,42 @@ export function FloatingBubbleCece() {
 
     const vw = window.innerWidth;
     const vh = window.innerHeight;
-    const size = Math.min(vw, vh) * 0.15;
 
-    // Start in the top area
+    // Start at wand position (center of screen) at tiny scale
     gsap.set(el, {
-      x: vw * 0.5 - size / 2,
-      y: vh * 0.1 - size / 2,
-      scale: 0,
+      x: vw * 0.5 - 40,
+      y: vh * 0.4 - 40,
+      scaleX: 0, scaleY: 0,
       opacity: 0,
       force3D: true,
     });
 
-    // Pop in
-    const tl = gsap.timeline();
-    tl.to(el, { scale: 1, opacity: 1, duration: 0.6, ease: "back.out(2)" }, 0);
+    // Pop out of wand with a bounce
+    const entranceTl = gsap.timeline();
+    entranceTl.to(el, {
+      scaleX: 1, scaleY: 1, opacity: 1,
+      duration: 0.8, ease: "back.out(2.5)",
+    });
+    // Float up to the safe zone (top of screen)
+    entranceTl.to(el, {
+      x: vw * 0.5 - 40,
+      y: vh * 0.1 - 40,
+      duration: 1.2, ease: "power2.out", force3D: true,
+    }, 0.4);
 
-    // Float around on random curved paths — chain of tweens
+    // After entrance, start floating randomly in top zone
+    let floatTween: gsap.core.Tween | null = null;
     const floatLoop = () => {
-      // Stay in the TOP area of screen to avoid characters in the center/bottom
-      // Safe zone: x 10-90%, y 3-25% (above the character foreground)
-      const tx = vw * (0.1 + Math.random() * 0.8) - size / 2;
-      const ty = vh * (0.03 + Math.random() * 0.22) - size / 2;
-      const dur = 2.5 + Math.random() * 2;
-      const scaleTarget = 0.7 + Math.random() * 0.5; // 0.7 to 1.2
-      const rot = (Math.random() - 0.5) * 12;
+      // Bubbly path: top area only (3-22% of screen height)
+      const tx = vw * (0.12 + Math.random() * 0.76) - 40;
+      const ty = vh * (0.03 + Math.random() * 0.19) - 40;
+      const dur = 3 + Math.random() * 2;
 
-      gsap.to(el, {
-        x: tx,
-        y: ty,
-        scale: scaleTarget,
-        rotation: rot,
+      floatTween = gsap.to(el, {
+        x: tx, y: ty,
+        scaleX: 0.75 + Math.random() * 0.4,
+        scaleY: 0.75 + Math.random() * 0.4,
+        rotation: (Math.random() - 0.5) * 10,
         duration: dur,
         ease: "sine.inOut",
         force3D: true,
@@ -62,16 +68,16 @@ export function FloatingBubbleCece() {
       });
     };
 
-    // Start floating after pop-in
-    tl.call(floatLoop, [], 0.8);
+    entranceTl.call(floatLoop, [], 1.6);
 
-    // Cycle sprites every 2.5s
+    // Cycle sprites
     const spriteInterval = setInterval(() => {
-      setSpriteIdx((prev) => (prev + 1) % BUBBLE_SPRITES.length);
+      setSpriteIdx(prev => (prev + 1) % BUBBLE_SPRITES.length);
     }, 2500);
 
     return () => {
-      tl.kill();
+      entranceTl.kill();
+      if (floatTween) floatTween.kill();
       gsap.killTweensOf(el);
       clearInterval(spriteInterval);
     };
@@ -81,31 +87,16 @@ export function FloatingBubbleCece() {
     <div
       ref={bubbleRef}
       className="absolute z-[12] pointer-events-none"
-      style={{
-        width: `${Math.min(window.innerWidth, window.innerHeight) * 0.15}px`,
-        height: `${Math.min(window.innerWidth, window.innerHeight) * 0.15}px`,
-      }}
+      style={{ width: 80, height: 80 }}
     >
       {BUBBLE_SPRITES.map((src, i) => (
-        <img
-          key={i}
-          src={src}
-          alt=""
-          className="absolute inset-0 w-full h-full object-contain"
-          style={{
-            opacity: spriteIdx === i ? 1 : 0,
-            transition: "opacity 0.3s ease",
-          }}
-        />
+        <img key={i} src={src} alt="" className="absolute inset-0 w-full h-full object-contain"
+          style={{ opacity: spriteIdx === i ? 1 : 0, transition: "opacity 0.3s ease" }} />
       ))}
-      {/* Soft glow */}
-      <div
-        className="absolute -inset-3 rounded-full"
-        style={{
-          background: "radial-gradient(circle, rgba(255,215,0,0.2) 0%, transparent 70%)",
-          animation: "fairyGlow 1.5s ease-in-out infinite alternate",
-        }}
-      />
+      <div className="absolute -inset-2 rounded-full" style={{
+        background: "radial-gradient(circle, rgba(255,215,0,0.2) 0%, transparent 70%)",
+        animation: "fairyGlow 1.5s ease-in-out infinite alternate",
+      }} />
     </div>
   );
 }
