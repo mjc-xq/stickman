@@ -89,7 +89,7 @@ export const STORY_SLIDES: Slide[] = [
     fg: "/images/story/slide-04-fg.png",
     effect: "flash",
     effectTriggerWord: "FLASH",
-    fairyTriggerWord: "tiny version",
+    fairyTriggerWord: "FLASH",
   },
   {
     lines: [
