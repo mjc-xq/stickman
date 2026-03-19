@@ -581,10 +581,14 @@ static const char* const BLE_OFF_TEXTS[] = {
 #define BLE_OFF_TEXT_N 5
 
 // ── Feed sprites + texts ──
+// Eating poses first (indices 0-3), then done/satisfied poses (4-5)
 static const SpriteIdx FEED_SPRITES[] = {
-  SPRITE_FEED_1, SPRITE_FEED_2, SPRITE_FEED_3, SPRITE_FEED_4, SPRITE_FEED_5, SPRITE_FEED_SHRIMP
+  SPRITE_FEED_1, SPRITE_FEED_2, SPRITE_FEED_3, SPRITE_FEED_SHRIMP,  // eating
+  SPRITE_FEED_4, SPRITE_FEED_5                                       // done (chipmunk cheeks, belly rub)
 };
 #define FEED_SPRITE_N 6
+#define FEED_EAT_N 4   // first 4 are eating poses
+#define FEED_DONE_START 4  // done poses start at index 4
 
 static const char* const FEED_TEXTS[] = {
   "Yum!", "Nom nom!", "Tasty~", "More leaves!", "*munch munch*", "So good!"
@@ -1019,11 +1023,11 @@ void loop() {
       // Feed Cece
       if (happiness < 90) {
         changeHappiness(8, "feed");
-        SpriteIdx eatSprite = pick(FEED_SPRITES, 4);  // first 4 are eating poses
+        SpriteIdx eatSprite = pick(FEED_SPRITES, FEED_EAT_N);  // eating poses only
         drawSprite(eatSprite);
         showMessage(pick(FEED_TEXTS, FEED_TEXT_N));
         delay(600);
-        SpriteIdx doneSprite = (random(100) < 50) ? SPRITE_FEED_4 : SPRITE_FEED_5;
+        SpriteIdx doneSprite = FEED_SPRITES[FEED_DONE_START + random(FEED_SPRITE_N - FEED_DONE_START)];
         drawSprite(doneSprite);
         showMessage("Yum!");
         state = STATE_RESULT; resultTime = now;
