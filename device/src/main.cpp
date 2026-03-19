@@ -1011,15 +1011,31 @@ void loop() {
   bleUpdate(); // handle BLE button release timing
   unsigned long now = millis();
 
-  // ── BtnA: short=feed (active) or wand-mount (debug), long=BLE toggle ──
-  static bool btnAHeld = false, btnALongFired = false;
-  if (M5.BtnA.wasPressed()) {
-    lastButtonPress = now;
-    btnAHeld = true; btnALongFired = false;
-    publishEvent("btn", "{\\\"button\\\":\\\"A\\\",\\\"state\\\":\\\"down\\\"}");
+  // ── BtnA: click=feed (active) or wand-mount (debug), hold=BLE toggle ──
+  if (M5.BtnA.wasPressed()) { lastButtonPress = now; publishEvent("btn", "{\\\"button\\\":\\\"A\\\",\\\"state\\\":\\\"down\\\"}"); }
+  if (M5.BtnA.wasReleased()) publishEvent("btn", "{\\\"button\\\":\\\"A\\\",\\\"state\\\":\\\"up\\\"}");
+  if (M5.BtnA.wasClicked()) {
+    if (mode == MODE_ACTIVE && tossState == TOSS_IDLE) {
+      // Feed Cece
+      if (happiness < 90) {
+        changeHappiness(8, "feed");
+        SpriteIdx eatSprite = pick(FEED_SPRITES, 4);  // first 4 are eating poses
+        drawSprite(eatSprite);
+        showMessage(pick(FEED_TEXTS, FEED_TEXT_N));
+        delay(600);
+        SpriteIdx doneSprite = (random(100) < 50) ? SPRITE_FEED_4 : SPRITE_FEED_5;
+        drawSprite(doneSprite);
+        showMessage("Yum!");
+        state = STATE_RESULT; resultTime = now;
+      }
+    } else if (mode == MODE_DEBUG) {
+      wandMount = !wandMount;
+      nvsWriteWandMount(wandMount);
+      Serial.printf("Wand mount: %s\n", wandMount ? "ON" : "OFF");
+      drawDebugScreen();
+    }
   }
-  if (btnAHeld && !btnALongFired && M5.BtnA.pressedFor(1500)) {
-    btnALongFired = true;
+  if (M5.BtnA.wasHold()) {
     if (mode == MODE_ACTIVE) {
       bleMode = bleMode ? 0 : 1;
       nvsWriteBleMode(bleMode);
@@ -1033,42 +1049,24 @@ void loop() {
       state = STATE_RESULT; resultTime = now;
     }
   }
-  if (M5.BtnA.wasReleased()) {
-    publishEvent("btn", "{\\\"button\\\":\\\"A\\\",\\\"state\\\":\\\"up\\\"}");
-    if (btnAHeld && !btnALongFired) {
-      if (mode == MODE_ACTIVE && tossState == TOSS_IDLE) {
-        // Feed Cece
-        if (happiness < 90) {
-          changeHappiness(8, "feed");
-          // Show eating sprite, then satisfied sprite
-          SpriteIdx eatSprite = pick(FEED_SPRITES, 4);  // first 4 are eating poses (leaf, munch, apple, shrimp)
-          drawSprite(eatSprite);
-          showMessage(pick(FEED_TEXTS, FEED_TEXT_N));
-          delay(600);
-          SpriteIdx doneSprite = (random(100) < 50) ? SPRITE_FEED_4 : SPRITE_FEED_5;  // stuffed or satisfied
-          drawSprite(doneSprite);
-          showMessage("Yum!");
-          state = STATE_RESULT; resultTime = now;
-        }
-      } else if (mode == MODE_DEBUG) {
-        wandMount = !wandMount;
-        nvsWriteWandMount(wandMount);
-        Serial.printf("Wand mount: %s\n", wandMount ? "ON" : "OFF");
-        drawDebugScreen();
-      }
-    }
-    btnAHeld = false;
-  }
 
-  // ── BtnB: short=stats (active) or exit debug, long=enter debug ──
-  static bool btnBHeld = false, btnBLongFired = false;
-  if (M5.BtnB.wasPressed()) {
-    lastButtonPress = now;
-    btnBHeld = true; btnBLongFired = false;
-    publishEvent("btn", "{\\\"button\\\":\\\"B\\\",\\\"state\\\":\\\"down\\\"}");
+  // ── BtnB: click=stats (active) or exit debug, hold=enter debug ──
+  if (M5.BtnB.wasPressed()) { lastButtonPress = now; publishEvent("btn", "{\\\"button\\\":\\\"B\\\",\\\"state\\\":\\\"down\\\"}"); }
+  if (M5.BtnB.wasReleased()) publishEvent("btn", "{\\\"button\\\":\\\"B\\\",\\\"state\\\":\\\"up\\\"}");
+  if (M5.BtnB.wasClicked()) {
+    if (mode == MODE_ACTIVE) {
+      drawStatsOverlay();
+      state = STATE_RESULT; resultTime = now;
+    } else if (mode == MODE_DEBUG) {
+      mode = MODE_ACTIVE;
+      publishEvent("mode", "{\\\"mode\\\":\\\"active\\\"}");
+      tossState = TOSS_IDLE; prevHpMag = 0; tapSettleCount = -1;
+      for (int i = 0; i < 3; i++) { hpState[i] = 0; hpPrevRaw[i] = 0; }
+      state = STATE_READY;
+      showReady();
+    }
   }
-  if (btnBHeld && !btnBLongFired && M5.BtnB.pressedFor(1500)) {
-    btnBLongFired = true;
+  if (M5.BtnB.wasHold()) {
     if (mode == MODE_ACTIVE) {
       mode = MODE_DEBUG;
       publishEvent("mode", "{\\\"mode\\\":\\\"debug\\\"}");
@@ -1077,24 +1075,6 @@ void loop() {
       state = STATE_READY;
       showReady();
     }
-  }
-  if (M5.BtnB.wasReleased()) {
-    publishEvent("btn", "{\\\"button\\\":\\\"B\\\",\\\"state\\\":\\\"up\\\"}");
-    if (btnBHeld && !btnBLongFired) {
-      if (mode == MODE_ACTIVE) {
-        // Show stats overlay
-        drawStatsOverlay();
-        state = STATE_RESULT; resultTime = now;
-      } else if (mode == MODE_DEBUG) {
-        mode = MODE_ACTIVE;
-        publishEvent("mode", "{\\\"mode\\\":\\\"active\\\"}");
-        tossState = TOSS_IDLE; prevHpMag = 0; tapSettleCount = -1;
-        for (int i = 0; i < 3; i++) { hpState[i] = 0; hpPrevRaw[i] = 0; }
-        state = STATE_READY;
-        showReady();
-      }
-    }
-    btnBHeld = false;
   }
 
   // IMU — [C8] skip frame if I2C read fails
