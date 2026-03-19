@@ -22,6 +22,7 @@ export interface Slide {
   fg: string;
   effect?: "shooting-star" | "flash" | "sparkle-burst";
   effectTriggerWord?: string;
+  fairyTriggerWord?: string; // triggers fairy flight animation when typed
   // Multi-piece foreground (replaces single fg when present)
   splitFg?: SplitPiece[];
 }
@@ -85,6 +86,7 @@ export const STORY_SLIDES: Slide[] = [
     fg: "/images/story/slide-04-fg.png",
     effect: "flash",
     effectTriggerWord: "FLASH",
+    fairyTriggerWord: "tiny version",
   },
   {
     lines: [

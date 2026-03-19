@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import gsap from "gsap";
 import { STORY_SLIDES, type Slide, type SplitPiece } from "./slides";
+import { FairyFlight } from "./FairyFlight";
 
 // Ken Burns drift — each slide zooms/pans to a different spot
 const KB_DRIFT: Array<{ x: string; y: string; scale: number }> = [
@@ -25,10 +26,11 @@ interface StorySlideProps {
   effect?: Slide["effect"];
   effectTriggerWord?: string;
   splitFg?: SplitPiece[];
+  fairyTriggerWord?: string;
 }
 
 export function StorySlide({
-  lines, bgSrc, fgSrc, index, isActive, effect, effectTriggerWord, splitFg,
+  lines, bgSrc, fgSrc, index, isActive, effect, effectTriggerWord, splitFg, fairyTriggerWord,
 }: StorySlideProps) {
   const hasSplit = splitFg && splitFg.length > 0;
   const isFirstSlide = index === 0;
@@ -55,6 +57,8 @@ export function StorySlide({
   const typeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [showEffect, setShowEffect] = useState(false);
   const effectFiredRef = useRef(false);
+  const [showFairy, setShowFairy] = useState(false);
+  const fairyFiredRef = useRef(false);
 
   const stopTypewriter = useCallback(() => {
     if (typeTimerRef.current) { clearTimeout(typeTimerRef.current); typeTimerRef.current = null; }
@@ -75,6 +79,10 @@ export function StorySlide({
           effectFiredRef.current = true;
           setShowEffect(true);
         }
+        if (fairyTriggerWord && !fairyFiredRef.current && cur.toLowerCase().includes(fairyTriggerWord.toLowerCase())) {
+          fairyFiredRef.current = true;
+          setShowFairy(true);
+        }
         i++;
         typeTimerRef.current = setTimeout(type, 35);
       } else {
@@ -82,7 +90,13 @@ export function StorySlide({
         const typeLine2 = () => {
           if (cancelled) return;
           if (j <= fullLine2.length) {
-            setLine2Text(fullLine2.slice(0, j));
+            const cur2 = fullLine2.slice(0, j);
+            setLine2Text(cur2);
+            // Check for fairy trigger in line 2
+            if (fairyTriggerWord && !fairyFiredRef.current && cur2.toLowerCase().includes(fairyTriggerWord.toLowerCase())) {
+              fairyFiredRef.current = true;
+              setShowFairy(true);
+            }
             j++;
             typeTimerRef.current = setTimeout(typeLine2, 35);
           }
@@ -191,6 +205,8 @@ export function StorySlide({
       wasActiveRef.current = true;
       hasPlayedOnceRef.current = true;
       effectFiredRef.current = false;
+      fairyFiredRef.current = false;
+      setShowFairy(false);
 
       // Reset the timeline to beginning and play
       tl.restart();
@@ -225,6 +241,7 @@ export function StorySlide({
       setLine1Text("");
       setLine2Text("");
       setShowEffect(false);
+      setShowFairy(false);
 
       tl.pause();
       if (kbRef.current) { kbRef.current.kill(); kbRef.current = null; }
@@ -306,6 +323,9 @@ export function StorySlide({
       {showEffect && effect === "shooting-star" && <ShootingStarEffect />}
       {showEffect && effect === "flash" && <FlashEffect />}
       {showEffect && effect === "sparkle-burst" && <SparkleBurstEffect />}
+
+      {/* Fairy flight animation */}
+      {showFairy && <FairyFlight onComplete={() => setShowFairy(false)} />}
 
       {/* Foreground — starts hidden via inline styles */}
       <div

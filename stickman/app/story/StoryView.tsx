@@ -225,6 +225,7 @@ export function StoryView() {
               effect={slide.effect}
               effectTriggerWord={slide.effectTriggerWord}
               splitFg={slide.splitFg}
+              fairyTriggerWord={slide.fairyTriggerWord}
             />
           </div>
         ))}
@@ -262,6 +263,14 @@ export function StoryView() {
         @keyframes fadeInUp {
           from { opacity: 0; transform: translateY(20px); }
           to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes fairyTrailFade {
+          0% { opacity: 0.9; transform: scale(1); }
+          100% { opacity: 0; transform: scale(0.2); }
+        }
+        @keyframes fairyGlow {
+          0% { opacity: 0.4; transform: scale(0.9); }
+          100% { opacity: 0.7; transform: scale(1.1); }
         }
       `}</style>
     </div>
