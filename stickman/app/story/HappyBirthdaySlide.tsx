@@ -5,6 +5,7 @@ import { usePointer } from "@/app/hooks/stickman";
 
 const TEXT_IMAGE = "/images/story/birthday-text.png";
 const FACE_IMAGE = "/images/bt4-clean.png";
+const MOON_IMAGE = "/images/story/moon.png";
 const DENSITY = 220;
 const PARTICLE_SIZE = 1.0;
 const PARTICLE_SPEED = 1;
@@ -62,8 +63,8 @@ export function HappyBirthdaySlide({ isActive }: HappyBirthdaySlideProps) {
     let faceLoaded = false;
     let morphedToFace = false;
     let activatedAt = 0;
-
-    // Moon state
+    let moonImg: HTMLImageElement | null = null;
+    let moonLoaded = false;
     let moonStartTime = 0;
 
     const buildBg = (w: number, h: number) => {
@@ -209,10 +210,11 @@ export function HappyBirthdaySlide({ isActive }: HappyBirthdaySlideProps) {
     };
 
     const drawMoon = (t: number) => {
+      if (!moonImg || !moonLoaded) return;
       const { w, h } = size;
       if (moonStartTime === 0) moonStartTime = t;
       const elapsed = t - moonStartTime;
-      const moonProgress = Math.min(elapsed / 5, 1); // 5 second arc
+      const moonProgress = Math.min(elapsed / 8, 1); // 8 second arc
       const moonAngle = Math.PI + moonProgress * Math.PI;
       const moonCx = w / 2;
       const moonCy = h * 0.65;
@@ -220,28 +222,25 @@ export function HappyBirthdaySlide({ isActive }: HappyBirthdaySlideProps) {
       const moonRy = h * 0.45;
       const moonX = moonCx + Math.cos(moonAngle) * moonRx;
       const moonY = moonCy + Math.sin(moonAngle) * moonRy;
-      const moonSize = Math.min(w, h) * 0.06;
+      const moonSize = Math.min(w, h) * 0.1;
 
-      // Glow
-      const moonGlow = ctx.createRadialGradient(moonX, moonY, moonSize * 0.5, moonX, moonY, moonSize * 2.5);
-      moonGlow.addColorStop(0, "rgba(255, 248, 220, 0.12)");
-      moonGlow.addColorStop(1, "rgba(255, 248, 220, 0)");
+      // Glow behind moon
+      const moonGlow = ctx.createRadialGradient(moonX, moonY, moonSize * 0.5, moonX, moonY, moonSize * 2);
+      moonGlow.addColorStop(0, "rgba(200, 210, 255, 0.1)");
+      moonGlow.addColorStop(0.5, "rgba(180, 190, 240, 0.05)");
+      moonGlow.addColorStop(1, "rgba(180, 190, 240, 0)");
       ctx.fillStyle = moonGlow;
       ctx.beginPath();
-      ctx.arc(moonX, moonY, moonSize * 2.5, 0, Math.PI * 2);
+      ctx.arc(moonX, moonY, moonSize * 2, 0, Math.PI * 2);
       ctx.fill();
 
-      // Body
-      ctx.fillStyle = "#fff8dc";
+      // Draw the real moon image
+      ctx.save();
       ctx.beginPath();
       ctx.arc(moonX, moonY, moonSize, 0, Math.PI * 2);
-      ctx.fill();
-
-      // Crescent
-      ctx.fillStyle = "rgba(10, 6, 24, 0.7)";
-      ctx.beginPath();
-      ctx.arc(moonX + moonSize * 0.3, moonY - moonSize * 0.1, moonSize * 0.85, 0, Math.PI * 2);
-      ctx.fill();
+      ctx.clip();
+      ctx.drawImage(moonImg, moonX - moonSize, moonY - moonSize, moonSize * 2, moonSize * 2);
+      ctx.restore();
     };
 
     const animate = () => {
@@ -355,6 +354,13 @@ export function HappyBirthdaySlide({ isActive }: HappyBirthdaySlideProps) {
       faceLoaded = true;
     };
     img2.src = FACE_IMAGE;
+
+    const img3 = new Image();
+    img3.onload = () => {
+      moonImg = img3;
+      moonLoaded = true;
+    };
+    img3.src = MOON_IMAGE;
 
     resize();
     animId = requestAnimationFrame(animate);
