@@ -6,71 +6,71 @@ export interface Slide {
 export const STORY_SLIDES: Slide[] = [
   {
     lines: [
-      "In a tower of spells and potions rare,",
-      "Alex Russo brushed back her wizard hair.",
+      "Deep inside a magical tower,",
+      "Alex Russo was getting ready for something big.",
     ],
     image: "/images/story/slide-01.png",
   },
   {
     lines: [
-      'A birthday star streaked across the sky —',
-      '"Someone special is ready," she said with a sigh.',
+      "A birthday star shot across the sky.",
+      '"Someone special is ready," Alex whispered.',
     ],
     image: "/images/story/slide-02.png",
   },
   {
     lines: [
-      'She found Cece and held her wand out bright:',
-      '"The magic isn\'t here — it\'s YOUR inner light."',
+      "She found Cece and held out her wand.",
+      '"The magic isn\'t in here — it\'s in YOU."',
     ],
     image: "/images/story/slide-03.png",
   },
   {
     lines: [
-      "The wand lit up and hummed a little song —",
-      "a tiny Cece appeared, dancing along!",
+      "The wand started to glow and hum.",
+      "A tiny version of Cece appeared inside, dancing!",
     ],
     image: "/images/story/slide-04.png",
   },
   {
     lines: [
-      '"She\'ll live right here and help your wishes grow —',
-      'but feed her well, or she\'ll be sad, you know!"',
+      '"She\'ll live in here and help your wishes come true.',
+      'But you have to feed her to keep her happy!"',
     ],
     image: "/images/story/slide-05.png",
   },
   {
     lines: [
-      "With just one flick, the TV came alive —",
-      "dragons danced and dolphins learned to dive!",
+      "Cece flicked the wand at the TV.",
+      "Dragons and dolphins burst out of the screen!",
     ],
     image: "/images/story/slide-06.png",
   },
   {
     lines: [
-      "She aimed it at the stars up in the night —",
-      "they spelled her name in trails of golden light!",
+      "She pointed it up at the night sky.",
+      "The stars rearranged to spell her name in gold!",
     ],
     image: "/images/story/slide-07.png",
   },
   {
     lines: [
-      "Her puppy Huey leaped and chased the sparks —",
-      "zigzagging magic lighting up the dark!",
+      "Huey went absolutely nuts chasing the sparkles,",
+      "leaping and zigzagging through the magic.",
     ],
     image: "/images/story/slide-08.png",
   },
   {
     lines: [
-      'Alex grinned and said, "I knew you\'d shine —',
-      'the greatest wizard of all time!"',
+      'Alex grinned. "I knew it.',
+      'You\'re the greatest wizard of all time."',
     ],
     image: "/images/story/slide-09.png",
   },
   {
     lines: [
-      "So when you see a streak across the night,",
-      "that's Cece, casting magic with all her might!",
+      "So if you ever see a streak of light in the sky,",
+      "that's Cece, doing her thing.",
     ],
     image: "/images/story/slide-10.png",
   },
