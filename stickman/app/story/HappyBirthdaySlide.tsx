@@ -4,7 +4,7 @@ import { useEffect, useRef } from "react";
 
 const TEXT_IMAGE = "/images/story/birthday-text.png";
 const FACE_IMAGE = "/images/bt4-clean.png";
-const MOON_IMAGE = "/images/story/moon.png";
+const MOON_IMAGE = "/images/moon.png";
 const DENSITY = 220;
 const PARTICLE_SIZE = 1.0;
 const PARTICLE_SPEED = 1;
