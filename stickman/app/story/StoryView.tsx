@@ -216,6 +216,7 @@ export function StoryView() {
                   isActive={activeSlide === index}
                   effect={slide.effect}
                   effectTriggerWord={slide.effectTriggerWord}
+                  splitFg={slide.splitFg}
                 />
               )}
             </div>

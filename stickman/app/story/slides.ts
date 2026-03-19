@@ -1,9 +1,24 @@
+export interface SplitPiece {
+  src: string;
+  // Where the piece starts (before animation)
+  fromX: number;  // px offset from final position
+  fromY: number;
+  fromScale: number;
+  fromRotate: number;
+  // Animation timing
+  delay: number;   // seconds delay from fg entrance start
+  duration: number; // seconds
+  ease: string;    // GSAP ease name
+}
+
 export interface Slide {
   lines: [string, string];
   bg: string;
   fg: string;
   effect?: "shooting-star" | "flash" | "sparkle-burst";
-  effectTriggerWord?: string; // effect fires when typewriter types this word
+  effectTriggerWord?: string;
+  // Multi-piece foreground (replaces single fg when present)
+  splitFg?: SplitPiece[];
 }
 
 export const STORY_SLIDES: Slide[] = [
@@ -32,6 +47,23 @@ export const STORY_SLIDES: Slide[] = [
     bg: "/images/story/slide-03-bg.png",
     fg: "/images/story/slide-03-fg.png",
     effect: "sparkle-burst",
+    splitFg: [
+      {
+        src: "/images/story/split/s03-alex.png",
+        fromX: 200, fromY: 40, fromScale: 0.85, fromRotate: 3,
+        delay: 0, duration: 1.2, ease: "back.out(1.2)",
+      },
+      {
+        src: "/images/story/split/s03-cece.png",
+        fromX: -200, fromY: 40, fromScale: 0.85, fromRotate: -3,
+        delay: 0.15, duration: 1.2, ease: "back.out(1.2)",
+      },
+      {
+        src: "/images/story/split/s03-sparkles.png",
+        fromX: 0, fromY: 0, fromScale: 0, fromRotate: 0,
+        delay: 0.6, duration: 0.8, ease: "elastic.out(1, 0.5)",
+      },
+    ],
   },
   {
     lines: [
@@ -50,6 +82,23 @@ export const STORY_SLIDES: Slide[] = [
     ],
     bg: "/images/story/slide-05-bg.png",
     fg: "/images/story/slide-05-fg.png",
+    splitFg: [
+      {
+        src: "/images/story/split/s05-alex.png",
+        fromX: -180, fromY: 30, fromScale: 0.9, fromRotate: -2,
+        delay: 0, duration: 1.1, ease: "back.out(1.3)",
+      },
+      {
+        src: "/images/story/split/s05-cece.png",
+        fromX: 180, fromY: 30, fromScale: 0.9, fromRotate: 2,
+        delay: 0.12, duration: 1.1, ease: "back.out(1.3)",
+      },
+      {
+        src: "/images/story/split/s05-tinycece.png",
+        fromX: 0, fromY: -50, fromScale: 0, fromRotate: 0,
+        delay: 0.7, duration: 1.0, ease: "elastic.out(1, 0.4)",
+      },
+    ],
   },
   {
     lines: [

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from "react";
 import gsap from "gsap";
-import { STORY_SLIDES, type Slide } from "./slides";
+import { STORY_SLIDES, type Slide, type SplitPiece } from "./slides";
 
 // Each slide's background enters from a different direction for variety
 const BG_ENTER: Array<{ x: number; y: number }> = [
@@ -36,17 +36,21 @@ interface StorySlideProps {
   isActive: boolean;
   effect?: Slide["effect"];
   effectTriggerWord?: string;
+  splitFg?: SplitPiece[];
 }
 
 export function StorySlide({
-  lines, bgSrc, fgSrc, index, isActive, effect, effectTriggerWord,
+  lines, bgSrc, fgSrc, index, isActive, effect, effectTriggerWord, splitFg,
 }: StorySlideProps) {
+  const hasSplit = splitFg && splitFg.length > 0;
+
   // GSAP target refs
   const bgRef = useRef<HTMLDivElement>(null);
   const fgRef = useRef<HTMLDivElement>(null);
   const fgImgRef = useRef<HTMLDivElement>(null);
   const glowRef = useRef<HTMLDivElement>(null);
   const textRef = useRef<HTMLDivElement>(null);
+  const splitContainerRef = useRef<HTMLDivElement>(null);
   const tlRef = useRef<gsap.core.Timeline | null>(null);
   const kbRef = useRef<gsap.core.Tween | null>(null);
   const idleRef = useRef<gsap.core.Tween | null>(null);
@@ -110,8 +114,6 @@ export function StorySlide({
 
     // Initial hidden state — all GPU-composited
     gsap.set(bg, { x: dir.x, y: dir.y, scale: 1.08, opacity: 0, force3D: true });
-    gsap.set(fg, { y: 80, scale: 0.92, opacity: 0, force3D: true });
-    gsap.set(fgImg, { rotateX: 6, rotateY: -2, force3D: true });
     gsap.set(glow, { opacity: 0, scale: 0.8 });
     gsap.set(text, { y: 30, opacity: 0, force3D: true });
 
@@ -124,37 +126,60 @@ export function StorySlide({
       duration: 1.0, ease: "power2.out", force3D: true,
     }, 0);
 
-    // t=0.2: Glow fades in (overlaps bg)
+    // t=0.2: Glow fades in
     tl.to(glow, {
       opacity: 1, scale: 1, duration: 0.8, ease: "power1.out",
     }, 0.2);
 
-    // t=0.4: Foreground springs up with overshoot (overlaps bg)
-    tl.to(fg, {
-      y: 0, scale: 1, opacity: 1,
-      duration: 1.0, ease: "back.out(1.4)", force3D: true,
-    }, 0.4);
+    if (hasSplit && splitContainerRef.current) {
+      // SPLIT FOREGROUND: animate each piece individually
+      const pieces = splitContainerRef.current.querySelectorAll<HTMLElement>(".split-piece");
+      pieces.forEach((el, i) => {
+        const piece = splitFg![i];
+        if (!piece) return;
+        gsap.set(el, {
+          x: piece.fromX, y: piece.fromY,
+          scale: piece.fromScale, rotation: piece.fromRotate,
+          opacity: 0, force3D: true,
+        });
+        tl.to(el, {
+          x: 0, y: 0, scale: 1, rotation: 0, opacity: 1,
+          duration: piece.duration, ease: piece.ease, force3D: true,
+        }, 0.4 + piece.delay);
+      });
+      // Hide the single fg
+      gsap.set(fg, { opacity: 0 });
+      if (fgImg) gsap.set(fgImg, { opacity: 0 });
+    } else {
+      // SINGLE FOREGROUND: normal spring-up
+      gsap.set(fg, { y: 80, scale: 0.92, opacity: 0, force3D: true });
+      if (fgImg) gsap.set(fgImg, { rotateX: 6, rotateY: -2, force3D: true });
 
-    // t=0.4: 3D tilt correction on fg image
-    tl.to(fgImg, {
-      rotateX: 0, rotateY: 0,
-      duration: 1.2, ease: "power2.out", force3D: true,
-    }, 0.4);
+      tl.to(fg, {
+        y: 0, scale: 1, opacity: 1,
+        duration: 1.0, ease: "back.out(1.4)", force3D: true,
+      }, 0.4);
 
-    // t=0.8: Non-word-triggered effects
+      tl.to(fgImg, {
+        rotateX: 0, rotateY: 0,
+        duration: 1.2, ease: "power2.out", force3D: true,
+      }, 0.4);
+    }
+
+    // Non-word-triggered effects
     if (effect && !effectTriggerWord) {
       tl.call(() => setShowEffect(true), [], 0.8);
     }
 
-    // t=1.1: Text slides up (overlaps fg settle)
+    // Text slides up
     tl.to(text, {
       y: 0, opacity: 1,
       duration: 0.5, ease: "expo.out", force3D: true,
-    }, 1.1);
+    }, hasSplit ? 1.4 : 1.1);
 
-    // t=1.3: Start typewriter
+    // Start typewriter
     let cancelType: (() => void) | null = null;
-    tl.call(() => { cancelType = startTypewriter(); }, [], 1.3);
+    tl.call(() => { cancelType = startTypewriter(); }, [], hasSplit ? 1.6 : 1.3);
 
     tlRef.current = tl;
 
@@ -166,7 +191,7 @@ export function StorySlide({
       if (idleRef.current) idleRef.current.kill();
       if (idleGlowRef.current) idleGlowRef.current.kill();
     };
-  }, [index, effect, effectTriggerWord, startTypewriter, stopTypewriter]);
+  }, [index, effect, effectTriggerWord, hasSplit, splitFg, startTypewriter, stopTypewriter]);
 
   // Play / exit based on isActive
   useEffect(() => {
@@ -217,6 +242,16 @@ export function StorySlide({
 
       // Staggered exit
       gsap.to(text, { y: 16, opacity: 0, duration: 0.25, ease: "power3.in", force3D: true });
+      if (hasSplit && splitContainerRef.current) {
+        const pieces = splitContainerRef.current.querySelectorAll(".split-piece");
+        pieces.forEach((el, i) => {
+          const piece = splitFg![i];
+          gsap.to(el, {
+            x: piece ? piece.fromX * 0.5 : 0, opacity: 0, scale: 0.9,
+            duration: 0.3, ease: "power3.in", delay: 0.05 * i, force3D: true,
+          });
+        });
+      }
       gsap.to(fg, { scale: 0.9, opacity: 0, duration: 0.35, ease: "power3.in", delay: 0.08, force3D: true });
       gsap.to(glow, { opacity: 0, duration: 0.3, delay: 0.08 });
       gsap.to(bg, {
@@ -244,19 +279,43 @@ export function StorySlide({
       {showEffect && effect === "flash" && <FlashEffect />}
       {showEffect && effect === "sparkle-burst" && <SparkleBurstEffect />}
 
-      {/* Foreground — GSAP spring entrance + idle bob */}
+      {/* Foreground — single or split pieces */}
       <div className="absolute inset-0 flex items-center justify-center z-10" style={{ perspective: "1000px" }}>
-        <div ref={fgRef} style={{ width: "90vw", maxWidth: "600px", willChange: "transform, opacity" }}>
+        <div ref={fgRef} style={{ width: "90vw", maxWidth: "600px" }}>
           <div ref={glowRef} className="absolute -inset-8 rounded-full blur-3xl" style={{
             background: "radial-gradient(ellipse, rgba(168,85,247,0.3) 0%, rgba(59,130,246,0.15) 40%, transparent 70%)",
           }} />
-          <div ref={fgImgRef} style={{}}>
-            <img src={fgSrc} alt={`Scene ${index + 1}`} loading={index <= 1 ? "eager" : "lazy"}
-              className="relative w-full h-auto object-contain" style={{
-                maxHeight: "55dvh",
-                filter: "drop-shadow(0 8px 30px rgba(0,0,0,0.6)) drop-shadow(0 0 60px rgba(168,85,247,0.15))",
-              }} />
-          </div>
+
+          {/* Single foreground (default) */}
+          {!hasSplit && (
+            <div ref={fgImgRef} style={{}}>
+              <img src={fgSrc} alt={`Scene ${index + 1}`} loading={index <= 1 ? "eager" : "lazy"}
+                className="relative w-full h-auto object-contain" style={{
+                  maxHeight: "55dvh",
+                  filter: "drop-shadow(0 8px 30px rgba(0,0,0,0.6)) drop-shadow(0 0 60px rgba(168,85,247,0.15))",
+                }} />
+            </div>
+          )}
+
+          {/* Split foreground pieces — each animated independently by GSAP */}
+          {hasSplit && (
+            <div ref={splitContainerRef} className="relative flex items-center justify-center" style={{ minHeight: "40dvh" }}>
+              {splitFg!.map((piece, i) => (
+                <img
+                  key={i}
+                  src={piece.src}
+                  alt=""
+                  className="split-piece absolute h-auto object-contain"
+                  loading="eager"
+                  style={{
+                    maxHeight: i === splitFg!.length - 1 ? "25dvh" : "50dvh", // sparkles/tiny pieces smaller
+                    maxWidth: "45vw",
+                    filter: "drop-shadow(0 8px 30px rgba(0,0,0,0.6)) drop-shadow(0 0 40px rgba(168,85,247,0.15))",
+                  }}
+                />
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
