@@ -5,9 +5,8 @@ import { useStickmanBus, usePointer } from "@/app/hooks/stickman";
 import { STORY_SLIDES } from "./slides";
 import { StorySlide } from "./StorySlide";
 import { HappyBirthdaySlide } from "./HappyBirthdaySlide";
-import { BirthdayFinale } from "./BirthdayFinale";
 
-const TOTAL_SLIDES = STORY_SLIDES.length + 2; // story slides + birthday text + particle finale
+const TOTAL_SLIDES = STORY_SLIDES.length + 1; // story slides + birthday particle slide
 const TAP_DEBOUNCE_MS = 600;
 
 // Pre-compute stable random values for twinkling stars (avoids hydration mismatch)
@@ -135,7 +134,7 @@ export function StoryView() {
   }, [goToSlide]);
 
   // Don't show wand pointer on the finale slide (it has its own particle pointer)
-  const showWandPointer = activeSlide < STORY_SLIDES.length + 1;
+  const showWandPointer = activeSlide < STORY_SLIDES.length;
 
   return (
     <div className="relative w-full h-[100dvh] overflow-hidden bg-[#0a0618]">
@@ -193,10 +192,6 @@ export function StoryView() {
 
         <div ref={setSlideRef(STORY_SLIDES.length)}>
           <HappyBirthdaySlide isActive={activeSlide === STORY_SLIDES.length} />
-        </div>
-
-        <div ref={setSlideRef(STORY_SLIDES.length + 1)}>
-          <BirthdayFinale isActive={activeSlide === STORY_SLIDES.length + 1} />
         </div>
       </div>
 
