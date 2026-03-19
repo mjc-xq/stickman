@@ -142,28 +142,28 @@ export const STORY_SLIDES: Slide[] = [
     fg: "/images/story/slide-10-fg.png",
     splitFg: [
       {
-        // Cece: rises up center with wand
+        // Cece: rises up center with wand — the hero
         src: "/images/story/split/finale-cece-wand.png",
         toX: 0, toY: 5, toScale: 1,
         fromX: 0, fromY: 120, fromScale: 0.7, fromRotate: 0,
         delay: 0, duration: 2.0, ease: "power3.out",
-        maxH: "50dvh",
+        maxH: "48dvh",
       },
       {
-        // Huey: runs from background (starts tiny, grows, ends off-screen right)
+        // Huey: bounds in from the right, settles next to Cece
         src: "/images/story/split/finale-huey-run.png",
-        toX: 70, toY: 25, toScale: 0.9,
-        fromX: 0, fromY: -20, fromScale: 0.06, fromRotate: 0,
-        delay: 2.0, duration: 2.5, ease: "power1.in",
-        maxH: "28dvh",
+        toX: 30, toY: 18, toScale: 0.65,
+        fromX: 300, fromY: 0, fromScale: 0.1, fromRotate: 0,
+        delay: 2.0, duration: 2.0, ease: "back.out(1.3)",
+        maxH: "25dvh",
       },
       {
-        // Alex: clapping, walks in from left — prominent, close to Cece
+        // Alex: clapping, walks in from left
         src: "/images/story/split/finale-alex-clap.png",
-        toX: -22, toY: 3, toScale: 0.95,
+        toX: -28, toY: 3, toScale: 0.9,
         fromX: -300, fromY: 15, fromScale: 0.85, fromRotate: -2,
-        delay: 3.5, duration: 2.0, ease: "power2.out",
-        maxH: "50dvh",
+        delay: 3.0, duration: 2.0, ease: "power2.out",
+        maxH: "48dvh",
       },
     ],
   },

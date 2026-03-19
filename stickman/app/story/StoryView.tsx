@@ -102,27 +102,13 @@ export function StoryView() {
     slideRefs.current[index] = el;
   }, []);
 
-  // Navigate to a specific slide
-  // iOS Safari: scroll-snap fights programmatic smooth scroll, so we
-  // temporarily disable snap, scroll, then re-enable after it settles.
+  // Navigate to a specific slide — instant jump (no scroll animation needed
+  // since GSAP handles all visual transitions via entrance/exit timelines)
   const goToSlide = useCallback((index: number) => {
     const container = scrollRef.current;
-    const el = slideRefs.current[index];
-    if (!container || !el) return;
-
-    container.style.scrollSnapType = "none";
-    el.scrollIntoView({ behavior: "smooth", block: "start" });
-
-    let restored = false;
-    const restore = () => {
-      if (restored) return;
-      restored = true;
-      container.style.scrollSnapType = "y mandatory";
-      container.removeEventListener("scrollend", restore);
-      clearTimeout(fallbackTimer);
-    };
-    container.addEventListener("scrollend", restore, { once: true });
-    const fallbackTimer = setTimeout(restore, 1000);
+    if (!container) return;
+    const slideHeight = container.clientHeight;
+    container.scrollTop = index * slideHeight;
   }, []);
 
   // Wand tap -> advance to next slide (ignored during animations — no queuing)
@@ -202,21 +188,17 @@ export function StoryView() {
       {/* Shooting stars */}
       <ShootingStars />
 
-      {/* Scroll snap container — ALL slides always rendered (only 8+1, no need to virtualize) */}
+      {/* Scroll container — overflow hidden, navigation only via tap/keyboard */}
       <div
         ref={scrollRef}
-        className="relative z-10 w-full h-full overflow-y-auto"
-        style={{
-          scrollSnapType: "y mandatory",
-          WebkitOverflowScrolling: "touch",
-        }}
+        className="relative z-10 w-full h-full overflow-hidden"
+        style={{}}
       >
         {STORY_SLIDES.map((slide, index) => (
           <div
             key={index}
             ref={setSlideRef(index)}
-            className="h-[100dvh] w-full snap-start"
-            style={{ scrollSnapAlign: "start" }}
+            className="h-[100dvh] w-full"
           >
             <StorySlide
               lines={slide.lines}

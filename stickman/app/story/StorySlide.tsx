@@ -139,14 +139,25 @@ export function StorySlide({
     }, 0.4);
 
     if (hasSplit && splitContainerRef.current) {
-      // SPLIT FOREGROUND: each piece animated to its own final position
+      // SPLIT FOREGROUND: each piece starts centered (-50%, -50%) + fromX/Y offset,
+      // then animates to centered + toX/toY offset
       const pieces = splitContainerRef.current.querySelectorAll<HTMLElement>(".split-piece");
       pieces.forEach((el, i) => {
         const piece = splitFg![i];
         if (!piece) return;
-        // Animate FROM inline-style start position TO final resting position
+        // Set initial position: centered + from offset
+        gsap.set(el, {
+          xPercent: -50, yPercent: -50,
+          x: piece.fromX, y: piece.fromY,
+          scale: piece.fromScale, rotation: piece.fromRotate,
+          opacity: 0, force3D: true,
+        });
+        // Animate to final position: centered + toX/toY as % of container width
+        const container = splitContainerRef.current!;
+        const finalX = (piece.toX / 100) * container.offsetWidth;
+        const finalY = (piece.toY / 100) * container.offsetHeight;
         tl.to(el, {
-          xPercent: piece.toX, yPercent: piece.toY,
+          x: finalX, y: finalY,
           scale: piece.toScale, rotation: 0, opacity: 1,
           duration: piece.duration, ease: piece.ease, force3D: true,
         }, 0.8 + piece.delay);
@@ -275,15 +286,15 @@ export function StorySlide({
           // Reset all elements back to their initial hidden positions so
           // the next entrance plays cleanly from the start.
           tl.progress(0).pause();
-          // Reset split pieces to their CSS initial state
+          // Reset split pieces to initial hidden state
           if (hasSplit && splitContainerRef.current) {
             const pieces = splitContainerRef.current.querySelectorAll<HTMLElement>(".split-piece");
             pieces.forEach((el, i) => {
               const piece = splitFg![i];
               if (!piece) return;
               gsap.set(el, {
+                xPercent: -50, yPercent: -50,
                 x: piece.fromX, y: piece.fromY,
-                xPercent: 0, yPercent: 0,
                 scale: piece.fromScale, rotation: piece.fromRotate,
                 opacity: 0, force3D: true,
               });
@@ -396,12 +407,13 @@ export function StorySlide({
             </div>
           )}
 
-          {/* Split foreground pieces — positioned absolutely, each starts offset from its final spot */}
+          {/* Split foreground pieces — each centered via left:50%/top:50%/translate(-50%,-50%),
+              then GSAP moves via xPercent/yPercent offsets from that center point */}
           {hasSplit && (
             <div
               ref={splitContainerRef}
               className="relative w-full"
-              style={{ height: "55dvh" }}
+              style={{ height: "60dvh" }}
             >
               {splitFg!.map((piece, i) => (
                 <img
@@ -412,16 +424,12 @@ export function StorySlide({
                   loading="eager"
                   style={{
                     maxHeight: piece.maxH,
-                    maxWidth: "48vw",
-                    // Position at center of container, GSAP will move to toX/toY
+                    maxWidth: "45vw",
                     left: "50%",
                     top: "50%",
-                    marginLeft: "-24vw", // offset half of maxWidth to center
-                    marginTop: `-${parseInt(piece.maxH) / 2}dvh`,
                     filter: "drop-shadow(0 8px 30px rgba(0,0,0,0.6)) drop-shadow(0 0 40px rgba(168,85,247,0.15))",
-                    // Start hidden at offset position — GSAP animates to toX/toY
+                    // Start hidden. GSAP handles all positioning including centering.
                     opacity: 0,
-                    transform: `translate3d(${piece.fromX}px, ${piece.fromY}px, 0) scale(${piece.fromScale}) rotate(${piece.fromRotate}deg)`,
                     willChange: "transform, opacity",
                   }}
                 />
