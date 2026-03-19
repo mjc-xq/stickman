@@ -8,7 +8,7 @@ const MOON_IMAGE = "/images/story/moon.png";
 const DENSITY = 220;
 const PARTICLE_SIZE = 1.0;
 const PARTICLE_SPEED = 1;
-const CANVAS_PCT = 80;
+const CANVAS_PCT = 55; // smaller text = more stars visible around it
 const RESTLESS = 5;
 const MORPH_DELAY_S = 8; // seconds before morphing text → face
 
