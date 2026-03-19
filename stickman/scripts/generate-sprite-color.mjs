@@ -99,6 +99,10 @@ const SPRITES = [
   { name: "feed-4", frame: f, desc: "Cece with puffed out chipmunk cheeks absolutely stuffed full of food, both hands pressing more food toward her mouth, eyes wide and greedy, wizard hat sitting on top of her overstuffed head" },
   { name: "feed-5", frame: f, desc: "Cece rubbing her belly with one hand after eating, eyes half-closed in satisfied bliss, tiny contented smile, a small happy sigh, wizard hat tilted back, completely satisfied and full" },
   { name: "feed-shrimp", frame: f, desc: "Cece holding a big pink curled shrimp by the tail between two fingers, one eyebrow raised with a fancy sophisticated expression, pinky finger up, about to eat it delicately. Wizard hat tilted at a fancy angle. Acting bougie about her shrimp dinner" },
+  { name: "feed-pizza", frame: f, desc: "Cece holding a huge triangular pizza slice with both hands, strings of melted cheese stretching from the slice to her wide open grinning mouth, eyes sparkling with pizza joy, wizard hat on" },
+  { name: "feed-ice-cream", frame: f, desc: "Cece licking a tall ice cream cone with three colorful scoops (pink, brown, yellow), tongue out touching the ice cream, eyes closed in pure bliss, wizard hat on, a drip running down the cone" },
+  { name: "feed-sushi", frame: f, desc: "Cece using chopsticks to hold a piece of sushi near her mouth, one eyebrow raised looking impressed and sophisticated, wizard hat tilted at a classy angle, a small wasabi blob on the side" },
+  { name: "feed-cookie", frame: f, desc: "Cece taking a huge bite from an oversized chocolate chip cookie, crumbs flying everywhere, eyes wide with cookie monster energy, one hand catching crumbs, wizard hat dusted with crumbs" },
   // Tomagotchi — pet
   { name: "pet", frame: f, desc: "Cece with eyes gently closed, peaceful dreamy smile, head slightly tilted, looking deeply content and cozy as if being rocked gently, wizard hat on" },
   // Tomagotchi — sad

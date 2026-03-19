@@ -581,14 +581,15 @@ static const char* const BLE_OFF_TEXTS[] = {
 #define BLE_OFF_TEXT_N 5
 
 // ── Feed sprites + texts ──
-// Eating poses first (indices 0-3), then done/satisfied poses (4-5)
+// Eating poses first, then done/satisfied poses at end
 static const SpriteIdx FEED_SPRITES[] = {
   SPRITE_FEED_1, SPRITE_FEED_2, SPRITE_FEED_3, SPRITE_FEED_SHRIMP,  // eating
+  SPRITE_FEED_PIZZA, SPRITE_FEED_ICE_CREAM, SPRITE_FEED_SUSHI, SPRITE_FEED_COOKIE,  // more eating
   SPRITE_FEED_4, SPRITE_FEED_5                                       // done (chipmunk cheeks, belly rub)
 };
-#define FEED_SPRITE_N 6
-#define FEED_EAT_N 4   // first 4 are eating poses
-#define FEED_DONE_START 4  // done poses start at index 4
+#define FEED_SPRITE_N 10
+#define FEED_EAT_N 8   // first 8 are eating poses
+#define FEED_DONE_START 8  // done poses start at index 8
 
 static const char* const FEED_TEXTS[] = {
   "Yum!", "Nom nom!", "Tasty~", "More leaves!", "*munch munch*", "So good!"
@@ -1025,10 +1026,14 @@ void loop() {
     if (!btnAHoldFired) {
       // Short press released — feed or wand mount
       if (mode == MODE_ACTIVE) {
-        if (happiness < 90 && tossState != TOSS_FREEFALL) {
-          changeHappiness(8, "feed");
+        if (tossState != TOSS_FREEFALL) {
+          if (happiness < 90) {
+            changeHappiness(8, "feed");
+          }
+          // Always show a feed sprite + text, even if capped (so button always responds visually)
           showSprite(pick(FEED_SPRITES, FEED_EAT_N), pick(FEED_TEXTS, FEED_TEXT_N));
           state = STATE_RESULT; resultTime = now;
+          Serial.printf("Feed! happiness=%d\n", happiness);
         }
       } else if (mode == MODE_DEBUG) {
         wandMount = !wandMount;
@@ -1224,7 +1229,18 @@ void loop() {
           drawSprite(currentSprite == SPRITE_TOSS_LOST_1 ? SPRITE_TOSS_LOST_2 : SPRITE_TOSS_LOST_1);
         }
       }
-      if (now - resultTime > 1200) { state = STATE_READY; lastBlink = now; blinkInterval = 500; }  // quick return, idle picks up on next cycle
+      if (now - resultTime > 1200) {
+        state = STATE_READY;
+        // Immediately show an idle sprite so there's a clear visual transition
+        int tier = getMoodTier();
+        if (tier >= 2 && random(100) < 30) {
+          showSprite(pick(COMPANION_SPRITES, COMPANION_SPRITE_N), pick(MOTIV_TEXTS, MOTIV_TEXT_N));
+        } else {
+          showSprite(pick(IDLE_SPRITES, IDLE_SPRITE_N), pick(IDLE_TEXTS, IDLE_TEXT_N));
+        }
+        lastBlink = now;
+        blinkInterval = random(3000, 7000);
+      }
       break;
     default: break;
   }
