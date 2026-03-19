@@ -842,15 +842,14 @@ static bool detectPetting(float ax) {
 
 static void updateToss(float accMag, unsigned long now) {
   switch (tossState) {
-    case TOSS_IDLE: {
-      float launchThresh = wandMount ? 5.0f : 2.5f;  // wand taps spike ~3-4g, real tosses spike higher
-      if (accMag > launchThresh) {
+    case TOSS_IDLE:
+      // Suppress toss if a tap was just detected (tap spikes can hit 3-4g)
+      if (accMag > 2.5f && (now - lastTapTime > TAP_COOLDOWN_MS)) {
         launchAccPeak = accMag; launchTime = now;
         tossState = TOSS_LAUNCHED;
         drawSprite(SPRITE_TOSS_LAUNCH);
       }
       break;
-    }
     case TOSS_LAUNCHED:
       if (accMag > launchAccPeak) launchAccPeak = accMag;
       if (accMag < 0.4f) {
