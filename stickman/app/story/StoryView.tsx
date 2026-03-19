@@ -228,6 +228,7 @@ export function StoryView() {
               effectTriggerWord={slide.effectTriggerWord}
               splitFg={slide.splitFg}
               fairyTriggerWord={slide.fairyTriggerWord}
+              isTitle={slide.isTitle}
             />
           </div>
         ))}

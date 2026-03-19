@@ -23,6 +23,7 @@ export interface Slide {
   effect?: "shooting-star" | "flash" | "sparkle-burst";
   effectTriggerWord?: string;
   fairyTriggerWord?: string; // triggers fairy flight animation when typed
+  isTitle?: boolean; // renders as title card instead of story slide
   // Multi-piece foreground (replaces single fg when present)
   splitFg?: SplitPiece[];
 }
@@ -30,11 +31,12 @@ export interface Slide {
 export const STORY_SLIDES: Slide[] = [
   {
     lines: [
-      "Something was wrong at the Wizard Lair.",
-      "Alex Russo's wand wouldn't stop glowing.",
+      "Cece and the Chaos Wand",
+      "A Birthday Adventure",
     ],
     bg: "/images/story/slide-01-bg.png",
-    fg: "/images/story/slide-01-fg.png",
+    fg: "/images/story/split/title-group.png",
+    isTitle: true,
   },
   {
     lines: [
@@ -148,7 +150,7 @@ export const STORY_SLIDES: Slide[] = [
     fg: "/images/story/slide-10-fg.png",
     splitFg: [
       {
-        // Cece: starts with wand held tenderly, then swaps to hero pose
+        // Cece: rises up center with wand
         src: "/images/story/split/finale-cece-wand.png",
         toX: 0, toY: 5, toScale: 1,
         fromX: 0, fromY: 120, fromScale: 0.7, fromRotate: 0,
@@ -156,20 +158,20 @@ export const STORY_SLIDES: Slide[] = [
         maxH: "50dvh",
       },
       {
-        // Alex: walks in from the left, proud
-        src: "/images/story/split/finale-alex-proud.png",
-        toX: -35, toY: 10, toScale: 0.85,
-        fromX: -350, fromY: 20, fromScale: 0.8, fromRotate: -3,
-        delay: 2.5, duration: 2.0, ease: "power2.out",
-        maxH: "45dvh",
+        // Huey: runs from background (starts tiny center, grows huge, ends off-screen right)
+        src: "/images/story/split/finale-huey-run.png",
+        toX: 80, toY: 15, toScale: 1.3,
+        fromX: 0, fromY: -30, fromScale: 0.08, fromRotate: 0,
+        delay: 2.0, duration: 2.5, ease: "power1.in",
+        maxH: "40dvh",
       },
       {
-        // Huey: bounds in from the right
-        src: "/images/story/split/finale-huey-run.png",
-        toX: 35, toY: 20, toScale: 0.75,
-        fromX: 400, fromY: 30, fromScale: 0.6, fromRotate: 5,
-        delay: 3.2, duration: 1.8, ease: "back.out(1.5)",
-        maxH: "35dvh",
+        // Alex: clapping, walks in from left after Huey runs through
+        src: "/images/story/split/finale-alex-clap.png",
+        toX: -32, toY: 8, toScale: 0.85,
+        fromX: -350, fromY: 20, fromScale: 0.8, fromRotate: -2,
+        delay: 3.5, duration: 2.0, ease: "power2.out",
+        maxH: "48dvh",
       },
     ],
   },
