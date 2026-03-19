@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, useCallback } from "react";
 import gsap from "gsap";
 import { STORY_SLIDES, type Slide, type SplitPiece } from "./slides";
 import { FairyFlight } from "./FairyFlight";
+import { FloatingBubbleCece } from "./FloatingBubbleCece";
 
 // Ken Burns drift — each slide zooms/pans to a different spot
 const KB_DRIFT: Array<{ x: string; y: string; scale: number }> = [
@@ -28,10 +29,11 @@ interface StorySlideProps {
   splitFg?: SplitPiece[];
   fairyTriggerWord?: string;
   isTitle?: boolean;
+  floatingBubble?: boolean;
 }
 
 export function StorySlide({
-  lines, bgSrc, fgSrc, index, isActive, effect, effectTriggerWord, splitFg, fairyTriggerWord, isTitle,
+  lines, bgSrc, fgSrc, index, isActive, effect, effectTriggerWord, splitFg, fairyTriggerWord, isTitle, floatingBubble,
 }: StorySlideProps) {
   const hasSplit = splitFg && splitFg.length > 0;
   const isFirstSlide = index === 0;
@@ -328,6 +330,9 @@ export function StorySlide({
       {/* Fairy flight animation */}
       {showFairy && <FairyFlight onComplete={() => setShowFairy(false)} />}
 
+      {/* Floating bubble Cece — only when this slide is active */}
+      {floatingBubble && isActive && <FloatingBubbleCece />}
+
       {/* Foreground — starts hidden via inline styles */}
       <div
         className="absolute inset-0 flex items-center justify-center z-10"
@@ -433,30 +438,41 @@ export function StorySlide({
       >
         <div className="max-w-[700px] mx-auto text-center">
           {isTitle ? (
-            <>
+            <div className="py-4">
               <h1
-                className="text-5xl md:text-7xl font-bold tracking-wider leading-tight"
+                className="text-6xl md:text-8xl font-bold leading-none"
                 style={{
-                  background: "linear-gradient(135deg, #ffd700, #ff69b4, #da70d6, #ffd700)",
+                  fontFamily: "var(--font-fredoka), var(--font-geist-sans), sans-serif",
+                  background: "linear-gradient(135deg, #ffd700 0%, #ff69b4 35%, #da70d6 65%, #ffd700 100%)",
                   backgroundSize: "300% 300%",
                   WebkitBackgroundClip: "text",
                   WebkitTextFillColor: "transparent",
                   animation: "shimmer 3s ease-in-out infinite",
-                  filter: "drop-shadow(0 0 20px rgba(255,215,0,0.4)) drop-shadow(0 0 40px rgba(218,112,214,0.3))",
+                  filter: "drop-shadow(0 0 25px rgba(255,215,0,0.5)) drop-shadow(0 0 50px rgba(218,112,214,0.3))",
+                  letterSpacing: "-0.02em",
                 }}
               >
                 {lines[0]}
               </h1>
-              <p
-                className="text-2xl md:text-3xl font-medium tracking-widest mt-3"
+              <div
+                className="mt-4 mx-auto"
                 style={{
+                  width: "60%",
+                  height: "2px",
+                  background: "linear-gradient(to right, transparent, rgba(255,215,0,0.6), rgba(218,112,214,0.6), transparent)",
+                }}
+              />
+              <p
+                className="text-2xl md:text-4xl font-semibold tracking-[0.2em] uppercase mt-4"
+                style={{
+                  fontFamily: "var(--font-fredoka), var(--font-geist-sans), sans-serif",
                   color: "#e8dff5",
-                  textShadow: "0 2px 4px rgba(0,0,0,1), 0 0 20px rgba(0,0,0,0.6)",
+                  textShadow: "0 2px 8px rgba(0,0,0,1), 0 0 30px rgba(0,0,0,0.6)",
                 }}
               >
                 {lines[1]}
               </p>
-            </>
+            </div>
           ) : (
             <>
           <p

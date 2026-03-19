@@ -229,6 +229,7 @@ export function StoryView() {
               splitFg={slide.splitFg}
               fairyTriggerWord={slide.fairyTriggerWord}
               isTitle={slide.isTitle}
+              floatingBubble={slide.floatingBubble}
             />
           </div>
         ))}

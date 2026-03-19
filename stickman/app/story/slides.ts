@@ -24,6 +24,7 @@ export interface Slide {
   effectTriggerWord?: string;
   fairyTriggerWord?: string; // triggers fairy flight animation when typed
   isTitle?: boolean; // renders as title card instead of story slide
+  floatingBubble?: boolean; // shows floating bubble Cece animation
   // Multi-piece foreground (replaces single fg when present)
   splitFg?: SplitPiece[];
 }
@@ -100,6 +101,7 @@ export const STORY_SLIDES: Slide[] = [
     ],
     bg: "/images/story/slide-05-bg.png",
     fg: "/images/story/slide-05-fg.png",
+    floatingBubble: true,
     splitFg: [
       {
         src: "/images/story/split/s05-alex.png",
@@ -114,13 +116,6 @@ export const STORY_SLIDES: Slide[] = [
         fromX: 220, fromY: 50, fromScale: 0.7, fromRotate: 4,
         delay: 0.25, duration: 1.8, ease: "back.out(1.3)",
         maxH: "45dvh",
-      },
-      {
-        src: "/images/story/split/s05-tinycece.png",
-        toX: 0, toY: -20, toScale: 0.7,
-        fromX: 0, fromY: -100, fromScale: 0, fromRotate: 0,
-        delay: 1.0, duration: 1.5, ease: "elastic.out(1, 0.4)",
-        maxH: "22dvh",
       },
     ],
   },
@@ -158,20 +153,20 @@ export const STORY_SLIDES: Slide[] = [
         maxH: "50dvh",
       },
       {
-        // Huey: runs from background (starts tiny center, grows huge, ends off-screen right)
+        // Huey: runs from background (starts tiny, grows, ends off-screen right)
         src: "/images/story/split/finale-huey-run.png",
-        toX: 80, toY: 15, toScale: 1.3,
-        fromX: 0, fromY: -30, fromScale: 0.08, fromRotate: 0,
+        toX: 70, toY: 25, toScale: 0.9,
+        fromX: 0, fromY: -20, fromScale: 0.06, fromRotate: 0,
         delay: 2.0, duration: 2.5, ease: "power1.in",
-        maxH: "40dvh",
+        maxH: "28dvh",
       },
       {
-        // Alex: clapping, walks in from left after Huey runs through
+        // Alex: clapping, walks in from left — prominent, close to Cece
         src: "/images/story/split/finale-alex-clap.png",
-        toX: -32, toY: 8, toScale: 0.85,
-        fromX: -350, fromY: 20, fromScale: 0.8, fromRotate: -2,
+        toX: -22, toY: 3, toScale: 0.95,
+        fromX: -300, fromY: 15, fromScale: 0.85, fromRotate: -2,
         delay: 3.5, duration: 2.0, ease: "power2.out",
-        maxH: "48dvh",
+        maxH: "50dvh",
       },
     ],
   },
