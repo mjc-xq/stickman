@@ -80,7 +80,7 @@ export function StorySlide({ lines, imageSrc, index, isActive }: StorySlideProps
 
       {/* Image container */}
       <div
-        className="relative w-[80vw] max-w-[500px] aspect-[4/3] mb-8 rounded-2xl overflow-hidden"
+        className="relative w-[80vw] max-w-[500px] max-h-[50dvh] mb-8 rounded-2xl overflow-hidden flex items-center justify-center"
         style={{
           opacity: revealed ? 1 : 0,
           transform: revealed ? "scale(1)" : "scale(0.85)",
@@ -100,7 +100,7 @@ export function StorySlide({ lines, imageSrc, index, isActive }: StorySlideProps
         <img
           src={imageSrc}
           alt={`Story scene ${index + 1}`}
-          className="relative w-full h-full object-cover rounded-2xl"
+          className="relative w-full h-auto max-h-[50dvh] object-contain rounded-2xl"
           style={{
             boxShadow: "0 0 40px rgba(168,85,247,0.2), 0 0 80px rgba(59,130,246,0.1)",
           }}

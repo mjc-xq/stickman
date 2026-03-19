@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { usePointer } from "@/app/hooks/stickman";
 
 // Same particle system as ParticleImageViz but with birthday overlay
@@ -34,17 +34,6 @@ function randColor(): string {
   return palettes[Math.floor(Math.random() * palettes.length)];
 }
 
-// Pre-computed sparkle positions (avoids hydration mismatch from Math.random in JSX)
-const BIRTHDAY_SPARKLES = Array.from({ length: 12 }, (_, i) => ({
-  size: 2 + ((i * 7 + 3) % 5) * 0.8,
-  top: 10 + ((i * 31 + 17) % 80),
-  left: 5 + ((i * 47 + 11) % 90),
-  color: i % 3 === 0 ? "#ffd700" : i % 3 === 1 ? "#ff69b4" : "#ffffff",
-  animDuration: 1 + ((i * 13 + 5) % 20) * 0.1,
-  animDelay: ((i * 19 + 7) % 20) * 0.1,
-  shadow: 4 + ((i * 11 + 3) % 8),
-}));
-
 interface BirthdayFinaleProps {
   isActive: boolean;
 }
@@ -53,20 +42,9 @@ export function BirthdayFinale({ isActive }: BirthdayFinaleProps) {
   const pointer = usePointer();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const isActiveRef = useRef(isActive);
-  const [textVisible, setTextVisible] = useState(false);
 
   // Keep ref in sync
   useEffect(() => { isActiveRef.current = isActive; }, [isActive]);
-
-  // Show birthday text with delay when active
-  useEffect(() => {
-    if (isActive) {
-      const t = setTimeout(() => setTextVisible(true), 600);
-      return () => clearTimeout(t);
-    } else {
-      setTextVisible(false);
-    }
-  }, [isActive]);
 
   // Particle animation (same as ParticleImageViz, but only runs when active)
   useEffect(() => {
@@ -124,9 +102,8 @@ export function BirthdayFinale({ isActive }: BirthdayFinaleProps) {
         drawW = Math.min(Math.round((w * CANVAS_PCT) / 100), w - 20);
         drawH = Math.round(drawW / imgAspect);
       }
-      // Shift image down a bit to leave room for birthday text
       const drawX = Math.round(w / 2 - drawW / 2);
-      const drawY = Math.round(h / 2 - drawH / 2) + Math.round(h * 0.05);
+      const drawY = Math.round(h / 2 - drawH / 2);
       imgBounds = { x: drawX, y: drawY, w: drawW, h: drawH };
 
       ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -300,66 +277,6 @@ export function BirthdayFinale({ isActive }: BirthdayFinaleProps) {
         style={{ background: "#0a0618" }}
       />
 
-      {/* Birthday text overlay */}
-      <div
-        className="absolute inset-x-0 top-0 flex flex-col items-center justify-center pointer-events-none z-10"
-        style={{
-          height: "18%",
-          opacity: textVisible ? 1 : 0,
-          transform: textVisible ? "translateY(0)" : "translateY(-20px)",
-          transition: "opacity 1s ease-out, transform 1s ease-out",
-        }}
-      >
-        <h1
-          className="text-4xl md:text-6xl font-bold tracking-wider text-center"
-          style={{
-            background: "linear-gradient(135deg, #ffd700, #ff69b4, #ffd700, #da70d6)",
-            backgroundSize: "300% 300%",
-            WebkitBackgroundClip: "text",
-            WebkitTextFillColor: "transparent",
-            animation: "shimmer 3s ease-in-out infinite",
-            textShadow: "none",
-            filter: "drop-shadow(0 0 20px rgba(255,215,0,0.4)) drop-shadow(0 0 40px rgba(218,112,214,0.3))",
-          }}
-        >
-          HAPPY BIRTHDAY
-        </h1>
-        <h2
-          className="text-5xl md:text-7xl font-bold tracking-widest mt-1"
-          style={{
-            background: "linear-gradient(135deg, #da70d6, #ffd700, #ff69b4, #ffd700)",
-            backgroundSize: "300% 300%",
-            WebkitBackgroundClip: "text",
-            WebkitTextFillColor: "transparent",
-            animation: "shimmer 3s ease-in-out infinite 0.5s",
-            filter: "drop-shadow(0 0 25px rgba(255,215,0,0.5)) drop-shadow(0 0 50px rgba(218,112,214,0.4))",
-          }}
-        >
-          CECE!
-        </h2>
-      </div>
-
-      {/* Sparkle decorations around text */}
-      {textVisible && (
-        <div className="absolute inset-x-0 top-0 pointer-events-none z-10" style={{ height: "20%" }}>
-          {BIRTHDAY_SPARKLES.map((s, i) => (
-            <div
-              key={i}
-              className="absolute rounded-full"
-              style={{
-                width: `${s.size}px`,
-                height: `${s.size}px`,
-                top: `${s.top}%`,
-                left: `${s.left}%`,
-                background: s.color,
-                animation: `sparkle ${s.animDuration}s ease-in-out infinite alternate`,
-                animationDelay: `${s.animDelay}s`,
-                boxShadow: `0 0 ${s.shadow}px currentColor`,
-              }}
-            />
-          ))}
-        </div>
-      )}
     </section>
   );
 }

@@ -55,8 +55,8 @@ export const STORY_SLIDES: Slide[] = [
   },
   {
     lines: [
-      "Her puppy Huey barked and chased the glow —",
-      "a comet trail that only he could throw!",
+      "Her puppy Huey leaped and chased the sparks —",
+      "zigzagging magic lighting up the dark!",
     ],
     image: "/images/story/slide-08.png",
   },

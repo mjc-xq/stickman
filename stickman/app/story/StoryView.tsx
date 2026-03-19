@@ -4,9 +4,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useGestures } from "@/app/hooks/stickman";
 import { STORY_SLIDES } from "./slides";
 import { StorySlide } from "./StorySlide";
+import { HappyBirthdaySlide } from "./HappyBirthdaySlide";
 import { BirthdayFinale } from "./BirthdayFinale";
 
-const TOTAL_SLIDES = STORY_SLIDES.length + 1; // story slides + birthday finale
+const TOTAL_SLIDES = STORY_SLIDES.length + 2; // story slides + birthday text + particle finale
 const TAP_DEBOUNCE_MS = 600;
 
 // Pre-compute stable random values for twinkling stars (avoids hydration mismatch)
@@ -182,9 +183,14 @@ export function StoryView() {
           </div>
         ))}
 
-        {/* Birthday finale */}
+        {/* Happy Birthday text slide */}
         <div ref={setSlideRef(STORY_SLIDES.length)}>
-          <BirthdayFinale isActive={activeSlide === STORY_SLIDES.length} />
+          <HappyBirthdaySlide isActive={activeSlide === STORY_SLIDES.length} />
+        </div>
+
+        {/* Particle stars finale */}
+        <div ref={setSlideRef(STORY_SLIDES.length + 1)}>
+          <BirthdayFinale isActive={activeSlide === STORY_SLIDES.length + 1} />
         </div>
       </div>
 
