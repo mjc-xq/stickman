@@ -227,14 +227,14 @@ export function StorySlide({
   }, [isActive, index, stopTypewriter]);
 
   return (
-    <section className="h-[100dvh] w-full relative snap-start snap-always overflow-hidden" style={{ scrollSnapAlign: "start" }}>
+    <section className="h-[100dvh] w-full relative overflow-hidden">
       {/* Slide counter */}
       <div className="absolute top-4 left-4 text-[10px] tracking-[0.3em] uppercase text-purple-400/30 font-mono z-20">
         {index + 1} / {STORY_SLIDES.length}
       </div>
 
       {/* Background — GSAP entrance + Ken Burns */}
-      <div ref={bgRef} className="absolute inset-0 z-0" style={{ willChange: "transform, opacity" }}>
+      <div ref={bgRef} className="absolute inset-0 z-0" style={{}}>
         <img src={bgSrc} alt="" className="w-full h-full object-cover" loading={index <= 1 ? "eager" : "lazy"} style={{ opacity: 0.8 }} />
         <div className="absolute inset-0 bg-gradient-to-b from-black/10 via-transparent to-black/70" />
       </div>
@@ -250,7 +250,7 @@ export function StorySlide({
           <div ref={glowRef} className="absolute -inset-8 rounded-full blur-3xl" style={{
             background: "radial-gradient(ellipse, rgba(168,85,247,0.3) 0%, rgba(59,130,246,0.15) 40%, transparent 70%)",
           }} />
-          <div ref={fgImgRef} style={{ willChange: "transform" }}>
+          <div ref={fgImgRef} style={{}}>
             <img src={fgSrc} alt={`Scene ${index + 1}`} loading={index <= 1 ? "eager" : "lazy"}
               className="relative w-full h-auto object-contain" style={{
                 maxHeight: "55dvh",
@@ -261,7 +261,7 @@ export function StorySlide({
       </div>
 
       {/* Text — GSAP entrance + typewriter */}
-      <div ref={textRef} className="absolute bottom-8 inset-x-0 z-20 px-6" style={{ willChange: "transform, opacity" }}>
+      <div ref={textRef} className="absolute bottom-8 inset-x-0 z-20 px-6" style={{}}>
         <div className="max-w-[700px] mx-auto text-center">
           <p className="text-3xl md:text-4xl leading-snug tracking-wide font-bold" style={{
             color: "#fff", textShadow: "0 2px 4px rgba(0,0,0,1), 0 0 20px rgba(0,0,0,0.8), 0 0 60px rgba(0,0,0,0.6)", minHeight: "1.5em",

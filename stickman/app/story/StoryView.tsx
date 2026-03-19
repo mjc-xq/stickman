@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useStickmanBus, usePointer } from "@/app/hooks/stickman";
+import { useStickmanBus } from "@/app/hooks/stickman";
 import { STORY_SLIDES } from "./slides";
 import { StorySlide } from "./StorySlide";
 import { HappyBirthdaySlide } from "./HappyBirthdaySlide";
@@ -10,7 +10,7 @@ const TOTAL_SLIDES = STORY_SLIDES.length + 1; // story slides + birthday particl
 const TAP_DEBOUNCE_MS = 600;
 
 // Pre-compute stable random values for twinkling stars (avoids hydration mismatch)
-const TWINKLE_STARS = Array.from({ length: 30 }, (_, i) => ({
+const TWINKLE_STARS = Array.from({ length: 15 }, (_, i) => ({
   w: 1 + ((i * 7 + 3) % 5) * 0.4,
   top: ((i * 31 + 17) % 100),
   left: ((i * 47 + 11) % 100),
@@ -160,8 +160,6 @@ export function StoryView() {
     });
   }, [activeSlide]);
 
-  const showWandPointer = activeSlide < STORY_SLIDES.length;
-
   return (
     <div className="relative w-full h-[100dvh] overflow-hidden bg-[#0a0618]">
       {/* Fixed starfield background */}
@@ -193,8 +191,7 @@ export function StoryView() {
       {/* Shooting stars */}
       <ShootingStars />
 
-      {/* Wand pointer overlay (visible on all slides except particle finale) */}
-      {showWandPointer && <WandPointer />}
+      {/* Wand pointer removed — was a full-screen 60fps canvas for 6 dots, not worth the cost */}
 
       {/* Scroll snap container */}
       <div
@@ -205,22 +202,30 @@ export function StoryView() {
           WebkitOverflowScrolling: "touch",
         }}
       >
-        {STORY_SLIDES.map((slide, index) => (
-          <div key={index} ref={setSlideRef(index)}>
-            <StorySlide
-              lines={slide.lines}
-              bgSrc={slide.bg}
-              fgSrc={slide.fg}
-              index={index}
-              isActive={activeSlide === index}
-              effect={slide.effect}
-              effectTriggerWord={slide.effectTriggerWord}
-            />
-          </div>
-        ))}
+        {STORY_SLIDES.map((slide, index) => {
+          // Only render slides within 1 of active — saves GPU memory on iPad
+          const nearby = Math.abs(index - activeSlide) <= 1;
+          return (
+            <div key={index} ref={setSlideRef(index)} className="h-[100dvh] w-full snap-start" style={{ scrollSnapAlign: "start" }}>
+              {nearby && (
+                <StorySlide
+                  lines={slide.lines}
+                  bgSrc={slide.bg}
+                  fgSrc={slide.fg}
+                  index={index}
+                  isActive={activeSlide === index}
+                  effect={slide.effect}
+                  effectTriggerWord={slide.effectTriggerWord}
+                />
+              )}
+            </div>
+          );
+        })}
 
-        <div ref={setSlideRef(STORY_SLIDES.length)}>
-          <HappyBirthdaySlide isActive={activeSlide === STORY_SLIDES.length} />
+        <div ref={setSlideRef(STORY_SLIDES.length)} className="h-[100dvh] w-full snap-start" style={{ scrollSnapAlign: "start" }}>
+          {Math.abs(STORY_SLIDES.length - activeSlide) <= 1 && (
+            <HappyBirthdaySlide isActive={activeSlide === STORY_SLIDES.length} />
+          )}
         </div>
       </div>
 
@@ -254,86 +259,6 @@ export function StoryView() {
   );
 }
 
-/** Wand sparkle pointer — follows the device pointer on all story slides */
-function WandPointer() {
-  const pointer = usePointer();
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    let animId = 0;
-    let w = 0, h = 0;
-
-    const resize = () => {
-      w = window.innerWidth;
-      h = window.innerHeight;
-      canvas.width = w;
-      canvas.height = h;
-    };
-
-    const animate = () => {
-      if (w === 0 || h === 0) { animId = requestAnimationFrame(animate); return; }
-      const ctx = canvas.getContext("2d")!;
-      ctx.clearRect(0, 0, w, h);
-
-      const norm = pointer.current;
-      // Map normalized pointer (-2..2) to screen coords
-      const mx = w / 2 + norm.x * (w / 4);
-      const my = h / 2 + norm.y * (h / 4);
-
-      const t = performance.now() * 0.001;
-
-      // Orbiting sparkles
-      for (let i = 0; i < 6; i++) {
-        const angle = t * (1.5 + i * 0.4) + (i * Math.PI * 2) / 6;
-        const orbit = 10 + Math.sin(t * 2 + i) * 7;
-        const sx = mx + Math.cos(angle) * orbit;
-        const sy = my + Math.sin(angle) * orbit;
-        const sparkleAlpha = 0.5 + Math.sin(t * 4 + i * 1.3) * 0.4;
-        const sr = 1.5 + Math.sin(t * 3 + i * 0.7) * 0.8;
-
-        ctx.globalCompositeOperation = "lighter";
-        ctx.fillStyle = `rgba(220, 210, 255, ${sparkleAlpha})`;
-        ctx.beginPath();
-        ctx.arc(sx, sy, sr, 0, Math.PI * 2);
-        ctx.fill();
-      }
-
-      // Central glow
-      const glowAlpha = 0.15 + Math.sin(t * 2.5) * 0.08;
-      const grd = ctx.createRadialGradient(mx, my, 0, mx, my, 25);
-      grd.addColorStop(0, `rgba(200, 180, 255, ${glowAlpha})`);
-      grd.addColorStop(0.5, `rgba(168, 85, 247, ${glowAlpha * 0.4})`);
-      grd.addColorStop(1, "rgba(200, 180, 255, 0)");
-      ctx.fillStyle = grd;
-      ctx.beginPath();
-      ctx.arc(mx, my, 25, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.globalCompositeOperation = "source-over";
-
-      animId = requestAnimationFrame(animate);
-    };
-
-    resize();
-    animId = requestAnimationFrame(animate);
-    window.addEventListener("resize", resize);
-
-    return () => {
-      cancelAnimationFrame(animId);
-      window.removeEventListener("resize", resize);
-    };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  return (
-    <canvas
-      ref={canvasRef}
-      className="fixed inset-0 z-[15] pointer-events-none"
-    />
-  );
-}
 
 function ShootingStars() {
   const [stars, setStars] = useState<{ id: number; x: number; y: number; duration: number }[]>([]);

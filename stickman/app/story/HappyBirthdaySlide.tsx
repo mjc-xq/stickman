@@ -399,8 +399,7 @@ export function HappyBirthdaySlide({ isActive }: HappyBirthdaySlideProps) {
 
   return (
     <section
-      className="h-[100dvh] w-full relative snap-start snap-always"
-      style={{ scrollSnapAlign: "start" }}
+      className="h-[100dvh] w-full relative"
     >
       <canvas
         ref={canvasRef}
