@@ -24,11 +24,19 @@ export function StoryView() {
   const activeSlideRef = useRef(0);
   const [activeSlide, setActiveSlide] = useState(0);
   const lastTapRef = useRef(0);
+  const animatingRef = useRef(false); // true while slide entrance is playing — ignore taps
+  const animTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const starCanvasRef = useRef<HTMLCanvasElement>(null);
   const slideRefs = useRef<(HTMLElement | null)[]>([]);
 
-  // Keep ref in sync with state
-  useEffect(() => { activeSlideRef.current = activeSlide; }, [activeSlide]);
+  // Keep ref in sync with state + lock out taps during animation
+  useEffect(() => {
+    activeSlideRef.current = activeSlide;
+    // Lock taps for 2.5s while entrance animation plays
+    animatingRef.current = true;
+    if (animTimerRef.current) clearTimeout(animTimerRef.current);
+    animTimerRef.current = setTimeout(() => { animatingRef.current = false; }, 2500);
+  }, [activeSlide]);
 
   // Draw starfield background (fixed, behind everything)
   useEffect(() => {
@@ -115,10 +123,11 @@ export function StoryView() {
     const fallbackTimer = setTimeout(restore, 1000);
   }, []);
 
-  // Wand tap -> advance to next slide
+  // Wand tap -> advance to next slide (ignored during animations — no queuing)
   useEffect(() => {
     const unsub = bus.subscribeType("gesture", (event) => {
       if (event.gesture !== "Tap") return;
+      if (animatingRef.current) return; // ignore taps during entrance animation
       const now = Date.now();
       if (now - lastTapRef.current < TAP_DEBOUNCE_MS) return;
       lastTapRef.current = now;
@@ -131,6 +140,7 @@ export function StoryView() {
   // Keyboard navigation
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
+      if (animatingRef.current) return; // ignore during animation
       const now = Date.now();
       if (now - lastTapRef.current < TAP_DEBOUNCE_MS) return;
 
