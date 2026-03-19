@@ -1038,11 +1038,19 @@ void loop() {
     publishEvent("btn", "{\\\"button\\\":\\\"A\\\",\\\"state\\\":\\\"up\\\"}");
     if (btnAHeld && !btnALongFired) {
       if (mode == MODE_ACTIVE && tossState != TOSS_FREEFALL) {
-        // Feed Cece — green flash + sprite so it's super obvious
+        // Feed Cece — green border around screen during feed
         if (happiness < 90) changeHappiness(8, "feed");
-        StickCP2.Display.fillScreen(0x2EC4);  // soft green tint
-        drawModeIndicator();
-        showSprite(pick(FEED_SPRITES, FEED_SPRITE_N), pick(FEED_TEXTS, FEED_TEXT_N));
+        // Green title bar and text area as a "feed frame"
+        uint16_t feedGreen = 0x2EC4;  // soft green
+        StickCP2.Display.fillRect(0, LAYOUT_TITLE_Y, 135, LAYOUT_TITLE_H, feedGreen);
+        StickCP2.Display.setTextColor(WHITE, feedGreen);
+        StickCP2.Display.setTextDatum(TC_DATUM);
+        StickCP2.Display.drawString("~ Yum! ~", 67, 2, 2);
+        drawSprite(pick(FEED_SPRITES, FEED_SPRITE_N));
+        StickCP2.Display.fillRect(0, LAYOUT_TEXT_Y, 135, LAYOUT_TEXT_H, feedGreen);
+        StickCP2.Display.setTextColor(WHITE, feedGreen);
+        StickCP2.Display.setTextDatum(TC_DATUM);
+        StickCP2.Display.drawString(pick(FEED_TEXTS, FEED_TEXT_N), 67, LAYOUT_TEXT_Y + (LAYOUT_TEXT_H - 26) / 2, 4);
         state = STATE_RESULT; resultTime = now;
       } else if (mode == MODE_DEBUG) {
         wandMount = !wandMount;
