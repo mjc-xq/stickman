@@ -63,8 +63,8 @@ export const STORY_SLIDES: Slide[] = [
   },
   {
     lines: [
-      "So if you see a flash of light tonight —",
-      "don't worry. That's just Cece, running the show.",
+      "Cece — you're the family wizard now. The magic is yours.",
+      "And you're going to do great.",
     ],
     bg: "/images/story/slide-10-bg.png",
     fg: "/images/story/slide-10-fg.png",
