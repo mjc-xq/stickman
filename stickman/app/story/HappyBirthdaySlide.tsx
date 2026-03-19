@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { usePointer } from "@/app/hooks/stickman";
 
 const TEXT_IMAGE = "/images/story/birthday-text.png";
 const FACE_IMAGE = "/images/bt4-clean.png";
@@ -9,8 +8,6 @@ const MOON_IMAGE = "/images/story/moon.png";
 const DENSITY = 220;
 const PARTICLE_SIZE = 1.0;
 const PARTICLE_SPEED = 1;
-const ATTRACT_PCT = 0.15;
-const ATTRACT_STRENGTH = 50;
 const CANVAS_PCT = 80;
 const RESTLESS = 5;
 const MORPH_DELAY_S = 8; // seconds before morphing text → face
@@ -41,7 +38,6 @@ interface HappyBirthdaySlideProps {
 }
 
 export function HappyBirthdaySlide({ isActive }: HappyBirthdaySlideProps) {
-  const pointer = usePointer();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const isActiveRef = useRef(isActive);
 
@@ -80,7 +76,7 @@ export function HappyBirthdaySlide({ isActive }: HappyBirthdaySlideProps) {
       grad.addColorStop(1, "#0c0820");
       bgCtx.fillStyle = grad;
       bgCtx.fillRect(0, 0, w, h);
-      const starCount = Math.round((w * h) / 1200);
+      const starCount = Math.round((w * h) / 400); // dense starfield
       for (let i = 0; i < starCount; i++) {
         const sx = Math.random() * w;
         const sy = Math.random() * h;
@@ -271,13 +267,7 @@ export function HappyBirthdaySlide({ isActive }: HappyBirthdaySlideProps) {
         createOrUpdateParticles(dests);
       }
 
-      // Pointer interaction
-      const ib = imgBounds;
-      const norm = pointer.current;
-      const pad = Math.max(ib.w, ib.h) * 0.15;
-      const mx = ib.x + ib.w / 2 + norm.x * (ib.w / 2 + pad);
-      const my = ib.y + ib.h / 2 + norm.y * (ib.h / 2 + pad);
-
+      // Particles drift to destinations (no wand interaction — keeps text readable)
       for (const p of particles) {
         const dx = p.destX - p.x;
         const dy = p.destY - p.y;
@@ -288,18 +278,6 @@ export function HappyBirthdaySlide({ isActive }: HappyBirthdaySlideProps) {
         }
         p.vx = (p.vx + dx / 500) * p.friction;
         p.vy = (p.vy + dy / 500) * p.friction;
-
-        const dmx = mx - p.x;
-        const dmy = my - p.y;
-        const mouseDist = Math.sqrt(dmx * dmx + dmy * dmy);
-        const attractDist = Math.max(ib.w, ib.h) * ATTRACT_PCT;
-        if (mouseDist < attractDist && mouseDist > 1) {
-          const invStr = Math.max(300 - ATTRACT_STRENGTH, 10);
-          const force = (attractDist - mouseDist) / invStr;
-          const angle = Math.atan2(dmy, dmx) + (Math.random() - 0.5) * 0.6;
-          p.vx += Math.cos(angle) * force;
-          p.vy += Math.sin(angle) * force;
-        }
         p.x += p.vx;
         p.y += p.vy;
 
@@ -308,30 +286,6 @@ export function HappyBirthdaySlide({ isActive }: HappyBirthdaySlideProps) {
         ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
         ctx.fill();
       }
-
-      // Sparkle cluster around pointer
-      for (let i = 0; i < 6; i++) {
-        const angle = t * (1.5 + i * 0.4) + (i * Math.PI * 2) / 6;
-        const orbit = 8 + Math.sin(t * 2 + i) * 6;
-        const sx = mx + Math.cos(angle) * orbit;
-        const sy = my + Math.sin(angle) * orbit;
-        const sparkleAlpha = 0.5 + Math.sin(t * 4 + i * 1.3) * 0.4;
-        const sr = 1.0 + Math.sin(t * 3 + i * 0.7) * 0.6;
-        ctx.globalCompositeOperation = "lighter";
-        ctx.fillStyle = `rgba(220, 210, 255, ${sparkleAlpha})`;
-        ctx.beginPath();
-        ctx.arc(sx, sy, sr, 0, Math.PI * 2);
-        ctx.fill();
-      }
-      const glowAlpha = 0.12 + Math.sin(t * 2.5) * 0.06;
-      const grd = ctx.createRadialGradient(mx, my, 0, mx, my, 20);
-      grd.addColorStop(0, `rgba(200, 180, 255, ${glowAlpha})`);
-      grd.addColorStop(1, "rgba(200, 180, 255, 0)");
-      ctx.fillStyle = grd;
-      ctx.beginPath();
-      ctx.arc(mx, my, 20, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.globalCompositeOperation = "source-over";
 
       animId = requestAnimationFrame(animate);
     };

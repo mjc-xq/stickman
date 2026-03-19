@@ -5,18 +5,20 @@ import { STORY_SLIDES } from "./slides";
 
 interface StorySlideProps {
   lines: [string, string];
-  imageSrc: string;
+  bgSrc: string;
+  fgSrc: string;
   index: number;
   isActive: boolean;
+  scrollProgress: number; // -1 to 1, 0 = centered in viewport
 }
 
-export function StorySlide({ lines, imageSrc, index, isActive }: StorySlideProps) {
+export function StorySlide({ lines, bgSrc, fgSrc, index, isActive, scrollProgress }: StorySlideProps) {
   const [revealed, setRevealed] = useState(false);
   const [line1Text, setLine1Text] = useState("");
   const [line2Text, setLine2Text] = useState("");
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Typewriter effect when slide becomes active
+  // Typewriter effect
   useEffect(() => {
     if (!isActive) return;
     let cancelled = false;
@@ -36,7 +38,6 @@ export function StorySlide({ lines, imageSrc, index, isActive }: StorySlideProps
           i++;
           timerRef.current = setTimeout(type, 35);
         } else {
-          // Start line 2
           let j = 0;
           const typeLine2 = () => {
             if (cancelled) return;
@@ -59,7 +60,6 @@ export function StorySlide({ lines, imageSrc, index, isActive }: StorySlideProps
     };
   }, [isActive, lines]);
 
-  // Reset when leaving
   useEffect(() => {
     if (!isActive) {
       setRevealed(false);
@@ -68,90 +68,104 @@ export function StorySlide({ lines, imageSrc, index, isActive }: StorySlideProps
     }
   }, [isActive]);
 
+  // Parallax offsets
+  const bgOffset = scrollProgress * -30; // background moves slower (opposite)
+  const fgOffset = scrollProgress * 15;  // foreground moves with scroll
+
   return (
     <section
-      className="h-[100dvh] w-full flex flex-col items-center justify-center relative snap-start snap-always"
+      className="h-[100dvh] w-full relative snap-start snap-always overflow-hidden"
       style={{ scrollSnapAlign: "start" }}
     >
       {/* Slide number */}
-      <div className="absolute top-6 left-6 text-[10px] tracking-[0.3em] uppercase text-purple-400/40 font-mono">
+      <div className="absolute top-4 left-4 text-[10px] tracking-[0.3em] uppercase text-purple-400/30 font-mono z-20">
         {index + 1} / {STORY_SLIDES.length}
       </div>
 
-      {/* Image container */}
+      {/* Background layer (parallax - moves slower) */}
       <div
-        className="relative w-[80vw] max-w-[500px] max-h-[50dvh] mb-8 rounded-2xl overflow-hidden flex items-center justify-center"
+        className="absolute inset-0 z-0"
         style={{
-          opacity: revealed ? 1 : 0,
-          transform: revealed ? "scale(1)" : "scale(0.85)",
-          transition: "opacity 0.8s ease-out, transform 1s cubic-bezier(0.16, 1, 0.3, 1)",
+          transform: `translateY(${bgOffset}px) scale(1.15)`,
+          willChange: "transform",
         }}
       >
-        {/* Glow behind image */}
-        <div
-          className="absolute -inset-4 rounded-3xl blur-2xl"
-          style={{
-            background: "radial-gradient(ellipse, rgba(168,85,247,0.25) 0%, rgba(59,130,246,0.1) 50%, transparent 80%)",
-            opacity: revealed ? 1 : 0,
-            transition: "opacity 1.5s ease-out",
-          }}
-        />
-        {/* Image */}
         <img
-          src={imageSrc}
-          alt={`Story scene ${index + 1}`}
-          className="relative w-full h-auto max-h-[50dvh] object-contain rounded-2xl"
-          style={{
-            boxShadow: "0 0 40px rgba(168,85,247,0.2), 0 0 80px rgba(59,130,246,0.1)",
-          }}
+          src={bgSrc}
+          alt=""
+          className="w-full h-full object-cover"
+          style={{ opacity: revealed ? 0.7 : 0, transition: "opacity 1.2s ease-out" }}
         />
-        {/* Sparkle overlay on image corners */}
-        <div className="absolute inset-0 pointer-events-none rounded-2xl">
-          {[0, 1, 2, 3].map((i) => (
-            <div
-              key={i}
-              className="absolute w-1 h-1 rounded-full bg-white"
-              style={{
-                top: i < 2 ? "8%" : "88%",
-                left: i % 2 === 0 ? "5%" : "92%",
-                animation: `sparkle ${1.5 + i * 0.3}s ease-in-out infinite alternate`,
-                animationDelay: `${i * 0.4}s`,
-              }}
-            />
-          ))}
+        {/* Darken overlay for text readability */}
+        <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-transparent to-black/60" />
+      </div>
+
+      {/* Foreground characters layer (parallax - slight float) */}
+      <div
+        className="absolute inset-0 flex items-center justify-center z-10"
+        style={{
+          transform: `translateY(${fgOffset}px)`,
+          willChange: "transform",
+        }}
+      >
+        <div
+          className="relative w-[70vw] max-w-[450px] max-h-[45dvh]"
+          style={{
+            opacity: revealed ? 1 : 0,
+            transform: revealed ? "scale(1) translateY(-5%)" : "scale(0.85) translateY(10%)",
+            transition: "opacity 0.8s ease-out 0.3s, transform 1.2s cubic-bezier(0.16, 1, 0.3, 1) 0.3s",
+          }}
+        >
+          {/* Glow behind characters */}
+          <div
+            className="absolute -inset-8 rounded-full blur-3xl"
+            style={{
+              background: "radial-gradient(ellipse, rgba(168,85,247,0.3) 0%, rgba(59,130,246,0.15) 40%, transparent 70%)",
+              opacity: revealed ? 1 : 0,
+              transition: "opacity 2s ease-out",
+            }}
+          />
+          <img
+            src={fgSrc}
+            alt={`Story scene ${index + 1}`}
+            className="relative w-full h-auto max-h-[45dvh] object-contain drop-shadow-2xl"
+            style={{
+              filter: "drop-shadow(0 4px 20px rgba(0,0,0,0.5)) drop-shadow(0 0 40px rgba(168,85,247,0.2))",
+            }}
+          />
         </div>
       </div>
 
-      {/* Text container */}
-      <div className="px-8 max-w-[600px] text-center">
-        <p
-          className="text-xl md:text-2xl leading-relaxed tracking-wide"
-          style={{
-            fontFamily: "var(--font-geist-sans)",
-            color: "#e8dff5",
-            textShadow: "0 0 20px rgba(168,85,247,0.3), 0 2px 4px rgba(0,0,0,0.5)",
-            minHeight: "2em",
-          }}
-        >
-          {line1Text}
-          {line1Text.length > 0 && line1Text.length < lines[0].length && (
-            <span className="inline-block w-[2px] h-[1.1em] bg-purple-300 align-middle ml-0.5 animate-pulse" />
-          )}
-        </p>
-        <p
-          className="text-xl md:text-2xl leading-relaxed tracking-wide mt-2"
-          style={{
-            fontFamily: "var(--font-geist-sans)",
-            color: "#e8dff5",
-            textShadow: "0 0 20px rgba(168,85,247,0.3), 0 2px 4px rgba(0,0,0,0.5)",
-            minHeight: "2em",
-          }}
-        >
-          {line2Text}
-          {line2Text.length > 0 && line2Text.length < lines[1].length && (
-            <span className="inline-block w-[2px] h-[1.1em] bg-purple-300 align-middle ml-0.5 animate-pulse" />
-          )}
-        </p>
+      {/* Text container - bigger text, positioned at bottom */}
+      <div className="absolute bottom-8 inset-x-0 z-20 px-6">
+        <div className="max-w-[700px] mx-auto text-center">
+          <p
+            className="text-2xl md:text-4xl leading-snug tracking-wide font-medium"
+            style={{
+              color: "#f0e8ff",
+              textShadow: "0 0 30px rgba(168,85,247,0.4), 0 2px 8px rgba(0,0,0,0.8), 0 0 60px rgba(0,0,0,0.5)",
+              minHeight: "1.5em",
+            }}
+          >
+            {line1Text}
+            {line1Text.length > 0 && line1Text.length < lines[0].length && (
+              <span className="inline-block w-[2px] h-[1.1em] bg-purple-300 align-middle ml-0.5 animate-pulse" />
+            )}
+          </p>
+          <p
+            className="text-2xl md:text-4xl leading-snug tracking-wide font-medium mt-2"
+            style={{
+              color: "#f0e8ff",
+              textShadow: "0 0 30px rgba(168,85,247,0.4), 0 2px 8px rgba(0,0,0,0.8), 0 0 60px rgba(0,0,0,0.5)",
+              minHeight: "1.5em",
+            }}
+          >
+            {line2Text}
+            {line2Text.length > 0 && line2Text.length < lines[1].length && (
+              <span className="inline-block w-[2px] h-[1.1em] bg-purple-300 align-middle ml-0.5 animate-pulse" />
+            )}
+          </p>
+        </div>
       </div>
     </section>
   );

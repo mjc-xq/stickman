@@ -51,7 +51,7 @@ export function StoryView() {
       ctx.fillStyle = grad;
       ctx.fillRect(0, 0, w, h);
 
-      const starCount = Math.round((w * h) / 800);
+      const starCount = Math.round((w * h) / 400); // dense starfield
       for (let i = 0; i < starCount; i++) {
         const sx = Math.random() * w;
         const sy = Math.random() * h;
@@ -71,7 +71,9 @@ export function StoryView() {
     return () => window.removeEventListener("resize", draw);
   }, []);
 
-  // Track active slide via scroll position
+  // Track active slide + scroll progress for parallax
+  const [scrollTop, setScrollTop] = useState(0);
+
   useEffect(() => {
     const container = scrollRef.current;
     if (!container) return;
@@ -79,7 +81,9 @@ export function StoryView() {
     const handleScroll = () => {
       const slideHeight = container.clientHeight;
       if (slideHeight === 0) return;
-      const active = Math.round(container.scrollTop / slideHeight);
+      const st = container.scrollTop;
+      setScrollTop(st);
+      const active = Math.round(st / slideHeight);
       setActiveSlide(Math.min(active, TOTAL_SLIDES - 1));
     };
 
@@ -189,16 +193,24 @@ export function StoryView() {
           WebkitOverflowScrolling: "touch",
         }}
       >
-        {STORY_SLIDES.map((slide, index) => (
-          <div key={index} ref={setSlideRef(index)}>
-            <StorySlide
-              lines={slide.lines}
-              imageSrc={slide.image}
-              index={index}
-              isActive={activeSlide === index}
-            />
-          </div>
-        ))}
+        {STORY_SLIDES.map((slide, index) => {
+          const containerEl = scrollRef.current;
+          const slideHeight = containerEl?.clientHeight || 1;
+          const slideTop = index * slideHeight;
+          const progress = (scrollTop - slideTop) / slideHeight; // -1 to 1 when visible
+          return (
+            <div key={index} ref={setSlideRef(index)}>
+              <StorySlide
+                lines={slide.lines}
+                bgSrc={slide.bg}
+                fgSrc={slide.fg}
+                index={index}
+                isActive={activeSlide === index}
+                scrollProgress={Math.max(-1, Math.min(1, progress))}
+              />
+            </div>
+          );
+        })}
 
         <div ref={setSlideRef(STORY_SLIDES.length)}>
           <HappyBirthdaySlide isActive={activeSlide === STORY_SLIDES.length} />
