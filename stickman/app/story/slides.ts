@@ -25,6 +25,7 @@ export interface Slide {
   fairyTriggerWord?: string; // triggers fairy flight animation when typed
   isTitle?: boolean; // renders as title card instead of story slide
   floatingBubble?: boolean; // shows floating bubble Cece animation
+  montage?: { ceceSrc: string; alexSrc: string }[]; // cycling image pairs
   // Multi-piece foreground (replaces single fg when present)
   splitFg?: SplitPiece[];
 }
@@ -121,20 +122,16 @@ export const STORY_SLIDES: Slide[] = [
   },
   {
     lines: [
-      "\"Hold the button to go Remote Mode — tap to control the TV!\"",
-      "\"But first... try the stars.\"",
+      "Press the button to feed her. Hold it to control the TV.",
+      "But mostly — just have fun.",
     ],
     bg: "/images/story/slide-07-bg.png",
     fg: "/images/story/slide-07-fg.png",
-  },
-  {
-    lines: [
-      "Cece waved the wand, and the stars obeyed.",
-      "They swirled. They danced. They were hers.",
+    montage: [
+      { ceceSrc: "/images/story/split/montage-cece-zap.png", alexSrc: "/images/story/split/montage-alex-wow.png" },
+      { ceceSrc: "/images/story/split/montage-cece-levitate.png", alexSrc: "/images/story/split/montage-alex-laugh.png" },
+      { ceceSrc: "/images/story/split/montage-cece-rain.png", alexSrc: "/images/story/split/montage-alex-proud.png" },
     ],
-    bg: "/images/story/slide-06-bg.png",
-    fg: "/images/story/slide-06-fg.png",
-    effect: "sparkle-burst",
   },
   {
     lines: [

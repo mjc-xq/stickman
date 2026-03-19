@@ -5,6 +5,7 @@ import gsap from "gsap";
 import { STORY_SLIDES, type Slide, type SplitPiece } from "./slides";
 import { FairyFlight } from "./FairyFlight";
 import { FloatingBubbleCece } from "./FloatingBubbleCece";
+import { MontageSlide, type MontageFrame } from "./MontageSlide";
 
 // Ken Burns drift — each slide zooms/pans to a different spot
 const KB_DRIFT: Array<{ x: string; y: string; scale: number }> = [
@@ -30,10 +31,11 @@ interface StorySlideProps {
   fairyTriggerWord?: string;
   isTitle?: boolean;
   floatingBubble?: boolean;
+  montage?: MontageFrame[];
 }
 
 export function StorySlide({
-  lines, bgSrc, fgSrc, index, isActive, effect, effectTriggerWord, splitFg, fairyTriggerWord, isTitle, floatingBubble,
+  lines, bgSrc, fgSrc, index, isActive, effect, effectTriggerWord, splitFg, fairyTriggerWord, isTitle, floatingBubble, montage,
 }: StorySlideProps) {
   const hasSplit = splitFg && splitFg.length > 0;
   const isFirstSlide = index === 0;
@@ -332,6 +334,11 @@ export function StorySlide({
 
       {/* Floating bubble Cece — only when this slide is active */}
       {floatingBubble && isActive && <FloatingBubbleCece />}
+
+      {/* Montage: cycling Cece+Alex image pairs */}
+      {montage && montage.length > 0 && (
+        <MontageSlide frames={montage} isActive={isActive} />
+      )}
 
       {/* Foreground — starts hidden via inline styles */}
       <div

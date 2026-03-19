@@ -230,6 +230,7 @@ export function StoryView() {
               fairyTriggerWord={slide.fairyTriggerWord}
               isTitle={slide.isTitle}
               floatingBubble={slide.floatingBubble}
+              montage={slide.montage}
             />
           </div>
         ))}
