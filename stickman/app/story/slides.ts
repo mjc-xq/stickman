@@ -2,6 +2,7 @@ export interface Slide {
   lines: [string, string];
   bg: string;
   fg: string;
+  effect?: "shooting-star" | "flash" | "sparkle-burst";
 }
 
 export const STORY_SLIDES: Slide[] = [
@@ -20,6 +21,7 @@ export const STORY_SLIDES: Slide[] = [
     ],
     bg: "/images/story/slide-02-bg.png",
     fg: "/images/story/slide-02-fg.png",
+    effect: "shooting-star",
   },
   {
     lines: [
@@ -28,6 +30,7 @@ export const STORY_SLIDES: Slide[] = [
     ],
     bg: "/images/story/slide-03-bg.png",
     fg: "/images/story/slide-03-fg.png",
+    effect: "sparkle-burst",
   },
   {
     lines: [
@@ -36,30 +39,31 @@ export const STORY_SLIDES: Slide[] = [
     ],
     bg: "/images/story/slide-04-bg.png",
     fg: "/images/story/slide-04-fg.png",
+    effect: "flash",
   },
   {
     lines: [
       "\"That tiny you is powered by your family's love.",
-      "Feed her snacks, keep her happy, and she'll help with ANYTHING.\"",
+      "Press the button to feed her snacks and keep her happy!\"",
     ],
     bg: "/images/story/slide-05-bg.png",
     fg: "/images/story/slide-05-fg.png",
   },
   {
     lines: [
-      "\"Oh — and hold the big button to tell the wand what to do.",
-      "Start the TV. Stop the TV. It listens to YOUR voice.\"",
-    ],
-    bg: "/images/story/slide-06-bg.png",
-    fg: "/images/story/slide-06-fg.png",
-  },
-  {
-    lines: [
-      "Cece had to test it. She held the button and said — \"TV, ON.\"",
-      "Dragons exploded out of the screen. Dolphins backflipped across the ceiling.",
+      "\"And hold the button down to turn it into a REMOTE.",
+      "Then tap the wand to control the TV. Tilt it to pick what you want!\"",
     ],
     bg: "/images/story/slide-07-bg.png",
     fg: "/images/story/slide-07-fg.png",
+  },
+  {
+    lines: [
+      "Cece held the button. The wand hummed — \"Remote Mode.\"",
+      "She tapped it once. Dragons exploded out of the TV.",
+    ],
+    bg: "/images/story/slide-06-bg.png",
+    fg: "/images/story/slide-06-fg.png",
   },
   {
     lines: [

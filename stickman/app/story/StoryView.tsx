@@ -197,6 +197,7 @@ export function StoryView() {
               fgSrc={slide.fg}
               index={index}
               isActive={activeSlide === index}
+              effect={slide.effect}
             />
           </div>
         ))}
@@ -230,6 +231,19 @@ export function StoryView() {
         @keyframes fadeInUp {
           from { opacity: 0; transform: translateY(20px); }
           to { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes slideShootingStar {
+          0% { transform: translateX(0) translateY(0); opacity: 1; }
+          80% { opacity: 1; }
+          100% { transform: translateX(75vw) translateY(30vh); opacity: 0; }
+        }
+        @keyframes flashBang {
+          0% { opacity: 0.9; }
+          100% { opacity: 0; }
+        }
+        @keyframes sparkleBurst {
+          0% { transform: rotate(var(--angle, 0deg)) translateX(0px); opacity: 1; }
+          100% { transform: rotate(var(--angle, 0deg)) translateX(40vw); opacity: 0; }
         }
       `}</style>
     </div>

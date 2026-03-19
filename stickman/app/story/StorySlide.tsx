@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { STORY_SLIDES } from "./slides";
+import { STORY_SLIDES, type Slide } from "./slides";
 
 interface StorySlideProps {
   lines: [string, string];
@@ -9,28 +9,34 @@ interface StorySlideProps {
   fgSrc: string;
   index: number;
   isActive: boolean;
+  effect?: Slide["effect"];
 }
 
-export function StorySlide({ lines, bgSrc, fgSrc, index, isActive }: StorySlideProps) {
+export function StorySlide({ lines, bgSrc, fgSrc, index, isActive, effect }: StorySlideProps) {
   const [phase, setPhase] = useState<"hidden" | "bg" | "fg" | "text">("hidden");
   const [line1Text, setLine1Text] = useState("");
   const [line2Text, setLine2Text] = useState("");
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [showEffect, setShowEffect] = useState(false);
 
-  // Staggered entrance: bg → fg slides up → text types in
+  // Staggered entrance: bg → effect → fg slides up → text types in
   useEffect(() => {
     if (!isActive) return;
     let cancelled = false;
 
-    // Phase 1: background fades in immediately
     setPhase("bg");
 
-    // Phase 2: foreground slides up after 0.6s
+    // Trigger per-slide effect right after bg appears
+    const effectTimer = setTimeout(() => {
+      if (!cancelled) setShowEffect(true);
+    }, 300);
+
+    // Foreground slides up
     const fgTimer = setTimeout(() => {
       if (!cancelled) setPhase("fg");
     }, 600);
 
-    // Phase 3: text starts typing after fg settles (1.5s)
+    // Text types in
     const textTimer = setTimeout(() => {
       if (cancelled) return;
       setPhase("text");
@@ -63,18 +69,19 @@ export function StorySlide({ lines, bgSrc, fgSrc, index, isActive }: StorySlideP
 
     return () => {
       cancelled = true;
+      clearTimeout(effectTimer);
       clearTimeout(fgTimer);
       clearTimeout(textTimer);
       if (timerRef.current) clearTimeout(timerRef.current);
     };
   }, [isActive, lines]);
 
-  // Reset when leaving
   useEffect(() => {
     if (!isActive) {
       setPhase("hidden");
       setLine1Text("");
       setLine2Text("");
+      setShowEffect(false);
     }
   }, [isActive]);
 
@@ -91,7 +98,7 @@ export function StorySlide({ lines, bgSrc, fgSrc, index, isActive }: StorySlideP
         {index + 1} / {STORY_SLIDES.length}
       </div>
 
-      {/* Background layer — fades in first */}
+      {/* Background layer */}
       <div className="absolute inset-0 z-0">
         <img
           src={bgSrc}
@@ -99,11 +106,15 @@ export function StorySlide({ lines, bgSrc, fgSrc, index, isActive }: StorySlideP
           className="w-full h-full object-cover"
           style={{ opacity: 0.75 }}
         />
-        {/* Darken bottom for text readability */}
         <div className="absolute inset-0 bg-gradient-to-b from-black/10 via-transparent to-black/70" />
       </div>
 
-      {/* Foreground characters — slides up from below with slight 3D float */}
+      {/* Per-slide effects */}
+      {showEffect && effect === "shooting-star" && <ShootingStarEffect />}
+      {showEffect && effect === "flash" && <FlashEffect />}
+      {showEffect && effect === "sparkle-burst" && <SparkleBurstEffect />}
+
+      {/* Foreground characters — slides up from below */}
       <div
         className="absolute inset-0 flex items-center justify-center z-10 overflow-hidden"
         style={{ perspective: "1200px" }}
@@ -117,7 +128,6 @@ export function StorySlide({ lines, bgSrc, fgSrc, index, isActive }: StorySlideP
             transition: fgVisible ? "transform 1.2s cubic-bezier(0.16, 1, 0.3, 1)" : "none",
           }}
         >
-          {/* Glow behind characters */}
           <div
             className="absolute -inset-8 rounded-full blur-3xl"
             style={{
@@ -135,7 +145,7 @@ export function StorySlide({ lines, bgSrc, fgSrc, index, isActive }: StorySlideP
         </div>
       </div>
 
-      {/* Text — appears last, at bottom */}
+      {/* Text at bottom */}
       <div
         className="absolute bottom-8 inset-x-0 z-20 px-6"
         style={{
@@ -158,7 +168,7 @@ export function StorySlide({ lines, bgSrc, fgSrc, index, isActive }: StorySlideP
             )}
           </p>
           <p
-            className="text-2xl md:text-4xl leading-snug tracking-wide font-medium mt-2"
+            className="text-3xl md:text-4xl leading-snug tracking-wide font-bold mt-2"
             style={{
               color: "#ffffff",
               textShadow: "0 2px 4px rgba(0,0,0,1), 0 0 20px rgba(0,0,0,0.8), 0 0 60px rgba(0,0,0,0.6), 0 0 10px rgba(168,85,247,0.3)",
@@ -173,5 +183,81 @@ export function StorySlide({ lines, bgSrc, fgSrc, index, isActive }: StorySlideP
         </div>
       </div>
     </section>
+  );
+}
+
+/** Shooting star streaks across the slide */
+function ShootingStarEffect() {
+  return (
+    <div className="absolute inset-0 z-[5] pointer-events-none overflow-hidden">
+      <div
+        className="absolute"
+        style={{
+          top: "15%",
+          left: "10%",
+          width: "200px",
+          height: "2px",
+          background: "linear-gradient(to right, transparent, rgba(255,215,0,0.9), #ffd700, white)",
+          borderRadius: "2px",
+          boxShadow: "0 0 12px rgba(255,215,0,0.8), 0 0 30px rgba(255,215,0,0.4)",
+          animation: "slideShootingStar 2s ease-out forwards",
+        }}
+      />
+      {/* Trail sparkles */}
+      {[0, 1, 2, 3, 4].map((i) => (
+        <div
+          key={i}
+          className="absolute rounded-full"
+          style={{
+            top: `${14 + Math.sin(i * 1.2) * 3}%`,
+            left: "10%",
+            width: "4px",
+            height: "4px",
+            background: "#ffd700",
+            boxShadow: "0 0 8px #ffd700",
+            animation: `slideShootingStar 2s ease-out ${0.1 + i * 0.08}s forwards`,
+            opacity: 1 - i * 0.15,
+          }}
+        />
+      ))}
+    </div>
+  );
+}
+
+/** Quick white flash — for the FLASH moment */
+function FlashEffect() {
+  return (
+    <div
+      className="absolute inset-0 z-[5] pointer-events-none"
+      style={{
+        background: "white",
+        animation: "flashBang 0.6s ease-out forwards",
+      }}
+    />
+  );
+}
+
+/** Sparkle burst — particles radiate outward from center */
+function SparkleBurstEffect() {
+  return (
+    <div className="absolute inset-0 z-[5] pointer-events-none flex items-center justify-center">
+      {Array.from({ length: 12 }).map((_, i) => {
+        const angle = (i / 12) * 360;
+        return (
+          <div
+            key={i}
+            className="absolute rounded-full"
+            style={{
+              width: "4px",
+              height: "4px",
+              background: i % 3 === 0 ? "#ffd700" : i % 3 === 1 ? "#da70d6" : "#ffffff",
+              boxShadow: `0 0 8px ${i % 3 === 0 ? "#ffd700" : i % 3 === 1 ? "#da70d6" : "#ffffff"}`,
+              animation: `sparkleBurst 1.2s ease-out ${i * 0.05}s forwards`,
+              transform: `rotate(${angle}deg) translateX(0px)`,
+            }}
+          />
+        );
+      })}
+    </div>
   );
 }
