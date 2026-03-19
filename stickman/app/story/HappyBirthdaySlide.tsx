@@ -221,7 +221,7 @@ export function HappyBirthdaySlide({ isActive }: HappyBirthdaySlideProps) {
       const { w, h } = size;
       if (moonStartTime === 0) moonStartTime = t;
       const elapsed = t - moonStartTime;
-      const moonProgress = Math.min(elapsed / 8, 1); // 8 second arc
+      const moonProgress = Math.min(elapsed / 4, 1); // 4 second arc
       const moonAngle = Math.PI + moonProgress * Math.PI;
       const moonCx = w / 2;
       const moonCy = h * 0.65;
