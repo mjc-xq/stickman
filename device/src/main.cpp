@@ -1025,12 +1025,7 @@ void loop() {
       if (happiness < 90 && tossState != TOSS_FREEFALL) {
         changeHappiness(8, "feed");
         SpriteIdx eatSprite = pick(FEED_SPRITES, FEED_EAT_N);
-        drawSprite(eatSprite);
-        showMessage(pick(FEED_TEXTS, FEED_TEXT_N));
-        delay(600);
-        SpriteIdx doneSprite = FEED_SPRITES[FEED_DONE_START + random(FEED_SPRITE_N - FEED_DONE_START)];
-        drawSprite(doneSprite);
-        showMessage("Yum!");
+        showSprite(eatSprite, pick(FEED_TEXTS, FEED_TEXT_N));
         state = STATE_RESULT; resultTime = now;
       }
     } else if (mode == MODE_DEBUG) {
@@ -1222,7 +1217,7 @@ void loop() {
           drawSprite(currentSprite == SPRITE_TOSS_LOST_1 ? SPRITE_TOSS_LOST_2 : SPRITE_TOSS_LOST_1);
         }
       }
-      if (now - resultTime > 1500) { state = STATE_READY; showReady(); lastBlink = now; }
+      if (now - resultTime > 1200) { state = STATE_READY; lastBlink = now; blinkInterval = 500; }  // quick return, idle picks up on next cycle
       break;
     default: break;
   }
