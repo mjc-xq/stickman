@@ -496,10 +496,10 @@ static const char* const TILT_UP_TEXTS[] = {
 
 static const SpriteIdx TAP_SPRITES[] = {
   SPRITE_TAP_ANNOYED, SPRITE_TAP_ANGRY,
-  SPRITE_TAP_SHOCKED, SPRITE_TAP_DIZZY, SPRITE_TAP_CRY,
-  SPRITE_TAP_GLARE, SPRITE_TAP_DODGE, SPRITE_TAP_REVENGE
+  SPRITE_TAP_SHOCKED, SPRITE_TAP_DIZZY,
+  SPRITE_TAP_GLARE, SPRITE_TAP_REVENGE
 };
-#define TAP_SPRITE_N 8
+#define TAP_SPRITE_N 6
 
 static const char* const TAP_TEXTS[] = {
   "Oww!", "Hey!", "Oof!", "Rude!", "Bonk!", "Ouch!",
