@@ -55,25 +55,28 @@ export const STORY_SLIDES: Slide[] = [
     effect: "sparkle-burst",
     splitFg: [
       {
-        src: "/images/story/split/s03-alex.png",
-        toX: 28, toY: 0, toScale: 1,
-        fromX: 250, fromY: 60, fromScale: 0.7, fromRotate: 5,
-        delay: 0, duration: 1.8, ease: "back.out(1.2)",
-        maxH: "50dvh",
-      },
-      {
+        // Cece: already in place on the left, just fades in immediately
         src: "/images/story/split/s03-cece.png",
         toX: -28, toY: 5, toScale: 1,
-        fromX: -250, fromY: 60, fromScale: 0.7, fromRotate: -5,
-        delay: 0.3, duration: 1.8, ease: "back.out(1.2)",
+        fromX: 0, fromY: 20, fromScale: 0.9, fromRotate: 0,
+        delay: 0, duration: 1.0, ease: "power2.out",
         maxH: "45dvh",
       },
       {
+        // Sparkle/star: flies in from top-right toward Cece, growing
         src: "/images/story/split/s03-sparkles.png",
-        toX: 0, toY: -5, toScale: 0.8,
-        fromX: 0, fromY: 0, fromScale: 0, fromRotate: 0,
-        delay: 1.2, duration: 1.2, ease: "elastic.out(1, 0.5)",
+        toX: -5, toY: -10, toScale: 0.8,
+        fromX: 350, fromY: -200, fromScale: 0.1, fromRotate: 180,
+        delay: 0.8, duration: 2.0, ease: "power2.inOut",
         maxH: "20dvh",
+      },
+      {
+        // Alex: follows the star in from the right, arriving after it
+        src: "/images/story/split/s03-alex.png",
+        toX: 28, toY: 0, toScale: 1,
+        fromX: 400, fromY: -80, fromScale: 0.6, fromRotate: 3,
+        delay: 1.5, duration: 2.0, ease: "power2.out",
+        maxH: "50dvh",
       },
     ],
   },
