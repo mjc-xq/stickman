@@ -71,9 +71,7 @@ export function StoryView() {
     return () => window.removeEventListener("resize", draw);
   }, []);
 
-  // Track active slide + scroll progress for parallax
-  const [scrollTop, setScrollTop] = useState(0);
-
+  // Track active slide
   useEffect(() => {
     const container = scrollRef.current;
     if (!container) return;
@@ -81,9 +79,7 @@ export function StoryView() {
     const handleScroll = () => {
       const slideHeight = container.clientHeight;
       if (slideHeight === 0) return;
-      const st = container.scrollTop;
-      setScrollTop(st);
-      const active = Math.round(st / slideHeight);
+      const active = Math.round(container.scrollTop / slideHeight);
       setActiveSlide(Math.min(active, TOTAL_SLIDES - 1));
     };
 
@@ -193,24 +189,17 @@ export function StoryView() {
           WebkitOverflowScrolling: "touch",
         }}
       >
-        {STORY_SLIDES.map((slide, index) => {
-          const containerEl = scrollRef.current;
-          const slideHeight = containerEl?.clientHeight || 1;
-          const slideTop = index * slideHeight;
-          const progress = (scrollTop - slideTop) / slideHeight; // -1 to 1 when visible
-          return (
-            <div key={index} ref={setSlideRef(index)}>
-              <StorySlide
-                lines={slide.lines}
-                bgSrc={slide.bg}
-                fgSrc={slide.fg}
-                index={index}
-                isActive={activeSlide === index}
-                scrollProgress={Math.max(-1, Math.min(1, progress))}
-              />
-            </div>
-          );
-        })}
+        {STORY_SLIDES.map((slide, index) => (
+          <div key={index} ref={setSlideRef(index)}>
+            <StorySlide
+              lines={slide.lines}
+              bgSrc={slide.bg}
+              fgSrc={slide.fg}
+              index={index}
+              isActive={activeSlide === index}
+            />
+          </div>
+        ))}
 
         <div ref={setSlideRef(STORY_SLIDES.length)}>
           <HappyBirthdaySlide isActive={activeSlide === STORY_SLIDES.length} />

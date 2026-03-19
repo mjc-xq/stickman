@@ -9,23 +9,31 @@ interface StorySlideProps {
   fgSrc: string;
   index: number;
   isActive: boolean;
-  scrollProgress: number; // -1 to 1, 0 = centered in viewport
 }
 
-export function StorySlide({ lines, bgSrc, fgSrc, index, isActive, scrollProgress }: StorySlideProps) {
-  const [revealed, setRevealed] = useState(false);
+export function StorySlide({ lines, bgSrc, fgSrc, index, isActive }: StorySlideProps) {
+  const [phase, setPhase] = useState<"hidden" | "bg" | "fg" | "text">("hidden");
   const [line1Text, setLine1Text] = useState("");
   const [line2Text, setLine2Text] = useState("");
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Typewriter effect
+  // Staggered entrance: bg → fg slides up → text types in
   useEffect(() => {
     if (!isActive) return;
     let cancelled = false;
 
-    const startDelay = setTimeout(() => {
+    // Phase 1: background fades in immediately
+    setPhase("bg");
+
+    // Phase 2: foreground slides up after 0.6s
+    const fgTimer = setTimeout(() => {
+      if (!cancelled) setPhase("fg");
+    }, 600);
+
+    // Phase 3: text starts typing after fg settles (1.5s)
+    const textTimer = setTimeout(() => {
       if (cancelled) return;
-      setRevealed(true);
+      setPhase("text");
 
       let i = 0;
       const fullLine1 = lines[0];
@@ -51,26 +59,28 @@ export function StorySlide({ lines, bgSrc, fgSrc, index, isActive, scrollProgres
         }
       };
       type();
-    }, 400);
+    }, 1500);
 
     return () => {
       cancelled = true;
-      clearTimeout(startDelay);
+      clearTimeout(fgTimer);
+      clearTimeout(textTimer);
       if (timerRef.current) clearTimeout(timerRef.current);
     };
   }, [isActive, lines]);
 
+  // Reset when leaving
   useEffect(() => {
     if (!isActive) {
-      setRevealed(false);
+      setPhase("hidden");
       setLine1Text("");
       setLine2Text("");
     }
   }, [isActive]);
 
-  // Parallax offsets
-  const bgOffset = scrollProgress * -30; // background moves slower (opposite)
-  const fgOffset = scrollProgress * 15;  // foreground moves with scroll
+  const bgVisible = phase !== "hidden";
+  const fgVisible = phase === "fg" || phase === "text";
+  const textVisible = phase === "text";
 
   return (
     <section
@@ -82,53 +92,44 @@ export function StorySlide({ lines, bgSrc, fgSrc, index, isActive, scrollProgres
         {index + 1} / {STORY_SLIDES.length}
       </div>
 
-      {/* Background layer (parallax - moves slower) */}
-      <div
-        className="absolute inset-0 z-0"
-        style={{
-          transform: `translateY(${bgOffset}px) scale(1.15)`,
-          willChange: "transform",
-        }}
-      >
+      {/* Background layer — fades in first */}
+      <div className="absolute inset-0 z-0">
         <img
           src={bgSrc}
           alt=""
           className="w-full h-full object-cover"
-          style={{ opacity: revealed ? 0.7 : 0, transition: "opacity 1.2s ease-out" }}
+          style={{
+            opacity: bgVisible ? 0.75 : 0,
+            transition: "opacity 1s ease-out",
+          }}
         />
-        {/* Darken overlay for text readability */}
-        <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-transparent to-black/60" />
+        {/* Darken bottom for text readability */}
+        <div className="absolute inset-0 bg-gradient-to-b from-black/10 via-transparent to-black/70" />
       </div>
 
-      {/* Foreground characters layer (parallax - slight float) */}
+      {/* Foreground characters — slides up from below */}
       <div
         className="absolute inset-0 flex items-center justify-center z-10"
         style={{
-          transform: `translateY(${fgOffset}px)`,
-          willChange: "transform",
+          opacity: fgVisible ? 1 : 0,
+          transform: fgVisible ? "translateY(0)" : "translateY(25%)",
+          transition: "opacity 0.8s ease-out, transform 1s cubic-bezier(0.16, 1, 0.3, 1)",
         }}
       >
-        <div
-          className="relative w-[70vw] max-w-[450px] max-h-[45dvh]"
-          style={{
-            opacity: revealed ? 1 : 0,
-            transform: revealed ? "scale(1) translateY(-5%)" : "scale(0.85) translateY(10%)",
-            transition: "opacity 0.8s ease-out 0.3s, transform 1.2s cubic-bezier(0.16, 1, 0.3, 1) 0.3s",
-          }}
-        >
+        <div className="relative w-[90vw] max-w-[600px] max-h-[55dvh]">
           {/* Glow behind characters */}
           <div
             className="absolute -inset-8 rounded-full blur-3xl"
             style={{
               background: "radial-gradient(ellipse, rgba(168,85,247,0.3) 0%, rgba(59,130,246,0.15) 40%, transparent 70%)",
-              opacity: revealed ? 1 : 0,
+              opacity: fgVisible ? 1 : 0,
               transition: "opacity 2s ease-out",
             }}
           />
           <img
             src={fgSrc}
             alt={`Story scene ${index + 1}`}
-            className="relative w-full h-auto max-h-[45dvh] object-contain drop-shadow-2xl"
+            className="relative w-full h-auto max-h-[55dvh] object-contain"
             style={{
               filter: "drop-shadow(0 4px 20px rgba(0,0,0,0.5)) drop-shadow(0 0 40px rgba(168,85,247,0.2))",
             }}
@@ -136,14 +137,21 @@ export function StorySlide({ lines, bgSrc, fgSrc, index, isActive, scrollProgres
         </div>
       </div>
 
-      {/* Text container - bigger text, positioned at bottom */}
-      <div className="absolute bottom-8 inset-x-0 z-20 px-6">
+      {/* Text — appears last, at bottom */}
+      <div
+        className="absolute bottom-8 inset-x-0 z-20 px-6"
+        style={{
+          opacity: textVisible ? 1 : 0,
+          transform: textVisible ? "translateY(0)" : "translateY(15px)",
+          transition: "opacity 0.5s ease-out, transform 0.5s ease-out",
+        }}
+      >
         <div className="max-w-[700px] mx-auto text-center">
           <p
-            className="text-2xl md:text-4xl leading-snug tracking-wide font-medium"
+            className="text-3xl md:text-5xl leading-snug tracking-wide font-bold"
             style={{
-              color: "#f0e8ff",
-              textShadow: "0 0 30px rgba(168,85,247,0.4), 0 2px 8px rgba(0,0,0,0.8), 0 0 60px rgba(0,0,0,0.5)",
+              color: "#ffffff",
+              textShadow: "0 2px 4px rgba(0,0,0,1), 0 0 20px rgba(0,0,0,0.8), 0 0 60px rgba(0,0,0,0.6), 0 0 10px rgba(168,85,247,0.3)",
               minHeight: "1.5em",
             }}
           >
@@ -155,8 +163,8 @@ export function StorySlide({ lines, bgSrc, fgSrc, index, isActive, scrollProgres
           <p
             className="text-2xl md:text-4xl leading-snug tracking-wide font-medium mt-2"
             style={{
-              color: "#f0e8ff",
-              textShadow: "0 0 30px rgba(168,85,247,0.4), 0 2px 8px rgba(0,0,0,0.8), 0 0 60px rgba(0,0,0,0.5)",
+              color: "#ffffff",
+              textShadow: "0 2px 4px rgba(0,0,0,1), 0 0 20px rgba(0,0,0,0.8), 0 0 60px rgba(0,0,0,0.6), 0 0 10px rgba(168,85,247,0.3)",
               minHeight: "1.5em",
             }}
           >
