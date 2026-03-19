@@ -120,6 +120,20 @@ const SPRITES = [
     desc: "Close-up of the teen wizard girl from the reference photo (match EXACTLY — long dark brown hair, olive skin, confident expression) leaning in from the right side whispering a secret spell to Cece. The wizard girl cups one hand near Cece's ear conspiratorially. Cece's eyes are wide with amazement, mouth in a little O of wonder, wizard hat perked up with excitement. Small sparkle stars between them" },
   { name: "alex-high-five", frame: b, refs: ["alex"],
     desc: "Cece and the teen wizard girl from the reference photo (match EXACTLY — long dark brown hair, olive skin, wearing a colorful striped outfit) doing an enthusiastic mid-air high five with a big magical BURST of purple and gold sparkles exploding from where their hands meet. Both grinning ear to ear, slightly jumping. Cece in her purple wizard hat, the wizard girl's dark hair flowing with the energy" },
+  // More Huey
+  { name: "huey-walk", frame: b, refs: ["huey"],
+    desc: "Cece walking confidently with the chunky tan bully breed dog from the reference photo (match EXACTLY — fawn coat, wrinkly face, cropped ears, stocky muscular build, pink tongue hanging out) trotting happily beside her on a leash. The dog looks up at Cece adoringly. Cece smiling down at him proudly. Wizard hat on, both mid-stride" },
+  { name: "huey-treat", frame: f, refs: ["huey"],
+    desc: "Cece holding a small treat above the chunky tan bully breed dog from the reference photo (match EXACTLY — fawn coat, wrinkly face, stocky build, pink tongue). The dog sits obediently looking up with huge begging eyes and drool. Cece has a playful teasing grin, holding the treat just out of reach. Wizard hat on" },
+  { name: "huey-couch", frame: f, refs: ["huey"],
+    desc: "Cece trying to sit down but the chunky tan bully breed dog from the reference photo (match EXACTLY — fawn coat, wrinkly face, cropped ears, stocky body, tongue out) is hogging the entire space, sprawled out lazily taking up all the room. Cece looks at the viewer with an exasperated but loving 'can you believe this dog' expression. Wizard hat on" },
+  // More Alex
+  { name: "alex-wand-compare", frame: f, refs: ["alex"],
+    desc: "Cece and the teen wizard girl from the reference photo (match EXACTLY — long dark brown hair, olive skin) comparing their wands side by side. Cece holds her wooden wand, the wizard girl holds her red wand. Both squinting critically at each other's wands with competitive expressions. Wizard hat on Cece" },
+  { name: "alex-laugh", frame: f, refs: ["alex"],
+    desc: "Cece and the teen wizard girl from the reference photo (match EXACTLY — long dark brown hair, olive skin) both doubled over laughing hysterically, eyes squeezed shut, mouths wide open. The wizard girl has one hand on Cece's shoulder for support. Cece's wizard hat falling off from laughing so hard. Best friends cracking up" },
+  { name: "alex-selfie", frame: f, refs: ["alex"],
+    desc: "Cece and the teen wizard girl from the reference photo (match EXACTLY — long dark brown hair, olive skin, confident smile) posing for a selfie. The wizard girl holds up a phone with one hand, both leaning in with big cheesy grins and peace signs. Cece's wizard hat tilted for the photo, the wizard girl doing a duck face" },
   // Tilt companions — shown randomly during tilt events
   { name: "tilt-huey-left", frame: f, refs: ["huey"],
     desc: "Cece tilting hard to the LEFT with a worried face, while the chunky tan bully breed dog from the reference (match EXACTLY — fawn coat, wrinkly face, cropped ears, stocky build, pink tongue out) slides across the frame in the same direction, legs scrambling comically. Both off-balance and sliding left. Wizard hat flying off to the left" },

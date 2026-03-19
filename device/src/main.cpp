@@ -620,12 +620,14 @@ static const SpriteIdx SAD_IDLE_SPRITES[] = {
 };
 #define SAD_IDLE_SPRITE_N 3
 
-// ── Companion sprites (bonus idle pool for happy tier) ──
+// ── Companion sprites (bonus idle pool) ──
 static const SpriteIdx COMPANION_SPRITES[] = {
   SPRITE_HUEY_CUDDLE, SPRITE_HUEY_NAP, SPRITE_HUEY_PLAY, SPRITE_HUEY_LICK,
-  SPRITE_ALEX_SPELL, SPRITE_ALEX_TEACH, SPRITE_ALEX_HIGH_FIVE
+  SPRITE_HUEY_WALK, SPRITE_HUEY_TREAT, SPRITE_HUEY_COUCH,
+  SPRITE_ALEX_SPELL, SPRITE_ALEX_TEACH, SPRITE_ALEX_HIGH_FIVE,
+  SPRITE_ALEX_WAND_COMPARE, SPRITE_ALEX_LAUGH, SPRITE_ALEX_SELFIE
 };
-#define COMPANION_SPRITE_N 7
+#define COMPANION_SPRITE_N 13
 
 // ── Motivational texts (shown periodically in happy/content tiers) ──
 static const char* const MOTIV_TEXTS[] = {
@@ -1143,16 +1145,20 @@ void loop() {
           SpriteIdx idleSprite;
           const char* idleText;
           if (tier == 3) {
-            // Happy: mix in companion sprites (30% chance) and motivational texts (25% chance)
-            if (random(100) < 30) {
+            // Happy: companion sprites 40%, motivational texts 25%
+            if (random(100) < 40) {
               idleSprite = pick(COMPANION_SPRITES, COMPANION_SPRITE_N);
             } else {
               idleSprite = pick(HAPPY_IDLE_SPRITES, HAPPY_IDLE_SPRITE_N);
             }
             idleText = (random(100) < 25) ? pick(MOTIV_TEXTS, MOTIV_TEXT_N) : pick(IDLE_TEXTS, IDLE_TEXT_N);
           } else if (tier == 2) {
-            // Content: normal pool, occasional motivational text (15% chance)
-            idleSprite = pick(IDLE_SPRITES, IDLE_SPRITE_N);
+            // Content: companion sprites 25%, motivational texts 15%
+            if (random(100) < 25) {
+              idleSprite = pick(COMPANION_SPRITES, COMPANION_SPRITE_N);
+            } else {
+              idleSprite = pick(IDLE_SPRITES, IDLE_SPRITE_N);
+            }
             idleText = (random(100) < 15) ? pick(MOTIV_TEXTS, MOTIV_TEXT_N) : pick(IDLE_TEXTS, IDLE_TEXT_N);
           } else if (tier == 1) {
             idleSprite = pick(GRUMPY_IDLE_SPRITES, GRUMPY_IDLE_SPRITE_N);
