@@ -1017,25 +1017,29 @@ void loop() {
   unsigned long now = millis();
 
   // ── BtnA: click=feed (active) or wand-mount (debug), hold=BLE toggle ──
-  if (M5.BtnA.wasPressed()) { lastButtonPress = now; publishEvent("btn", "{\\\"button\\\":\\\"A\\\",\\\"state\\\":\\\"down\\\"}"); }
-  if (M5.BtnA.wasReleased()) publishEvent("btn", "{\\\"button\\\":\\\"A\\\",\\\"state\\\":\\\"up\\\"}");
-  if (M5.BtnA.wasClicked()) {
-    if (mode == MODE_ACTIVE) {
-      // Feed Cece — always responds, highest priority interaction
-      if (happiness < 90 && tossState != TOSS_FREEFALL) {
-        changeHappiness(8, "feed");
-        SpriteIdx eatSprite = pick(FEED_SPRITES, FEED_EAT_N);
-        showSprite(eatSprite, pick(FEED_TEXTS, FEED_TEXT_N));
-        state = STATE_RESULT; resultTime = now;
+  // Hold threshold = 1500ms so normal presses aren't misread as holds
+  static bool btnAHoldFired = false;
+  if (M5.BtnA.wasPressed()) { lastButtonPress = now; btnAHoldFired = false; publishEvent("btn", "{\\\"button\\\":\\\"A\\\",\\\"state\\\":\\\"down\\\"}"); }
+  if (M5.BtnA.wasReleased()) {
+    publishEvent("btn", "{\\\"button\\\":\\\"A\\\",\\\"state\\\":\\\"up\\\"}");
+    if (!btnAHoldFired) {
+      // Short press released — feed or wand mount
+      if (mode == MODE_ACTIVE) {
+        if (happiness < 90 && tossState != TOSS_FREEFALL) {
+          changeHappiness(8, "feed");
+          showSprite(pick(FEED_SPRITES, FEED_EAT_N), pick(FEED_TEXTS, FEED_TEXT_N));
+          state = STATE_RESULT; resultTime = now;
+        }
+      } else if (mode == MODE_DEBUG) {
+        wandMount = !wandMount;
+        nvsWriteWandMount(wandMount);
+        Serial.printf("Wand mount: %s\n", wandMount ? "ON" : "OFF");
+        drawDebugScreen();
       }
-    } else if (mode == MODE_DEBUG) {
-      wandMount = !wandMount;
-      nvsWriteWandMount(wandMount);
-      Serial.printf("Wand mount: %s\n", wandMount ? "ON" : "OFF");
-      drawDebugScreen();
     }
   }
-  if (M5.BtnA.wasHold()) {
+  if (!btnAHoldFired && M5.BtnA.pressedFor(1500)) {
+    btnAHoldFired = true;
     if (mode == MODE_ACTIVE) {
       bleMode = bleMode ? 0 : 1;
       nvsWriteBleMode(bleMode);
@@ -1050,24 +1054,27 @@ void loop() {
     }
   }
 
-  // ── BtnB: click=stats (active) or exit debug, hold=enter debug ──
-  if (M5.BtnB.wasPressed()) { lastButtonPress = now; publishEvent("btn", "{\\\"button\\\":\\\"B\\\",\\\"state\\\":\\\"down\\\"}"); }
-  if (M5.BtnB.wasReleased()) publishEvent("btn", "{\\\"button\\\":\\\"B\\\",\\\"state\\\":\\\"up\\\"}");
-  if (M5.BtnB.wasClicked()) {
-    if (mode == MODE_ACTIVE) {
-      // Stats — always responds
-      drawStatsOverlay();
-      state = STATE_RESULT; resultTime = now;
-    } else if (mode == MODE_DEBUG) {
-      mode = MODE_ACTIVE;
-      publishEvent("mode", "{\\\"mode\\\":\\\"active\\\"}");
-      tossState = TOSS_IDLE; prevHpMag = 0; tapSettleCount = -1;
-      for (int i = 0; i < 3; i++) { hpState[i] = 0; hpPrevRaw[i] = 0; }
-      state = STATE_READY;
-      showReady();
+  // ── BtnB: short=stats (active) or exit debug, hold=enter debug ──
+  static bool btnBHoldFired = false;
+  if (M5.BtnB.wasPressed()) { lastButtonPress = now; btnBHoldFired = false; publishEvent("btn", "{\\\"button\\\":\\\"B\\\",\\\"state\\\":\\\"down\\\"}"); }
+  if (M5.BtnB.wasReleased()) {
+    publishEvent("btn", "{\\\"button\\\":\\\"B\\\",\\\"state\\\":\\\"up\\\"}");
+    if (!btnBHoldFired) {
+      if (mode == MODE_ACTIVE) {
+        drawStatsOverlay();
+        state = STATE_RESULT; resultTime = now;
+      } else if (mode == MODE_DEBUG) {
+        mode = MODE_ACTIVE;
+        publishEvent("mode", "{\\\"mode\\\":\\\"active\\\"}");
+        tossState = TOSS_IDLE; prevHpMag = 0; tapSettleCount = -1;
+        for (int i = 0; i < 3; i++) { hpState[i] = 0; hpPrevRaw[i] = 0; }
+        state = STATE_READY;
+        showReady();
+      }
     }
   }
-  if (M5.BtnB.wasHold()) {
+  if (!btnBHoldFired && M5.BtnB.pressedFor(1500)) {
+    btnBHoldFired = true;
     if (mode == MODE_ACTIVE) {
       mode = MODE_DEBUG;
       publishEvent("mode", "{\\\"mode\\\":\\\"debug\\\"}");
