@@ -43,7 +43,16 @@ export function HappyBirthdaySlide({ isActive }: HappyBirthdaySlideProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const isActiveRef = useRef(isActive);
 
-  useEffect(() => { isActiveRef.current = isActive; }, [isActive]);
+  // Track active state via ref for the animation loop
+  const animIdRef = useRef(0);
+  const animateFnRef = useRef<(() => void) | null>(null);
+  useEffect(() => {
+    isActiveRef.current = isActive;
+    // Restart animation loop when becoming active (it stops when inactive)
+    if (isActive && animateFnRef.current) {
+      animIdRef.current = requestAnimationFrame(animateFnRef.current);
+    }
+  }, [isActive]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -242,10 +251,8 @@ export function HappyBirthdaySlide({ isActive }: HappyBirthdaySlideProps) {
     };
 
     const animate = () => {
-      if (!isActiveRef.current) {
-        animId = requestAnimationFrame(animate);
-        return;
-      }
+      // Stop the loop when inactive (saves battery on iPad)
+      if (!isActiveRef.current) return;
 
       if (activatedAt === 0) activatedAt = performance.now() * 0.001;
 
@@ -340,7 +347,11 @@ export function HappyBirthdaySlide({ isActive }: HappyBirthdaySlideProps) {
       }
 
       animId = requestAnimationFrame(animate);
+      animIdRef.current = animId;
     };
+
+    // Store animate function so isActive effect can restart the loop
+    animateFnRef.current = animate;
 
     // Load both images
     const img1 = new Image();
@@ -369,13 +380,18 @@ export function HappyBirthdaySlide({ isActive }: HappyBirthdaySlideProps) {
     img3.src = MOON_IMAGE;
 
     resize();
-    animId = requestAnimationFrame(animate);
+    if (isActiveRef.current) {
+      animId = requestAnimationFrame(animate);
+      animIdRef.current = animId;
+    }
 
     const obs = new ResizeObserver(resize);
     obs.observe(canvas);
 
     return () => {
       cancelAnimationFrame(animId);
+      cancelAnimationFrame(animIdRef.current);
+      animateFnRef.current = null;
       obs.disconnect();
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps

@@ -103,11 +103,16 @@ export function StoryView() {
     container.style.scrollSnapType = "none";
     el.scrollIntoView({ behavior: "smooth", block: "start" });
 
-    const restore = () => { container.style.scrollSnapType = "y mandatory"; };
-    // scrollend is ideal but not universally supported; timeout as fallback
-    const onEnd = () => { restore(); container.removeEventListener("scrollend", onEnd); };
-    container.addEventListener("scrollend", onEnd, { once: true });
-    setTimeout(restore, 1000);
+    let restored = false;
+    const restore = () => {
+      if (restored) return;
+      restored = true;
+      container.style.scrollSnapType = "y mandatory";
+      container.removeEventListener("scrollend", restore);
+      clearTimeout(fallbackTimer);
+    };
+    container.addEventListener("scrollend", restore, { once: true });
+    const fallbackTimer = setTimeout(restore, 1000);
   }, []);
 
   // Wand tap → advance to next slide (subscribe directly to bus for reliability)

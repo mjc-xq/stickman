@@ -104,6 +104,7 @@ export function StorySlide({ lines, bgSrc, fgSrc, index, isActive, effect }: Sto
           src={bgSrc}
           alt=""
           className="w-full h-full object-cover"
+          loading={index === 0 ? "eager" : "lazy"}
           style={{ opacity: 0.75 }}
         />
         <div className="absolute inset-0 bg-gradient-to-b from-black/10 via-transparent to-black/70" />
@@ -137,6 +138,7 @@ export function StorySlide({ lines, bgSrc, fgSrc, index, isActive, effect }: Sto
           <img
             src={fgSrc}
             alt={`Story scene ${index + 1}`}
+            loading={index === 0 ? "eager" : "lazy"}
             className="relative w-full h-auto max-h-[55dvh] object-contain"
             style={{
               filter: "drop-shadow(0 4px 20px rgba(0,0,0,0.5)) drop-shadow(0 0 40px rgba(168,85,247,0.2))",
