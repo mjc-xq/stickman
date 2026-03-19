@@ -26,7 +26,6 @@ const rl = readline.createInterface({ input: process.stdin, output: process.stdo
 const ask = (q) => new Promise((r) => rl.question(q, r));
 
 // Latest IMU data
-let latest = null;
 let samples = [];
 
 function fmt(v) { return v >= 0 ? ` ${v.toFixed(3)}` : v.toFixed(3); }
@@ -73,7 +72,6 @@ async function main() {
   channel.subscribe("imu", (msg) => {
     try {
       const d = typeof msg.data === "string" ? JSON.parse(msg.data) : msg.data;
-      latest = d;
       samples.push(d);
       if (!receiving) {
         receiving = true;

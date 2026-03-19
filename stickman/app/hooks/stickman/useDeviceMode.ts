@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useStickmanBus } from "./useStickmanBus";
 
 export interface DeviceMode {
-  mode: "wand" | "toss" | "debug" | null;
+  mode: "active" | "debug" | null;
 }
 
 export function useDeviceMode(): DeviceMode {
