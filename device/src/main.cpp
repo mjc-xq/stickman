@@ -1020,11 +1020,11 @@ void loop() {
   if (M5.BtnA.wasPressed()) { lastButtonPress = now; publishEvent("btn", "{\\\"button\\\":\\\"A\\\",\\\"state\\\":\\\"down\\\"}"); }
   if (M5.BtnA.wasReleased()) publishEvent("btn", "{\\\"button\\\":\\\"A\\\",\\\"state\\\":\\\"up\\\"}");
   if (M5.BtnA.wasClicked()) {
-    if (mode == MODE_ACTIVE && tossState == TOSS_IDLE) {
-      // Feed Cece
-      if (happiness < 90) {
+    if (mode == MODE_ACTIVE) {
+      // Feed Cece — always responds, highest priority interaction
+      if (happiness < 90 && tossState != TOSS_FREEFALL) {
         changeHappiness(8, "feed");
-        SpriteIdx eatSprite = pick(FEED_SPRITES, FEED_EAT_N);  // eating poses only
+        SpriteIdx eatSprite = pick(FEED_SPRITES, FEED_EAT_N);
         drawSprite(eatSprite);
         showMessage(pick(FEED_TEXTS, FEED_TEXT_N));
         delay(600);
@@ -1060,6 +1060,7 @@ void loop() {
   if (M5.BtnB.wasReleased()) publishEvent("btn", "{\\\"button\\\":\\\"B\\\",\\\"state\\\":\\\"up\\\"}");
   if (M5.BtnB.wasClicked()) {
     if (mode == MODE_ACTIVE) {
+      // Stats — always responds
       drawStatsOverlay();
       state = STATE_RESULT; resultTime = now;
     } else if (mode == MODE_DEBUG) {
