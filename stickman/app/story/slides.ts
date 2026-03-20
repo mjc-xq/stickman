@@ -1,5 +1,6 @@
 export interface SplitPiece {
   src: string;
+  video?: string;  // optional animated WebP — replaces static image, plays once then holds last frame
   // Where the piece ENDS (final resting position, % of container)
   toX: number;     // final left position as % (0 = center, -40 = far left, 40 = far right)
   toY: number;     // final top position as % (0 = center)
@@ -20,6 +21,7 @@ export interface Slide {
   lines: [string, string];
   bg: string;
   fg: string;
+  fgVideo?: string; // optional animated WebP to replace single fg image
   effect?: "shooting-star" | "flash" | "sparkle-burst";
   effectTriggerWord?: string;
   fairyTriggerWord?: string; // triggers fairy flight animation when typed
@@ -31,6 +33,7 @@ export interface Slide {
 }
 
 export const STORY_SLIDES: Slide[] = [
+  // ── Slide 01: Title Card ──────────────────────────────────────────
   {
     lines: [
       "Cece and the Chaos Wand",
@@ -40,6 +43,8 @@ export const STORY_SLIDES: Slide[] = [
     fg: "/images/story/split/title-group.png",
     isTitle: true,
   },
+
+  // ── Slide 02: Birthday Star ───────────────────────────────────────
   {
     lines: [
       "A signal. A birthday star — blazing across the sky.",
@@ -49,6 +54,10 @@ export const STORY_SLIDES: Slide[] = [
     fg: "/images/story/slide-02-fg.png",
     effect: "shooting-star",
   },
+
+  // ── Slide 03: Wand Transfer ───────────────────────────────────────
+  // Alex gives the wand to Cece. Three pieces enter sequentially.
+  // Keep static images — the GSAP choreography IS the animation here.
   {
     lines: [
       "She tracked the star straight to Cece.",
@@ -84,6 +93,9 @@ export const STORY_SLIDES: Slide[] = [
       },
     ],
   },
+
+  // ── Slide 04: The Flash ───────────────────────────────────────────
+  // Cece touches the wand — FLASH — tiny fairy appears inside.
   {
     lines: [
       "The second Cece touched the wand — FLASH.",
@@ -95,6 +107,10 @@ export const STORY_SLIDES: Slide[] = [
     effectTriggerWord: "FLASH",
     fairyTriggerWord: "FLASH",
   },
+
+  // ── Slide 05: The Button ──────────────────────────────────────────
+  // Tiny Cece inside the wand, powered by family love.
+  // Cece piece replaced with animated tiny-Cece-in-bubble video.
   {
     lines: [
       "\"That tiny you is powered by your family's love.",
@@ -120,6 +136,10 @@ export const STORY_SLIDES: Slide[] = [
       },
     ],
   },
+
+  // ── Slide 06: Montage ─────────────────────────────────────────────
+  // Cece doing magic — cycling image pairs.
+  // Levitate frame replaced with animated levitation video.
   {
     lines: [
       "Press the button to feed her. Hold it to control the TV.",
@@ -133,6 +153,11 @@ export const STORY_SLIDES: Slide[] = [
       { ceceSrc: "/images/story/split/montage-cece-rain.png", alexSrc: "/images/story/split/montage-alex-proud.png" },
     ],
   },
+
+  // ── Slide 07: Finale ──────────────────────────────────────────────
+  // "You're the family wizard now." Three characters enter sequentially.
+  // Cece: animated wand-point (hero moment, pointing wand at viewer)
+  // Alex: animated high-five with Cece (celebration)
   {
     lines: [
       "Cece — you're the family wizard now. The magic is yours.",
@@ -142,27 +167,21 @@ export const STORY_SLIDES: Slide[] = [
     fg: "/images/story/slide-10-fg.png",
     splitFg: [
       {
-        // Cece: rises up center with wand — the hero
+        // Cece: rises up center — animated wand point (the hero moment)
         src: "/images/story/split/finale-cece-wand.png",
-        toX: 0, toY: 5, toScale: 1,
+        video: "/videos/animated/cece-wand-point.webp",
+        toX: -15, toY: 5, toScale: 1,
         fromX: 0, fromY: 120, fromScale: 0.7, fromRotate: 0,
         delay: 0, duration: 2.0, ease: "power3.out",
         maxH: "48dvh",
       },
       {
-        // Huey: bounds in from the right, settles next to Cece
-        src: "/images/story/split/finale-huey-run.png",
-        toX: 30, toY: 18, toScale: 0.65,
-        fromX: 300, fromY: 0, fromScale: 0.1, fromRotate: 0,
-        delay: 2.0, duration: 2.0, ease: "back.out(1.3)",
-        maxH: "25dvh",
-      },
-      {
-        // Alex: clapping, walks in from left
+        // Alex: animated high-five celebration (enters from right)
         src: "/images/story/split/finale-alex-clap.png",
-        toX: -28, toY: 3, toScale: 0.9,
-        fromX: -300, fromY: 15, fromScale: 0.85, fromRotate: -2,
-        delay: 3.0, duration: 2.0, ease: "power2.out",
+        video: "/videos/animated/cece-alex-highfive.webp",
+        toX: 20, toY: 3, toScale: 0.9,
+        fromX: 300, fromY: 15, fromScale: 0.85, fromRotate: 2,
+        delay: 2.0, duration: 2.0, ease: "power2.out",
         maxH: "48dvh",
       },
     ],

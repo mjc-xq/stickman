@@ -1,15 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import gsap from "gsap";
 import { usePointer } from "@/app/hooks/stickman";
 
-const BUBBLE_SPRITES = [
-  "/images/story/split/s05-bubble-wave.png",
-  "/images/story/split/s05-bubble-spin.png",
-  "/images/story/split/s05-bubble-sleep.png",
-  "/images/story/split/s05-bubble-laugh.png",
-];
+const BUBBLE_VIDEO = "/videos/animated/slide05-tiny-cece-wave.webp";
 
 /**
  * Tiny bubble Cece pops out of the wand, floats around the top of the screen.
@@ -19,7 +14,6 @@ const BUBBLE_SPRITES = [
 export function FloatingBubbleCece() {
   const bubbleRef = useRef<HTMLDivElement>(null);
   const pointer = usePointer();
-  const [spriteIdx, setSpriteIdx] = useState(0);
 
   useEffect(() => {
     const el = bubbleRef.current;
@@ -27,7 +21,7 @@ export function FloatingBubbleCece() {
 
     const vw = window.innerWidth;
     const vh = window.innerHeight;
-    const bubbleSize = 80;
+    const bubbleSize = 160;
     const half = bubbleSize / 2;
 
     // Current bubble position (tracked for wand blending)
@@ -108,16 +102,10 @@ export function FloatingBubbleCece() {
 
     animId = requestAnimationFrame(animate);
 
-    // Cycle sprites
-    const spriteInterval = setInterval(() => {
-      setSpriteIdx(prev => (prev + 1) % BUBBLE_SPRITES.length);
-    }, 2500);
-
     return () => {
       entranceTl.kill();
       cancelAnimationFrame(animId);
       gsap.killTweensOf(el);
-      clearInterval(spriteInterval);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -126,12 +114,9 @@ export function FloatingBubbleCece() {
     <div
       ref={bubbleRef}
       className="absolute z-[12] pointer-events-none"
-      style={{ width: 80, height: 80 }}
+      style={{ width: 160, height: 160 }}
     >
-      {BUBBLE_SPRITES.map((src, i) => (
-        <img key={i} src={src} alt="" className="absolute inset-0 w-full h-full object-contain"
-          style={{ opacity: spriteIdx === i ? 1 : 0, transition: "opacity 0.3s ease" }} />
-      ))}
+      <img src={BUBBLE_VIDEO} alt="" className="absolute inset-0 w-full h-full object-contain" />
       <div className="absolute -inset-2 rounded-full" style={{
         background: "radial-gradient(circle, rgba(255,215,0,0.2) 0%, transparent 70%)",
         animation: "fairyGlow 1.5s ease-in-out infinite alternate",

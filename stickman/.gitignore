@@ -42,3 +42,8 @@ next-env.d.ts
 # raw video source + extracted frames (large, regeneratable)
 stickman/public/videos/raw/
 stickman/public/videos/frames/
+
+# Video generation intermediates (keep transparent/ for final output)
+public/videos/raw/
+public/videos/startframes/
+public/videos/.frames/

@@ -227,6 +227,15 @@ export function StorySlide({
       // Reset the timeline to beginning and play
       tl.restart();
 
+      // Restart animated WebP by re-setting src (forces replay)
+      if (splitContainerRef.current) {
+        splitContainerRef.current.querySelectorAll<HTMLImageElement>("img.split-piece[src$='.webp']").forEach(img => {
+          const src = img.src;
+          img.src = "";
+          img.src = src;
+        });
+      }
+
       // Ken Burns: start AFTER bg entrance completes (1.5s) to avoid scale conflict
       if (kbRef.current) kbRef.current.kill();
       kbRef.current = gsap.fromTo(bg,
@@ -263,58 +272,31 @@ export function StorySlide({
       setShowEffect(false);
       setShowFairy(false);
 
+      // Kill only standalone tweens (KB, idle) — NOT the timeline's tweens
       tl.pause();
       if (kbRef.current) { kbRef.current.kill(); kbRef.current = null; }
       if (idleRef.current) { idleRef.current.kill(); idleRef.current = null; }
       if (idleGlowRef.current) { idleGlowRef.current.kill(); idleGlowRef.current = null; }
 
-      // Kill any tweens on managed elements to prevent orphaned exit tweens
-      gsap.killTweensOf(bg);
-      gsap.killTweensOf(fg);
-      gsap.killTweensOf(glow);
-      gsap.killTweensOf(text);
-      if (hasSplit && splitContainerRef.current) {
-        splitContainerRef.current.querySelectorAll(".split-piece").forEach(el => gsap.killTweensOf(el));
-      }
+      // Immediately reset timeline to frame 0 (hidden state) so it's
+      // ready for re-entrance. This is instant — no visual effect since
+      // the slide is already scrolling away.
+      tl.progress(0).pause();
 
-      // Staggered exit: text -> fg -> bg, then reset to initial hidden state
-      gsap.to(text, { y: 16, opacity: 0, duration: 0.25, ease: "power3.in", force3D: true });
-
+      // Also reset split pieces to their starting positions
       if (hasSplit && splitContainerRef.current) {
-        const pieces = splitContainerRef.current.querySelectorAll(".split-piece");
+        const pieces = splitContainerRef.current.querySelectorAll<HTMLElement>(".split-piece");
         pieces.forEach((el, i) => {
           const piece = splitFg![i];
-          gsap.to(el, {
-            x: piece ? piece.fromX * 0.5 : 0, opacity: 0, scale: 0.9,
-            duration: 0.3, ease: "power3.in", delay: 0.05 * i, force3D: true,
+          if (!piece) return;
+          gsap.set(el, {
+            xPercent: -50, yPercent: -50,
+            x: piece.fromX, y: piece.fromY,
+            scale: piece.fromScale, rotation: piece.fromRotate,
+            opacity: 0, force3D: true,
           });
         });
       }
-
-      gsap.to(fg, { scale: 0.9, opacity: 0, duration: 0.35, ease: "power3.in", delay: 0.08, force3D: true });
-      gsap.to(glow, { opacity: 0, duration: 0.3, delay: 0.08 });
-      gsap.to(bg, {
-        opacity: 0, duration: 0.4, ease: "power2.in", delay: 0.12, force3D: true,
-        onComplete: () => {
-          // Reset all elements back to their initial hidden positions so
-          // the next entrance plays cleanly from the start.
-          tl.progress(0).pause();
-          // Reset split pieces to initial hidden state
-          if (hasSplit && splitContainerRef.current) {
-            const pieces = splitContainerRef.current.querySelectorAll<HTMLElement>(".split-piece");
-            pieces.forEach((el, i) => {
-              const piece = splitFg![i];
-              if (!piece) return;
-              gsap.set(el, {
-                xPercent: -50, yPercent: -50,
-                x: piece.fromX, y: piece.fromY,
-                scale: piece.fromScale, rotation: piece.fromRotate,
-                opacity: 0, force3D: true,
-              });
-            });
-          }
-        },
-      });
     }
   }, [isActive, index, hasSplit, splitFg, stopTypewriter]);
 
@@ -428,25 +410,39 @@ export function StorySlide({
               className="relative w-full"
               style={{ height: "60dvh" }}
             >
-              {splitFg!.map((piece, i) => (
-                <img
-                  key={i}
-                  src={piece.src}
-                  alt=""
-                  className="split-piece absolute h-auto object-contain"
-                  loading="eager"
-                  style={{
-                    maxHeight: piece.maxH,
-                    maxWidth: "45vw",
-                    left: "50%",
-                    top: "50%",
-                    filter: "drop-shadow(0 8px 30px rgba(0,0,0,0.6)) drop-shadow(0 0 40px rgba(168,85,247,0.15))",
-                    // Start hidden. GSAP handles all positioning including centering.
-                    opacity: 0,
-                    willChange: "transform, opacity",
-                  }}
-                />
-              ))}
+              {splitFg!.map((piece, i) => {
+                const sharedStyle = {
+                  maxHeight: piece.maxH,
+                  maxWidth: "45vw",
+                  left: "50%",
+                  top: "50%",
+                  filter: "drop-shadow(0 8px 30px rgba(0,0,0,0.6)) drop-shadow(0 0 40px rgba(168,85,247,0.15))",
+                  opacity: 0,
+                  willChange: "transform, opacity",
+                } as const;
+                if (piece.video) {
+                  return (
+                    <img
+                      key={i}
+                      src={piece.video}
+                      alt=""
+                      className="split-piece absolute h-auto object-contain"
+                      loading="eager"
+                      style={sharedStyle}
+                    />
+                  );
+                }
+                return (
+                  <img
+                    key={i}
+                    src={piece.src}
+                    alt=""
+                    className="split-piece absolute h-auto object-contain"
+                    loading="eager"
+                    style={sharedStyle}
+                  />
+                );
+              })}
             </div>
           )}
         </div>

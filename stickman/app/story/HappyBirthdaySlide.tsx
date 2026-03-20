@@ -46,11 +46,20 @@ export function HappyBirthdaySlide({ isActive }: HappyBirthdaySlideProps) {
   // Track active state via ref for the animation loop
   const animIdRef = useRef(0);
   const animateFnRef = useRef<(() => void) | null>(null);
+  // Refs for state that needs to reset on re-activation
+  const activatedAtRef = useRef(0);
+  const morphedRef = useRef(false);
+
   useEffect(() => {
     isActiveRef.current = isActive;
-    // Restart animation loop when becoming active (it stops when inactive)
-    if (isActive && animateFnRef.current) {
-      animIdRef.current = requestAnimationFrame(animateFnRef.current);
+    if (isActive) {
+      // Reset timing so animations play from the start on revisit
+      activatedAtRef.current = 0;
+      morphedRef.current = false;
+      // Restart animation loop
+      if (animateFnRef.current) {
+        animIdRef.current = requestAnimationFrame(animateFnRef.current);
+      }
     }
   }, [isActive]);
 
@@ -68,8 +77,7 @@ export function HappyBirthdaySlide({ isActive }: HappyBirthdaySlideProps) {
     let faceImg: HTMLImageElement | null = null;
     let textLoaded = false;
     let faceLoaded = false;
-    let morphedToFace = false;
-    let activatedAt = 0;
+    // morphedRef.current and activatedAtRef.current are on refs so they reset on re-activation
     let moonImg: HTMLImageElement | null = null;
     let moonLoaded = false;
     let moonStartTime = 0;
@@ -209,7 +217,7 @@ export function HappyBirthdaySlide({ isActive }: HappyBirthdaySlideProps) {
       canvas.height = rect.height;
       buildBg(rect.width, rect.height);
       // Rebuild particles from current target
-      if (morphedToFace && faceImg && faceLoaded) {
+      if (morphedRef.current && faceImg && faceLoaded) {
         createOrUpdateParticles(sampleImage(faceImg));
       } else if (textImg && textLoaded) {
         createOrUpdateParticles(sampleImage(textImg));
@@ -254,7 +262,7 @@ export function HappyBirthdaySlide({ isActive }: HappyBirthdaySlideProps) {
       // Stop the loop when inactive (saves battery on iPad)
       if (!isActiveRef.current) return;
 
-      if (activatedAt === 0) activatedAt = performance.now() * 0.001;
+      if (activatedAtRef.current === 0) activatedAtRef.current = performance.now() * 0.001;
 
       const { w, h } = size;
       if (bgCanvas) {
@@ -264,21 +272,21 @@ export function HappyBirthdaySlide({ isActive }: HappyBirthdaySlideProps) {
       }
 
       const t = performance.now() * 0.001;
-      const elapsed = t - activatedAt;
+      const elapsed = t - activatedAtRef.current;
 
       // Draw moon behind particles (only after stars have settled into text, ~4s)
       if (elapsed > 4) drawMoon(t);
 
       // Check if it's time to morph text → face
-      if (!morphedToFace && elapsed > MORPH_DELAY_S && faceImg && faceLoaded) {
-        morphedToFace = true;
+      if (!morphedRef.current && elapsed > MORPH_DELAY_S && faceImg && faceLoaded) {
+        morphedRef.current = true;
         const dests = sampleImage(faceImg);
         createOrUpdateParticles(dests);
       }
 
       // Wand interaction only after morph to face (not during text — keeps it readable)
       const ib = imgBounds;
-      const useWand = morphedToFace;
+      const useWand = morphedRef.current;
       const norm = pointer.current;
       const pad = Math.max(ib.w, ib.h) * 0.15;
       const mx = ib.x + ib.w / 2 + norm.x * (ib.w / 2 + pad);
