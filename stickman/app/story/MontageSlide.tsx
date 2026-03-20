@@ -26,21 +26,29 @@ export function MontageSlide({ frames, isActive, cycleDuration = 3.5 }: MontageS
   const [activeFrame, setActiveFrame] = useState(0);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Cycle frames when active
+  // Cycle frames when active — videos get 9s, images get 3.5s
   useEffect(() => {
     if (!isActive) {
-      if (intervalRef.current) clearInterval(intervalRef.current);
+      if (intervalRef.current) clearTimeout(intervalRef.current);
       setActiveFrame(0);
       return;
     }
 
-    intervalRef.current = setInterval(() => {
-      setActiveFrame(prev => (prev + 1) % frames.length);
-    }, cycleDuration * 1000);
+    const scheduleNext = (currentIdx: number) => {
+      const isVideo = !!frames[currentIdx]?.videoSrc;
+      const delay = isVideo ? 9000 : cycleDuration * 1000; // videos need 9s to play fully
+      intervalRef.current = setTimeout(() => {
+        const next = (currentIdx + 1) % frames.length;
+        setActiveFrame(next);
+        scheduleNext(next);
+      }, delay);
+    };
+    scheduleNext(activeFrame);
 
     return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
+      if (intervalRef.current) clearTimeout(intervalRef.current);
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isActive, frames.length, cycleDuration]);
 
   // Animate frame transitions
