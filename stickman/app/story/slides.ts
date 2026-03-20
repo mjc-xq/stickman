@@ -199,35 +199,14 @@ export const STORY_SLIDES: Slide[] = [
   },
 
   // ── Slide 07: Finale ──────────────────────────────────────────────
-  // "You're the family wizard now." Three characters enter sequentially.
-  // Cece: animated wand-point (hero moment, pointing wand at viewer)
-  // Alex: animated high-five with Cece (celebration)
+  // Epic single video: Cece raises wand to the sky, magic erupts
   {
     lines: [
       "Cece — you're the family wizard now. The magic is yours.",
       "And you're going to do great.",
     ],
     bg: "/images/story/slide-10-bg.png",
-    fg: "/images/story/slide-10-fg.png",
-    splitFg: [
-      {
-        // Cece: rises up center — animated wand point (the hero moment)
-        src: "/images/story/split/finale-cece-wand.png",
-        video: "/videos/mp4/cece-wand-point.mp4",
-        toX: -15, toY: 5, toScale: 1,
-        fromX: 0, fromY: 120, fromScale: 0.7, fromRotate: 0,
-        delay: 0, duration: 2.0, ease: "power3.out",
-        maxH: "48dvh",
-      },
-      {
-        // Alex: animated high-five celebration (enters from right)
-        src: "/images/story/split/finale-alex-clap.png",
-        video: "/videos/mp4/cece-alex-highfive.mp4",
-        toX: 20, toY: 3, toScale: 0.9,
-        fromX: 300, fromY: 15, fromScale: 0.85, fromRotate: 2,
-        delay: 2.0, duration: 2.0, ease: "power2.out",
-        maxH: "48dvh",
-      },
-    ],
+    fg: "/images/story/split/finale-cece-wand.png",
+    fgVideo: "/videos/mp4/finale-epic-wand.mp4",
   },
 ];
