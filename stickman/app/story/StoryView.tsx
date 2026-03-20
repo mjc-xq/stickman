@@ -7,7 +7,7 @@ import { StorySlide } from "./StorySlide";
 import { HappyBirthdaySlide } from "./HappyBirthdaySlide";
 
 const TOTAL_SLIDES = STORY_SLIDES.length + 1; // story slides + birthday particle slide
-const TAP_DEBOUNCE_MS = 600;
+const TAP_DEBOUNCE_MS = 200; // short debounce — animation lockout handles the real gating
 
 // Pre-compute stable random values for twinkling stars (avoids hydration mismatch)
 const TWINKLE_STARS = Array.from({ length: 15 }, (_, i) => ({
@@ -32,11 +32,29 @@ export function StoryView() {
   // Keep ref in sync with state + lock out taps during animation
   useEffect(() => {
     activeSlideRef.current = activeSlide;
-    // Lock taps for 2.5s while entrance animation plays
+
+    // First slide: already visible on load, no lockout needed
+    if (activeSlide === 0) {
+      animatingRef.current = false;
+      return;
+    }
+
+    // Lock taps while entrance animation plays
     animatingRef.current = true;
     if (animTimerRef.current) clearTimeout(animTimerRef.current);
-    // Longer lockout for finale slide (has 3 characters entering)
-    const lockoutMs = activeSlide === STORY_SLIDES.length - 1 ? 7000 : 4000;
+
+    // Lockout duration based on slide complexity
+    const slide = STORY_SLIDES[activeSlide];
+    let lockoutMs = 3000; // default: bg(1.5s) + fg(1.4s) + buffer
+    if (slide?.splitFg && slide.splitFg.length > 0) {
+      // Split slides: longest piece delay + duration + text delay
+      const maxPieceEnd = Math.max(...slide.splitFg.map(p => p.delay + p.duration));
+      lockoutMs = Math.round((0.8 + maxPieceEnd + 1.5) * 1000); // 0.8s fg start + pieces + text
+    }
+    if (slide?.montage) lockoutMs = 2500; // montage has no split entrance
+    // Cap at 6s to avoid feeling stuck
+    lockoutMs = Math.min(lockoutMs, 6000);
+
     animTimerRef.current = setTimeout(() => { animatingRef.current = false; }, lockoutMs);
   }, [activeSlide]);
 
