@@ -82,19 +82,17 @@ export function MontageSlide({ frames, isActive, cycleDuration = 3.5 }: MontageS
         if (frame.videoSrc) {
           // Full-frame video — hardware decoded with multiply blend
           return (
-            <video
+            <img
               key={`video-${i}`}
               data-frame={i}
               src={frame.videoSrc}
-              autoPlay={i === 0}
-              muted
-              playsInline
-              preload={i <= 1 ? "auto" : "none"}
+              alt=""
+              loading={i <= 1 ? "eager" : "lazy"}
               className="absolute object-contain"
               style={{
                 opacity: i === 0 ? 1 : 0,
                 top: "10%", left: "10%", width: "80%", height: "75%",
-                mixBlendMode: "multiply",
+                filter: "drop-shadow(0 6px 20px rgba(0,0,0,0.5))",
                 willChange: "transform, opacity",
               }}
             />

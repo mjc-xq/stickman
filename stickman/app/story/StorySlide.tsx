@@ -243,11 +243,14 @@ export function StorySlide({
       // Reset the timeline to beginning and play
       tl.restart();
 
-      // Restart video elements on slide re-entry
+      // Restart animated WebP by re-setting src
       if (splitContainerRef.current) {
-        splitContainerRef.current.querySelectorAll<HTMLVideoElement>("video.split-piece").forEach(v => {
-          v.currentTime = 0;
-          v.play().catch(() => {});
+        splitContainerRef.current.querySelectorAll<HTMLImageElement>("img.split-piece").forEach(img => {
+          if (img.src.includes(".webp")) {
+            const s = img.src;
+            img.src = "";
+            requestAnimationFrame(() => { img.src = s; });
+          }
         });
       }
 
@@ -387,17 +390,13 @@ export function StorySlide({
               }}
             >
               {fgVideo ? (
-                <video
+                <img
                   src={fgVideo}
-                  autoPlay
-                  muted
-                  playsInline
-                  preload="auto"
-                  poster={fgSrc}
+                  alt=""
+                  loading={index <= 2 ? "eager" : "lazy"}
                   className="relative w-full h-auto object-contain"
                   style={{
                     maxHeight: "55dvh",
-                    mixBlendMode: "multiply",
                     filter: "drop-shadow(0 8px 30px rgba(0,0,0,0.6))",
                   }}
                 />
@@ -436,16 +435,13 @@ export function StorySlide({
                 } as const;
                 if (piece.video) {
                   return (
-                    <video
+                    <img
                       key={i}
                       src={piece.video}
-                      poster={piece.src}
-                      autoPlay
-                      muted
-                      playsInline
-                      preload="auto"
+                      alt=""
                       className="split-piece absolute h-auto object-contain"
-                      style={{ ...sharedStyle, mixBlendMode: "multiply" as const }}
+                      loading={index <= 2 ? "eager" : "lazy"}
+                      style={sharedStyle}
                     />
                   );
                 }

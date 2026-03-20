@@ -172,7 +172,7 @@ export function StoryView() {
     <div className="relative w-full h-[100dvh] overflow-hidden bg-[#0a0618]">
       {/* Preload first slide videos for smooth playback */}
       {STORY_SLIDES.slice(0, 3).map((slide, i) =>
-        slide.fgVideo ? <link key={i} rel="preload" as="video" href={slide.fgVideo} /> : null
+        slide.fgVideo ? <link key={i} rel="preload" as="image" href={slide.fgVideo} /> : null
       )}
       {/* Fixed starfield background */}
       <canvas
