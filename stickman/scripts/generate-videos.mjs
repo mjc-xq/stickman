@@ -61,6 +61,8 @@ ADDITION: She wears a pointy purple wizard hat on top of her head.
 
 STYLE: Same bold cartoon/comic art style as reference. Strong black outlines, flat colors, very expressive. She must look like the SAME character in every image.
 
+FORMAT: On a SOLID BRIGHT LIME GREEN (#00FF00) background. The entire background must be uniform bright green — like a green screen. NO white in the background. Characters should NOT contain any bright lime green in their design. NO shadows on the background.
+
 `;
 
 const HUEY_IN_STYLE = `In the SAME bold cartoon art style as the girl: a chunky tan/fawn bully breed dog matching the dog reference photo — same wrinkly face, fawn coat, cropped ears, stocky muscular build, big pink tongue. Draw the dog in cartoon style with strong black outlines and flat colors to match the girl's art style.`;
@@ -72,86 +74,86 @@ const CLIPS = [
     name: "cece-wand-wave",
     aspect: "9:16",
     refs: ["cece"],
-    imagePrompt: `FULL BODY illustration on PURE WHITE background. The girl standing center frame holding a wooden magic wand up, tip glowing with golden sparkles. Big excited grin, wizard hat on. Plenty of white space around her — do NOT crop any part of her body. No shadows, no scenery.`,
-    videoPrompt: `The cartoon girl waves her magic wand in a flowing figure-eight pattern. Golden sparkles and purple magical trails swirl from the wand tip around her. She bounces on her toes with excitement. Smooth cartoon animation. White background.`,
+    imagePrompt: `FULL BODY illustration on SOLID BRIGHT LIME GREEN (#00FF00) background like a green screen. The girl standing center frame holding a wooden magic wand up, tip glowing with golden sparkles. Big excited grin, wizard hat on. Plenty of white space around her — do NOT crop any part of her body. No shadows. Bright lime green background only.`,
+    videoPrompt: `The cartoon girl waves her magic wand in a flowing figure-eight pattern. Golden sparkles and purple magical trails swirl from the wand tip around her. She bounces on her toes with excitement. Smooth cartoon animation. Bright lime green background.`,
   },
   {
     name: "huey-lick",
     aspect: "9:16",
     refs: ["cece", "huey"],
-    imagePrompt: `FULL BODY illustration on PURE WHITE background. The girl sitting cross-legged center frame, with a chunky cartoon dog next to her. ${HUEY_IN_STYLE} The dog is leaning toward the girl's face. Both fully visible with space around them. No shadows, no scenery.`,
-    videoPrompt: `The cartoon dog enthusiastically licks the girl's entire face with its huge pink tongue. She throws her head back laughing, eyes squeezed shut, glasses going askew. The dog's tail wags rapidly. Cartoon animation. White background.`,
+    imagePrompt: `FULL BODY illustration on SOLID BRIGHT LIME GREEN (#00FF00) background like a green screen. The girl sitting cross-legged center frame, with a chunky cartoon dog next to her. ${HUEY_IN_STYLE} The dog is leaning toward the girl's face. Both fully visible with space around them. No shadows. Bright lime green background only.`,
+    videoPrompt: `The cartoon dog enthusiastically licks the girl's entire face with its huge pink tongue. She throws her head back laughing, eyes squeezed shut, glasses going askew. The dog's tail wags rapidly. Cute charming cartoon animation. Solid bright lime green background.`,
   },
   {
     name: "cece-turns-alex-cat",
     aspect: "9:16",
     refs: ["cece", "alex"],
-    imagePrompt: `FULL BODY illustration on PURE WHITE background. Wide shot showing TWO characters fully visible: the girl on the left pointing her wand at a teen wizard girl on the right. ${ALEX_IN_STYLE} Both standing facing each other, plenty of space around both. Purple magical energy crackling at the wand tip. No shadows, no scenery.`,
-    videoPrompt: `A bright purple magical blast shoots from the younger girl's wand and hits the teen girl. The teen girl is engulfed in swirling purple smoke and transforms into a surprised fluffy cat wearing a striped outfit. The younger girl covers her mouth laughing. Cartoon animation. White background.`,
+    imagePrompt: `FULL BODY illustration on SOLID BRIGHT LIME GREEN (#00FF00) background like a green screen. Wide shot showing TWO characters fully visible: the girl on the left pointing her wand at a teen wizard girl on the right. ${ALEX_IN_STYLE} Both standing facing each other, plenty of space around both. Purple magical energy crackling at the wand tip. No shadows. Bright lime green background only.`,
+    videoPrompt: `A bright purple magical blast shoots from the younger girl's wand and hits the teen girl. The teen girl is engulfed in swirling purple smoke and transforms into a surprised fluffy cat wearing a striped outfit. The younger girl covers her mouth laughing. Cute charming cartoon animation. Solid bright lime green background.`,
   },
   {
     name: "cece-spell-sparkles",
     aspect: "9:16",
     refs: ["cece"],
-    imagePrompt: `FULL BODY illustration on PURE WHITE background. The girl standing center frame, holding her wand up high with both hands, eyes closed in concentration. Colorful sparkles — gold, purple, pink — beginning to swirl at the wand tip. Wizard hat glowing. Fully visible with space around her. No shadows, no scenery.`,
-    videoPrompt: `Magical energy erupts — brilliant gold, deep purple, and hot pink sparkles spiral up from below her feet, wrapping around her body and exploding from the wand tip in a spectacular starburst. Her locs float from the energy. Cartoon animation. White background.`,
+    imagePrompt: `FULL BODY illustration on SOLID BRIGHT LIME GREEN (#00FF00) background like a green screen. The girl standing center frame, holding her wand up high with both hands, eyes closed in concentration. Colorful sparkles — gold, purple, pink — beginning to swirl at the wand tip. Wizard hat glowing. Fully visible with space around her. No shadows. Bright lime green background only.`,
+    videoPrompt: `Magical energy erupts — brilliant gold, deep purple, and hot pink sparkles spiral up from below her feet, wrapping around her body and exploding from the wand tip in a spectacular starburst. Her locs float from the energy. Cute charming cartoon animation. Solid bright lime green background.`,
   },
   {
     name: "cece-levitate",
     aspect: "9:16",
     refs: ["cece"],
-    imagePrompt: `FULL BODY illustration on PURE WHITE background. The girl standing center frame with arms starting to spread wide, wand in one hand, looking up. Faint golden rings appearing at her feet. Leave LOTS of space above her head. Fully visible. No shadows, no scenery.`,
-    videoPrompt: `The girl gently floats upward off the ground with arms spread wide. Golden rings of magic pulse outward from her body. Her wizard hat lifts slightly off her head. She looks down with amazed wide eyes and a joyful gasp. Sparkle dust drifts from her shoes. Smooth cartoon animation. White background.`,
+    imagePrompt: `FULL BODY illustration on SOLID BRIGHT LIME GREEN (#00FF00) background like a green screen. The girl standing center frame with arms starting to spread wide, wand in one hand, looking up. Faint golden rings appearing at her feet. Leave LOTS of space above her head. Fully visible. No shadows. Bright lime green background only.`,
+    videoPrompt: `The girl gently floats upward off the ground with arms spread wide. Golden rings of magic pulse outward from her body. Her wizard hat lifts slightly off her head. She looks down with amazed wide eyes and a joyful gasp. Sparkle dust drifts from her shoes. Smooth cartoon animation. Bright lime green background.`,
   },
   {
     name: "fairy-cece-laugh",
     aspect: "9:16",
     refs: ["cece"],
-    imagePrompt: `FULL BODY illustration on PURE WHITE background. A TINY fairy version of the girl — miniature with delicate translucent iridescent butterfly wings on her back. Same outfit and wizard hat but tiny. She is standing center frame holding her belly laughing. Sparkle dust around her wings. Fully visible with lots of white space. No shadows, no scenery.`,
-    videoPrompt: `The tiny fairy girl laughs hysterically — holding her belly, knees buckling, stumbling sideways. Her wizard hat tumbles off. Golden sparkle dust puffs from her wings with each heave of laughter. She's absolutely losing it. Cartoon animation. White background.`,
+    imagePrompt: `FULL BODY illustration on SOLID BRIGHT LIME GREEN (#00FF00) background like a green screen. A TINY fairy version of the girl — miniature with delicate translucent iridescent butterfly wings on her back. Same outfit and wizard hat but tiny. She is standing center frame holding her belly laughing. Sparkle dust around her wings. Fully visible with lots of white space. No shadows. Bright lime green background only.`,
+    videoPrompt: `The tiny fairy girl laughs hysterically — holding her belly, knees buckling, stumbling sideways. Her wizard hat tumbles off. Golden sparkle dust puffs from her wings with each heave of laughter. She's absolutely losing it. Cute charming cartoon animation. Solid bright lime green background.`,
   },
   {
     name: "fairy-cece-tumble",
     aspect: "9:16",
     refs: ["cece"],
-    imagePrompt: `FULL BODY illustration on PURE WHITE background. A TINY fairy version of the girl — miniature with delicate translucent iridescent butterfly wings on her back. Same outfit and wizard hat. She is mid-somersault in the air center frame, golden sparkle trail behind her. Fully visible with lots of white space. No shadows, no scenery.`,
-    videoPrompt: `The tiny fairy performs graceful acrobatic tumbles and somersaults — spinning, looping, diving, twirling. Golden sparkle dust trails behind her every movement. Her wizard hat stays on magically. She giggles the whole time. All movement stays well within frame. Cartoon animation. White background.`,
+    imagePrompt: `FULL BODY illustration on SOLID BRIGHT LIME GREEN (#00FF00) background like a green screen. A TINY fairy version of the girl — miniature with delicate translucent iridescent butterfly wings on her back. Same outfit and wizard hat. She is mid-somersault in the air center frame, golden sparkle trail behind her. Fully visible with lots of white space. No shadows. Bright lime green background only.`,
+    videoPrompt: `The tiny fairy performs graceful acrobatic tumbles and somersaults — spinning, looping, diving, twirling. Golden sparkle dust trails behind her every movement. Her wizard hat stays on magically. She giggles the whole time. All movement stays well within frame. Cute charming cartoon animation. Solid bright lime green background.`,
   },
   {
     name: "cece-huey-dance",
     aspect: "9:16",
     refs: ["cece", "huey"],
-    imagePrompt: `FULL BODY illustration on PURE WHITE background. Wide shot showing the girl and a chunky cartoon dog side by side. ${HUEY_IN_STYLE} Both in mid-dance pose — girl with arms up, dog standing on hind legs. Music notes floating. Both fully visible with space around them. No shadows, no scenery.`,
-    videoPrompt: `The girl bounces from foot to foot waving her arms while the chunky dog attempts to copy her — spinning in clumsy circles, hopping on stubby legs, tongue flapping. Musical notes and sparkles float around them. Pure joy and silliness. Cartoon animation. White background.`,
+    imagePrompt: `FULL BODY illustration on SOLID BRIGHT LIME GREEN (#00FF00) background like a green screen. Wide shot showing the girl and a chunky cartoon dog side by side. ${HUEY_IN_STYLE} Both in mid-dance pose — girl with arms up, dog standing on hind legs. Music notes floating. Both fully visible with space around them. No shadows. Bright lime green background only.`,
+    videoPrompt: `The girl bounces from foot to foot waving her arms while the chunky dog attempts to copy her — spinning in clumsy circles, hopping on stubby legs, tongue flapping. Musical notes and sparkles float around them. Pure joy and silliness. Cute charming cartoon animation. Solid bright lime green background.`,
   },
   {
     name: "cece-alex-highfive",
     aspect: "9:16",
     refs: ["cece", "alex"],
-    imagePrompt: `FULL BODY illustration on PURE WHITE background. Wide shot of TWO characters facing each other: the girl on the left and a teen wizard girl on the right. ${ALEX_IN_STYLE} Both with one hand raised, about to high five, huge grins. Magical energy between their hands. Both fully visible with space around them. No shadows, no scenery.`,
-    videoPrompt: `Both girls run at each other and leap for an epic mid-air high five. When their hands connect, a massive shockwave of purple and gold energy bursts outward in rings. Both hang in the air for a beat with triumphant grins. Cartoon animation. White background.`,
+    imagePrompt: `FULL BODY illustration on SOLID BRIGHT LIME GREEN (#00FF00) background like a green screen. Wide shot of TWO characters facing each other: the girl on the left and a teen wizard girl on the right. ${ALEX_IN_STYLE} Both with one hand raised, about to high five, huge grins. Magical energy between their hands. Both fully visible with space around them. No shadows. Bright lime green background only.`,
+    videoPrompt: `Both girls run at each other and leap for an epic mid-air high five. When their hands connect, a massive shockwave of purple and gold energy bursts outward in rings. Both hang in the air for a beat with triumphant grins. Cute charming cartoon animation. Solid bright lime green background.`,
   },
   {
     name: "cece-wand-point",
     aspect: "9:16",
     refs: ["cece"],
-    imagePrompt: `UPPER BODY illustration on PURE WHITE background. The girl center frame, thrusting her wand forward toward the viewer. One eye narrowed, mischievous confident smirk. Wand tip crackling with purple and gold energy. Wizard hat on. Fully visible from waist up. No shadows, no scenery.`,
-    videoPrompt: `The wand tip crackles with building purple and gold electrical energy, sparks arcing and growing more intense. She gives a playful wink. The energy reaches a crescendo and fires a sparkle blast toward the viewer. Cartoon animation. White background.`,
+    imagePrompt: `UPPER BODY illustration on SOLID BRIGHT LIME GREEN (#00FF00) background like a green screen. The girl center frame, thrusting her wand forward toward the viewer. One eye narrowed, mischievous confident smirk. Wand tip crackling with purple and gold energy. Wizard hat on. Fully visible from waist up. No shadows. Bright lime green background only.`,
+    videoPrompt: `The wand tip crackles with building purple and gold electrical energy, sparks arcing and growing more intense. She gives a playful wink. The energy reaches a crescendo and fires a sparkle blast toward the viewer. Cute charming cartoon animation. Solid bright lime green background.`,
   },
   {
     name: "intro-all-laughing",
     aspect: "16:9",
     refs: ["cece", "alex"],
-    imagePrompt: `FULL BODY WIDE illustration on PURE WHITE background. LANDSCAPE orientation showing TWO characters side by side center frame: the girl on the left and a teen wizard girl on the right (${ALEX_IN_STYLE}). Both are laughing together — the girl's head thrown back in giggles, the teen girl doubled over with one hand on the younger girl's shoulder. Both fully visible with comfortable space around them. No shadows, no scenery.`,
-    videoPrompt: `Both girls laugh together — the younger girl throws her head back giggling while the teen wizard girl doubles over laughing. They lean on each other for support, nearly falling over from laughing so hard. Warm, joyful, infectious laughter. Sparkles drift around them. Cartoon animation. White background.`,
+    imagePrompt: `FULL BODY WIDE illustration on SOLID BRIGHT LIME GREEN (#00FF00) background like a green screen. LANDSCAPE orientation showing TWO characters side by side center frame: the girl on the left and a teen wizard girl on the right (${ALEX_IN_STYLE}). Both are laughing together — the girl's head thrown back in giggles, the teen girl doubled over with one hand on the younger girl's shoulder. Both fully visible with comfortable space around them. No shadows. Bright lime green background only.`,
+    videoPrompt: `Both girls laugh together — the younger girl throws her head back giggling while the teen wizard girl doubles over laughing. They lean on each other for support, nearly falling over from laughing so hard. Warm, joyful, infectious laughter. Sparkles drift around them. Cute charming cartoon animation. Solid bright lime green background.`,
   },
   // ── Slide 02 foreground: Alex speaking ──
   {
     name: "slide02-alex-star",
     aspect: "9:16",
     refs: ["alex"],
-    imagePrompt: `FULL BODY illustration on PURE WHITE background. DO NOT draw the younger girl from the reference — instead draw ONLY the OLDER teen wizard girl from the second reference image (${ALEX_IN_STYLE}). She is standing alone center frame, looking up at the sky with wide eyes and a knowing smile. One hand shielding her eyes as she gazes upward at a bright golden star above her. Her red wand is gripped tightly at her side. She is OLDER and TALLER than the girl in the first reference — a teenager, not a child. Long straight dark brown hair, olive skin, colorful striped dress. NO wizard hat. NO glasses. NO locs. NO other characters. Fully visible with space around her. No shadows, no scenery.`,
-    videoPrompt: `The teen girl with long dark hair gazes up at a bright golden star streaking across the sky above her. Her eyes follow it with growing recognition and excitement. She grips her red wand tighter, nods knowingly — she understands this star is choosing someone. She looks determined, ready to pass on her power. A golden glow washes over her face from the star above. Cartoon animation. White background. Only this one teen character, no one else.`,
+    imagePrompt: `FULL BODY illustration on SOLID BRIGHT LIME GREEN (#00FF00) background like a green screen. DO NOT draw the younger girl from the reference — instead draw ONLY the OLDER teen wizard girl from the second reference image (${ALEX_IN_STYLE}). She is standing alone center frame, looking up at the sky with wide eyes and a knowing smile. One hand shielding her eyes as she gazes upward at a bright golden star above her. Her red wand is gripped tightly at her side. She is OLDER and TALLER than the girl in the first reference — a teenager, not a child. Long straight dark brown hair, olive skin, colorful striped dress. NO wizard hat. NO glasses. NO locs. NO other characters. Fully visible with space around her. No shadows. Bright lime green background only.`,
+    videoPrompt: `The teen girl with long dark hair gazes up at a bright golden star streaking across the sky above her. Her eyes follow it with growing recognition and excitement. She grips her red wand tighter, nods knowingly — she understands this star is choosing someone. She looks determined, ready to pass on her power. A golden glow washes over her face from the star above. Cute charming cartoon animation. Solid bright lime green background. Only this one teen character, no one else.`,
   },
   // ── Slide foreground animations ──
   // These can replace static foreground PNGs on story slides
@@ -159,22 +161,22 @@ const CLIPS = [
     name: "slide03-cece-receives-wand",
     aspect: "9:16",
     refs: ["cece"],
-    imagePrompt: `FULL BODY illustration on PURE WHITE background. The girl standing center frame with her hands outstretched, palms up, looking amazed with wide sparkling eyes and open mouth. She is about to receive something magical. Small golden sparkles drift around her open hands. Wizard hat on. Fully visible. No shadows, no scenery.`,
-    videoPrompt: `The girl's outstretched hands begin to glow with golden light. A magical wand materializes in her hands in a shower of sparkles. Her eyes go even wider, her mouth drops open in pure wonder and joy. She grips the wand and it pulses with energy. She lifts it up triumphantly. Cartoon animation. White background.`,
+    imagePrompt: `FULL BODY illustration on SOLID BRIGHT LIME GREEN (#00FF00) background like a green screen. The girl standing center frame with her hands outstretched, palms up, looking amazed with wide sparkling eyes and open mouth. She is about to receive something magical. Small golden sparkles drift around her open hands. Wizard hat on. Fully visible. No shadows. Bright lime green background only.`,
+    videoPrompt: `The girl's outstretched hands begin to glow with golden light. A magical wand materializes in her hands in a shower of sparkles. Her eyes go even wider, her mouth drops open in pure wonder and joy. She grips the wand and it pulses with energy. She lifts it up triumphantly. Cute charming cartoon animation. Solid bright lime green background.`,
   },
   {
     name: "slide05-tiny-cece-wave",
     aspect: "9:16",
     refs: ["cece"],
-    imagePrompt: `FULL BODY illustration on PURE WHITE background. A TINY miniature version of the girl — like a little doll-sized figure inside a glowing magical sphere/bubble. Same outfit, wizard hat, glasses, locs. She is waving at the viewer with a big friendly smile. The bubble glows softly with purple light. Fully visible center frame. No shadows, no scenery.`,
-    videoPrompt: `The tiny girl inside the glowing bubble waves enthusiastically at the viewer, bouncing around inside the bubble. She presses her face against the bubble wall making a funny squished face, then spins around doing a little dance. The bubble bobs gently. Sparkle dust swirls inside. Cartoon animation. White background.`,
+    imagePrompt: `FULL BODY illustration on SOLID BRIGHT LIME GREEN (#00FF00) background like a green screen. A TINY miniature version of the girl — like a little doll-sized figure inside a glowing magical sphere/bubble. Same outfit, wizard hat, glasses, locs. She is waving at the viewer with a big friendly smile. The bubble glows softly with purple light. Fully visible center frame. No shadows. Bright lime green background only.`,
+    videoPrompt: `The tiny girl inside the glowing bubble waves enthusiastically at the viewer, bouncing around inside the bubble. She presses her face against the bubble wall making a funny squished face, then spins around doing a little dance. The bubble bobs gently. Sparkle dust swirls inside. Cute charming cartoon animation. Solid bright lime green background.`,
   },
   {
     name: "slide07-finale-group",
     aspect: "9:16",
     refs: ["cece", "alex"],
-    imagePrompt: `FULL BODY illustration on PURE WHITE background. TWO characters center frame: the girl on the left holding her wand up high looking powerful and confident, and the teen wizard girl on the right (${ALEX_IN_STYLE}) with her arm around the younger girl's shoulder looking proud. Both fully visible with space around them. No shadows, no scenery.`,
-    videoPrompt: `The younger girl raises her wand and it erupts with golden light. The teen wizard girl claps and cheers next to her. Magical sparkles rain down like confetti. The younger girl beams with confidence — she is the family wizard now. Both celebrate together. Cartoon animation. White background.`,
+    imagePrompt: `FULL BODY illustration on SOLID BRIGHT LIME GREEN (#00FF00) background like a green screen. TWO characters center frame: the girl on the left holding her wand up high looking powerful and confident, and the teen wizard girl on the right (${ALEX_IN_STYLE}) with her arm around the younger girl's shoulder looking proud. Both fully visible with space around them. No shadows. Bright lime green background only.`,
+    videoPrompt: `The younger girl raises her wand and it erupts with golden light. The teen wizard girl claps and cheers next to her. Magical sparkles rain down like confetti. The younger girl beams with confidence — she is the family wizard now. Both celebrate together. Cute charming cartoon animation. Solid bright lime green background.`,
   },
 ];
 

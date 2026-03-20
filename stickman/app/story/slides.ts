@@ -53,7 +53,7 @@ export const STORY_SLIDES: Slide[] = [
     ],
     bg: "/images/story/slide-02-bg.png",
     fg: "/images/story/slide-02-fg.png",
-    fgVideo: "/videos/animated/slide02-alex-speaking.webp",
+    fgVideo: "/videos/animated/slide02-alex-star.webp",
     effect: "shooting-star",
   },
 
