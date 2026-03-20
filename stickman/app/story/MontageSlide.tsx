@@ -76,22 +76,23 @@ export function MontageSlide({ frames, isActive, cycleDuration = 3.5 }: MontageS
 
   return (
     <div ref={containerRef} className="absolute inset-0 flex items-center justify-center z-[11] pointer-events-none">
-      {/* Full-width video frames (when videoSrc is set) */}
-      <div className="absolute inset-0 flex items-center justify-center">
-        {frames.map((frame, i) => frame.videoSrc ? (
-          <img
-            key={`video-${i}`}
-            src={frame.videoSrc}
-            alt=""
-            className="montage-cece montage-alex absolute h-full object-contain"
-            style={{
-              opacity: i === 0 ? 1 : 0,
-              maxHeight: "70%",
-              filter: "drop-shadow(0 6px 20px rgba(0,0,0,0.5))",
-            }}
-          />
-        ) : null)}
-      </div>
+      {/* Full-width video frames (when videoSrc is set) — centered, fully visible */}
+      {frames.map((frame, i) => frame.videoSrc ? (
+        <img
+          key={`video-${i}`}
+          src={frame.videoSrc}
+          alt=""
+          className="montage-cece montage-alex absolute object-contain"
+          style={{
+            opacity: i === 0 ? 1 : 0,
+            top: "10%",
+            left: "10%",
+            width: "80%",
+            height: "75%",
+            filter: "drop-shadow(0 6px 20px rgba(0,0,0,0.5))",
+          }}
+        />
+      ) : null)}
 
       {/* Alex on the left (for image-pair frames only) */}
       <div className="absolute" style={{ left: "5%", top: "15%", width: "40%", height: "65%" }}>
