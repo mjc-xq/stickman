@@ -197,7 +197,10 @@ function loadRef(filePath) {
 // ── Step 1: Generate starting frame image with Gemini ────────────────
 
 async function generateStartFrame(ai, refs, clip) {
-  const prompt = IMAGE_BASE_PROMPT + clip.imagePrompt;
+  // Use Cece base prompt only if Cece is in refs, otherwise use a generic style prompt
+  const hasCece = clip.refs.includes("cece");
+  const basePrompt = hasCece ? IMAGE_BASE_PROMPT : `Generate an illustration matching the character shown in the reference image. Same bold cartoon/comic art style with strong black outlines and flat colors. Very expressive.\n\n`;
+  const prompt = basePrompt + clip.imagePrompt;
   const imageParts = [];
   // Only send the reference images the clip actually needs
   if (clip.refs.includes("cece") && refs.cece) {
