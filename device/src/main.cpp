@@ -158,7 +158,7 @@ static uint8_t blePressedKey = 0;
 
 // ── Tilt-to-arrows tuning ──
 #define JOY_TILT_THRESH 0.20f     // tilt (g) to trigger arrow — ~12 degrees
-#define JOY_REPEAT_MS 180         // arrow key repeat rate (ms)
+#define JOY_REPEAT_MS 350         // arrow key repeat rate (ms) — slower for controllability
 #define JOY_SEND_INTERVAL_MS 25
 static unsigned long lastJoySend = 0;
 static unsigned long lastArrowTime[4] = {0,0,0,0};
