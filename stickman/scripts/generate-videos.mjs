@@ -147,11 +147,11 @@ const CLIPS = [
   },
   // ── Slide 02 foreground: Alex speaking ──
   {
-    name: "slide02-alex-speaking",
+    name: "slide02-alex-star",
     aspect: "9:16",
-    refs: ["cece", "alex"],
-    imagePrompt: `UPPER BODY illustration on PURE WHITE background. The teen wizard girl (${ALEX_IN_STYLE}) center frame, looking up at the sky with wonder and excitement, one hand pointing upward. Her long dark hair flows behind her. Her red wand is held at her side. She looks wise and amazed. Fully visible with space around her. No shadows, no scenery.`,
-    videoPrompt: `The teen wizard girl points up at the sky in amazement, her eyes wide. She turns to speak to someone off-screen, gesturing excitedly. Her hair sways gently. A faint golden glow reflects on her face from above. Smooth cartoon animation. White background.`,
+    refs: ["alex"],
+    imagePrompt: `FULL BODY illustration on PURE WHITE background. DO NOT draw the younger girl from the reference — instead draw ONLY the OLDER teen wizard girl from the second reference image (${ALEX_IN_STYLE}). She is standing alone center frame, looking up at the sky with wide eyes and a knowing smile. One hand shielding her eyes as she gazes upward at a bright golden star above her. Her red wand is gripped tightly at her side. She is OLDER and TALLER than the girl in the first reference — a teenager, not a child. Long straight dark brown hair, olive skin, colorful striped dress. NO wizard hat. NO glasses. NO locs. NO other characters. Fully visible with space around her. No shadows, no scenery.`,
+    videoPrompt: `The teen girl with long dark hair gazes up at a bright golden star streaking across the sky above her. Her eyes follow it with growing recognition and excitement. She grips her red wand tighter, nods knowingly — she understands this star is choosing someone. She looks determined, ready to pass on her power. A golden glow washes over her face from the star above. Cartoon animation. White background. Only this one teen character, no one else.`,
   },
   // ── Slide foreground animations ──
   // These can replace static foreground PNGs on story slides
@@ -198,15 +198,20 @@ function loadRef(filePath) {
 
 async function generateStartFrame(ai, refs, clip) {
   const prompt = IMAGE_BASE_PROMPT + clip.imagePrompt;
-  const imageParts = [
-    { inlineData: { mimeType: "image/png", data: refs.cece.base64 } },
-  ];
-  // Add companion reference images
+  const imageParts = [];
+  // Only send the reference images the clip actually needs
+  if (clip.refs.includes("cece") && refs.cece) {
+    imageParts.push({ inlineData: { mimeType: "image/png", data: refs.cece.base64 } });
+  }
   if (clip.refs.includes("huey") && refs.huey) {
     imageParts.push({ inlineData: { mimeType: refs.huey.mimeType, data: refs.huey.base64 } });
   }
   if (clip.refs.includes("alex") && refs.alex) {
     imageParts.push({ inlineData: { mimeType: refs.alex.mimeType, data: refs.alex.base64 } });
+  }
+  // Fallback: if no refs specified, send Cece
+  if (imageParts.length === 0 && refs.cece) {
+    imageParts.push({ inlineData: { mimeType: "image/png", data: refs.cece.base64 } });
   }
 
   const response = await ai.models.generateContent({
