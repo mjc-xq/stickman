@@ -232,6 +232,7 @@ export function StoryView() {
               isTitle={slide.isTitle}
               floatingBubble={slide.floatingBubble}
               montage={slide.montage}
+              titleDropDown={slide.titleDropDown}
             />
           </div>
         ))}

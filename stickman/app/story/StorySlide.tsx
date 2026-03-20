@@ -33,10 +33,11 @@ interface StorySlideProps {
   isTitle?: boolean;
   floatingBubble?: boolean;
   montage?: MontageFrame[];
+  titleDropDown?: boolean;
 }
 
 export function StorySlide({
-  lines, bgSrc, fgSrc, fgVideo, index, isActive, effect, effectTriggerWord, splitFg, fairyTriggerWord, isTitle, floatingBubble, montage,
+  lines, bgSrc, fgSrc, fgVideo, index, isActive, effect, effectTriggerWord, splitFg, fairyTriggerWord, isTitle, floatingBubble, montage, titleDropDown,
 }: StorySlideProps) {
   const hasSplit = splitFg && splitFg.length > 0;
   const isFirstSlide = index === 0;
@@ -453,7 +454,9 @@ export function StorySlide({
           opacity: isFirstSlide ? 1 : 0,
           transform: isFirstSlide
             ? "translate3d(0, 0, 0)"
-            : "translate3d(0, 30px, 0)",
+            : titleDropDown
+              ? "translate3d(0, -100px, 0)"
+              : "translate3d(0, 30px, 0)",
           willChange: "transform, opacity",
         }}
       >

@@ -26,6 +26,7 @@ export interface Slide {
   effectTriggerWord?: string;
   fairyTriggerWord?: string; // triggers fairy flight animation when typed
   isTitle?: boolean; // renders as title card instead of story slide
+  titleDropDown?: boolean; // title text drops from above instead of sliding up
   floatingBubble?: boolean; // shows floating bubble Cece animation
   montage?: { ceceSrc: string; alexSrc: string; videoSrc?: string }[]; // cycling image/video pairs
   // Multi-piece foreground (replaces single fg when present)
@@ -33,6 +34,45 @@ export interface Slide {
 }
 
 export const STORY_SLIDES: Slide[] = [
+  // ── Slide 00: Wizards Intro ─────────────────────────────────────
+  // Alex slides left, Cece slides right, crystal ball rises, title drops
+  {
+    lines: [
+      "Wizards of Dahill Ln",
+      "",
+    ],
+    bg: "/images/story/intro-curtain-bg.png",
+    fg: "/images/story/split/intro-crystal-ball.png",
+    isTitle: true,
+    titleDropDown: true,
+    splitFg: [
+      {
+        // Alex: slides in from the left
+        src: "/images/story/split/intro-alex.png",
+        toX: -30, toY: 0, toScale: 1,
+        fromX: -500, fromY: 0, fromScale: 1, fromRotate: 0,
+        delay: 0, duration: 1.5, ease: "power2.out",
+        maxH: "55dvh",
+      },
+      {
+        // Cece: slides in from the right
+        src: "/images/story/split/intro-cece.png",
+        toX: 30, toY: 0, toScale: 1,
+        fromX: 500, fromY: 0, fromScale: 1, fromRotate: 0,
+        delay: 0.4, duration: 1.5, ease: "power2.out",
+        maxH: "55dvh",
+      },
+      {
+        // Crystal ball: rises up from below, big, center-front (like the promo shot)
+        src: "/images/story/split/intro-crystal-ball.png",
+        toX: 0, toY: 20, toScale: 1,
+        fromX: 0, fromY: 350, fromScale: 0.6, fromRotate: 0,
+        delay: 1.2, duration: 1.8, ease: "back.out(1.3)",
+        maxH: "45dvh",
+      },
+    ],
+  },
+
   // ── Slide 01: Title Card ──────────────────────────────────────────
   {
     lines: [
