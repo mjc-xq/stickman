@@ -275,13 +275,13 @@ async function removeBackground(inputMp4, outputWebm, clipName) {
   const frames = fs.readdirSync(tempDir).filter(f => f.endsWith(".png")).sort();
   console.log(`    Green screen removal on ${frames.length} frames...`);
 
-  // Chromakey: remove lime green background + any residual white/black edges
-  // Fast and clean — no AI needed for green screen
+  // Chromakey: remove ONLY green — don't touch white (eyes) or black (outlines)
+  // Higher fuzz (25%) to catch compressed green variations and kill the green fringe
   for (const frame of frames) {
     const p = path.join(tempDir, frame);
     try {
       execSync(
-        `magick "${p}" -fuzz 18% -transparent "#00FF00" -fuzz 3% -transparent white -fuzz 3% -transparent black "${p}"`,
+        `magick "${p}" -fuzz 25% -transparent "#00FF00" "${p}"`,
         { stdio: "pipe" }
       );
     } catch (e) { /* skip */ }
