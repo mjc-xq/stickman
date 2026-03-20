@@ -265,55 +265,28 @@ async function removeBackground(inputMp4, outputWebm, clipName) {
   const tempDir = path.join(TEMP_FRAMES_DIR, clipName);
   fs.mkdirSync(tempDir, { recursive: true });
 
-  // Extract frames — crop 10% top + 8% bottom to fully remove Veo black bars
-  console.log("    Extracting frames...");
+  // Extract at 8fps (64 frames for 8s) + crop Veo black bars
+  console.log("    Extracting frames (8fps)...");
   execSync(
-    `ffmpeg -y -i "${inputMp4}" -vf "crop=iw:ih*0.82:0:ih*0.10,fps=24" "${tempDir}/frame-%04d.png" 2>/dev/null`,
+    `ffmpeg -y -i "${inputMp4}" -vf "crop=iw:ih*0.82:0:ih*0.10,fps=8" "${tempDir}/frame-%04d.png" 2>/dev/null`,
     { stdio: "pipe" }
   );
 
   const frames = fs.readdirSync(tempDir).filter(f => f.endsWith(".png")).sort();
-  console.log(`    AI background removal on ${frames.length} frames...`);
+  console.log(`    Green screen removal on ${frames.length} frames...`);
 
-  // Use @imgly/background-removal-node for smart AI-based removal
-  // Handles enclosed areas (between arms, gaps in hair, etc.)
-  const { removeBackground } = await import("@imgly/background-removal-node");
-
-  // Process frames in batches of 8 for memory management
-  const BATCH = 8;
-  for (let i = 0; i < frames.length; i += BATCH) {
-    const batch = frames.slice(i, i + BATCH);
-    await Promise.all(batch.map(async (frame) => {
-      const p = path.join(tempDir, frame);
-      const jpgPath = p.replace(".png", ".jpg");
-      try {
-        // Convert to JPG (imgly needs it)
-        execSync(`magick "${p}" "${jpgPath}"`, { stdio: "pipe" });
-        const result = await removeBackground(`file://${jpgPath}`);
-        const buf = Buffer.from(await result.arrayBuffer());
-        fs.writeFileSync(p, buf);
-        fs.unlinkSync(jpgPath);
-      } catch (e) {
-        // Fallback: ImageMagick floodfill
-        try { fs.unlinkSync(jpgPath); } catch (_) {}
-        try {
-          const id = execSync(`magick identify -format "%w %h" "${p}"`, { encoding: "utf-8" }).trim();
-          const [w, h] = id.split(" ").map(Number);
-          execSync(
-            `magick "${p}" -bordercolor white -border 1 -alpha set -fuzz 10% -fill none ` +
-            `-draw "color 0,0 floodfill" -draw "color ${w+1},0 floodfill" ` +
-            `-draw "color 0,${h+1} floodfill" -draw "color ${w+1},${h+1} floodfill" ` +
-            `-shave 1x1 "${p}"`,
-            { stdio: "pipe" }
-          );
-        } catch (_) {}
-      }
-    }));
-    if (i + BATCH < frames.length) {
-      process.stdout.write(`    ${i + BATCH}/${frames.length} frames done\r`);
-    }
+  // Chromakey: remove lime green background + any residual white/black edges
+  // Fast and clean — no AI needed for green screen
+  for (const frame of frames) {
+    const p = path.join(tempDir, frame);
+    try {
+      execSync(
+        `magick "${p}" -fuzz 18% -transparent "#00FF00" -fuzz 3% -transparent white -fuzz 3% -transparent black "${p}"`,
+        { stdio: "pipe" }
+      );
+    } catch (e) { /* skip */ }
   }
-  console.log(`    ${frames.length}/${frames.length} frames done`);
+  console.log(`    ${frames.length} frames done`);
 
   // Scale frames down for web, then assemble as animated WebP with alpha
   // Using img2webp (not ffmpeg) because ffmpeg 8.x has broken VP9 alpha encoding
@@ -349,13 +322,12 @@ async function removeBackground(inputMp4, outputWebm, clipName) {
     execSync(`magick "${path.join(scaledDir, sf)}" -resize "${refW}x${refH}!" "${path.join(scaledDir, sf)}"`, { stdio: "pipe" });
   }
 
-  // Skip every other frame (24fps → 12fps) for reasonable file size
-  const finalFrames = scaledFrames.filter((_, i) => i % 2 === 0);
-  // Assemble animated WebP — play once (no loop), 12fps, good quality
+  // Already at 8fps from extraction — use all frames
   const webpOut = outputWebm.replace(/\.webm$/, ".webp");
-  const frameArgs = finalFrames.map(f => `"${path.join(scaledDir, f)}"`).join(" ");
-  console.log(`    Assembling animated WebP (${finalFrames.length} frames @ 12fps, ${refW}x${refH})...`);
-  execSync(`img2webp -loop 1 -d 83 -lossy -q 70 ${frameArgs} -o "${webpOut}"`, { stdio: "pipe" });
+  const frameArgs = scaledFrames.map(f => `"${path.join(scaledDir, f)}"`).join(" ");
+  // -loop 1 = play once then freeze, -d 125 = 8fps, -q 75 = high quality
+  console.log(`    Assembling animated WebP (${scaledFrames.length} frames @ 8fps, ${refW}x${refH})...`);
+  execSync(`img2webp -loop 1 -d 125 -lossy -q 75 ${frameArgs} -o "${webpOut}"`, { stdio: "pipe" });
 
   // Clean up
   fs.rmSync(scaledDir, { recursive: true, force: true });
