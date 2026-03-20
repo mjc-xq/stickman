@@ -140,19 +140,33 @@ export function StoryView() {
     const t = setTimeout(restore, 1000);
   }, []);
 
-  // Wand tap -> advance to next slide (ignored during animations — no queuing)
+  // Advance slide on tap or toss (ignored during animations)
+  const advanceSlide = useCallback(() => {
+    if (animatingRef.current) return;
+    const now = Date.now();
+    if (now - lastTapRef.current < TAP_DEBOUNCE_MS) return;
+    lastTapRef.current = now;
+    const next = Math.min(activeSlideRef.current + 1, TOTAL_SLIDES - 1);
+    goToSlide(next);
+  }, [goToSlide]);
+
+  // Wand tap -> advance
   useEffect(() => {
     const unsub = bus.subscribeType("gesture", (event) => {
       if (event.gesture !== "Tap") return;
-      if (animatingRef.current) return; // ignore taps during entrance animation
-      const now = Date.now();
-      if (now - lastTapRef.current < TAP_DEBOUNCE_MS) return;
-      lastTapRef.current = now;
-      const next = Math.min(activeSlideRef.current + 1, TOTAL_SLIDES - 1);
-      goToSlide(next);
+      advanceSlide();
     });
     return unsub;
-  }, [bus, goToSlide]);
+  }, [bus, advanceSlide]);
+
+  // Toss (caught or lost) -> also advance
+  useEffect(() => {
+    const unsub = bus.subscribeType("toss", (event) => {
+      if (event.state !== "landed" && event.state !== "lost") return;
+      advanceSlide();
+    });
+    return unsub;
+  }, [bus, advanceSlide]);
 
   // Keyboard navigation
   useEffect(() => {
