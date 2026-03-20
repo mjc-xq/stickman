@@ -96,17 +96,17 @@ export function FloatingBubbleCece() {
       pos.y = Math.max(vh * -0.02 - half, Math.min(vh * 0.25 - half, pos.y));
 
       gsap.set(el, { x: pos.x, y: pos.y, force3D: true });
-
-      // Gentle scale wobble
-      const t = performance.now() * 0.001;
-      const wobbleScale = 0.9 + Math.sin(t * 1.5) * 0.1;
-      const wobbleRot = Math.sin(t * 0.8) * 5;
-      gsap.set(el, { scaleX: wobbleScale, scaleY: wobbleScale, rotation: wobbleRot });
-
       animId = requestAnimationFrame(animate);
     };
 
     animId = requestAnimationFrame(animate);
+
+    // Wobble as a single GSAP tween (not per-frame gsap.set)
+    const wobbleTween = gsap.to(el, {
+      scaleX: 0.9, scaleY: 1.1, rotation: 5,
+      duration: 1.5, ease: "sine.inOut", yoyo: true, repeat: -1,
+      force3D: true,
+    });
 
     // Cycle sprites
     const spriteInterval = setInterval(() => {
@@ -115,6 +115,7 @@ export function FloatingBubbleCece() {
 
     return () => {
       entranceTl.kill();
+      wobbleTween.kill();
       cancelAnimationFrame(animId);
       gsap.killTweensOf(el);
       clearInterval(spriteInterval);
