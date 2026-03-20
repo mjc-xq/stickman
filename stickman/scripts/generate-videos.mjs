@@ -286,9 +286,16 @@ function removeBackground(inputMp4, outputWebm, clipName) {
   console.log("    Scaling frames for web...");
   const scaledDir = tempDir + "-scaled";
   fs.mkdirSync(scaledDir, { recursive: true });
+  // Get dimensions from first frame to enforce consistency
+  const firstId = execSync(`magick identify -format "%w %h" "${path.join(tempDir, frames[0])}"`, { encoding: "utf-8" }).trim();
+  const [srcW, srcH] = firstId.split(" ").map(Number);
+  const aspect = srcW / srcH;
+  const targetW = Math.min(480, srcW);
+  const targetH = Math.round(targetW / aspect);
+  // Force all frames to exact same dimensions (prevents img2webp mismatch errors)
   for (const frame of frames) {
     execSync(
-      `magick "${path.join(tempDir, frame)}" -resize "480x854>" "${path.join(scaledDir, frame)}"`,
+      `magick "${path.join(tempDir, frame)}" -resize "${targetW}x${targetH}!" "${path.join(scaledDir, frame)}"`,
       { stdio: "pipe" }
     );
   }
