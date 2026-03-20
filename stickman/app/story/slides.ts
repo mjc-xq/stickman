@@ -151,11 +151,11 @@ export const STORY_SLIDES: Slide[] = [
     fg: "/images/story/slide-06-fg.png",
     montage: [
       { ceceSrc: "/images/story/split/montage-cece-zap.png", alexSrc: "/images/story/split/montage-alex-wow.png" },
-      { ceceSrc: "", alexSrc: "", videoSrc: "/videos/animated/cece-levitate.webp" },
-      { ceceSrc: "/images/story/split/montage-cece-levitate.png", alexSrc: "/images/story/split/montage-alex-laugh.png" },
       { ceceSrc: "", alexSrc: "", videoSrc: "/videos/animated/cece-turns-alex-cat.webp" },
+      { ceceSrc: "/images/story/split/montage-cece-levitate.png", alexSrc: "/images/story/split/montage-alex-laugh.png" },
+      { ceceSrc: "", alexSrc: "", videoSrc: "/videos/animated/cece-levitate.webp" },
       { ceceSrc: "/images/story/split/montage-cece-rain.png", alexSrc: "/images/story/split/montage-alex-proud.png" },
-      { ceceSrc: "", alexSrc: "", videoSrc: "/videos/animated/cece-wand-point.webp" },
+      { ceceSrc: "", alexSrc: "", videoSrc: "/videos/animated/cece-alex-highfive.webp" },
     ],
   },
 
