@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@google/genai": "^1.45.0",
+    "@imgly/background-removal-node": "^1.4.5",
     "@react-three/drei": "^10.7.7",
     "@react-three/fiber": "^9.5.0",
     "@tsparticles/react": "^3.0.0",
