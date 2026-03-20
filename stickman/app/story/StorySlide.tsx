@@ -243,12 +243,11 @@ export function StorySlide({
       // Reset the timeline to beginning and play
       tl.restart();
 
-      // Restart animated WebP by re-setting src (forces replay)
+      // Restart video elements on slide re-entry
       if (splitContainerRef.current) {
-        splitContainerRef.current.querySelectorAll<HTMLImageElement>("img.split-piece[src$='.webp']").forEach(img => {
-          const src = img.src;
-          img.src = "";
-          img.src = src;
+        splitContainerRef.current.querySelectorAll<HTMLVideoElement>("video.split-piece").forEach(v => {
+          v.currentTime = 0;
+          v.play().catch(() => {});
         });
       }
 
@@ -387,16 +386,33 @@ export function StorySlide({
                 willChange: "transform",
               }}
             >
-              <img
-                src={fgVideo || fgSrc}
-                alt={`Scene ${index + 1}`}
-                loading={index <= 1 ? "eager" : "lazy"}
-                className="relative w-full h-auto object-contain"
-                style={{
-                  maxHeight: "55dvh",
-                  filter: "drop-shadow(0 8px 30px rgba(0,0,0,0.6)) drop-shadow(0 0 60px rgba(168,85,247,0.15))",
-                }}
-              />
+              {fgVideo ? (
+                <video
+                  src={fgVideo}
+                  autoPlay
+                  muted
+                  playsInline
+                  preload="auto"
+                  poster={fgSrc}
+                  className="relative w-full h-auto object-contain"
+                  style={{
+                    maxHeight: "55dvh",
+                    mixBlendMode: "multiply",
+                    filter: "drop-shadow(0 8px 30px rgba(0,0,0,0.6))",
+                  }}
+                />
+              ) : (
+                <img
+                  src={fgSrc}
+                  alt={`Scene ${index + 1}`}
+                  loading={index <= 1 ? "eager" : "lazy"}
+                  className="relative w-full h-auto object-contain"
+                  style={{
+                    maxHeight: "55dvh",
+                    filter: "drop-shadow(0 8px 30px rgba(0,0,0,0.6)) drop-shadow(0 0 60px rgba(168,85,247,0.15))",
+                  }}
+                />
+              )}
             </div>
           )}
 
@@ -420,13 +436,16 @@ export function StorySlide({
                 } as const;
                 if (piece.video) {
                   return (
-                    <img
+                    <video
                       key={i}
                       src={piece.video}
-                      alt=""
+                      poster={piece.src}
+                      autoPlay
+                      muted
+                      playsInline
+                      preload="auto"
                       className="split-piece absolute h-auto object-contain"
-                      loading="eager"
-                      style={sharedStyle}
+                      style={{ ...sharedStyle, mixBlendMode: "multiply" as const }}
                     />
                   );
                 }
@@ -436,7 +455,7 @@ export function StorySlide({
                     src={piece.src}
                     alt=""
                     className="split-piece absolute h-auto object-contain"
-                    loading="eager"
+                    loading={index <= 2 ? "eager" : "lazy"}
                     style={sharedStyle}
                   />
                 );

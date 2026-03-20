@@ -81,7 +81,7 @@ export const STORY_SLIDES: Slide[] = [
     ],
     bg: "/images/story/slide-01-bg.png",
     fg: "/images/story/split/title-group.png",
-    fgVideo: "/videos/animated/intro-all-laughing.webp",
+    fgVideo: "/videos/mp4/intro-all-laughing.mp4",
     isTitle: true,
   },
 
@@ -93,7 +93,7 @@ export const STORY_SLIDES: Slide[] = [
     ],
     bg: "/images/story/slide-02-bg.png",
     fg: "/images/story/slide-02-fg.png",
-    fgVideo: "/videos/animated/slide02-alex-star.webp",
+    fgVideo: "/videos/mp4/slide02-alex-star.mp4",
     effect: "shooting-star",
   },
 
@@ -190,11 +190,11 @@ export const STORY_SLIDES: Slide[] = [
     fg: "/images/story/slide-06-fg.png",
     montage: [
       { ceceSrc: "/images/story/split/montage-cece-zap.png", alexSrc: "/images/story/split/montage-alex-wow.png" },
-      { ceceSrc: "", alexSrc: "", videoSrc: "/videos/animated/cece-levitate.webp" },
+      { ceceSrc: "", alexSrc: "", videoSrc: "/videos/mp4/cece-levitate.mp4" },
       { ceceSrc: "/images/story/split/montage-cece-rain.png", alexSrc: "/images/story/split/montage-alex-proud.png" },
-      { ceceSrc: "", alexSrc: "", videoSrc: "/videos/animated/cece-turns-alex-cat.webp" },
+      { ceceSrc: "", alexSrc: "", videoSrc: "/videos/mp4/cece-turns-alex-cat.mp4" },
       { ceceSrc: "/images/story/split/montage-cece-levitate.png", alexSrc: "/images/story/split/montage-alex-laugh.png" },
-      { ceceSrc: "", alexSrc: "", videoSrc: "/videos/animated/cece-alex-highfive.webp" },
+      { ceceSrc: "", alexSrc: "", videoSrc: "/videos/mp4/cece-alex-highfive.mp4" },
     ],
   },
 
@@ -213,7 +213,7 @@ export const STORY_SLIDES: Slide[] = [
       {
         // Cece: rises up center — animated wand point (the hero moment)
         src: "/images/story/split/finale-cece-wand.png",
-        video: "/videos/animated/cece-wand-point.webp",
+        video: "/videos/mp4/cece-wand-point.mp4",
         toX: -15, toY: 5, toScale: 1,
         fromX: 0, fromY: 120, fromScale: 0.7, fromRotate: 0,
         delay: 0, duration: 2.0, ease: "power3.out",
@@ -222,7 +222,7 @@ export const STORY_SLIDES: Slide[] = [
       {
         // Alex: animated high-five celebration (enters from right)
         src: "/images/story/split/finale-alex-clap.png",
-        video: "/videos/animated/cece-alex-highfive.webp",
+        video: "/videos/mp4/cece-alex-highfive.mp4",
         toX: 20, toY: 3, toScale: 0.9,
         fromX: 300, fromY: 15, fromScale: 0.85, fromRotate: 2,
         delay: 2.0, duration: 2.0, ease: "power2.out",
