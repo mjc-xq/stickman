@@ -251,7 +251,7 @@ async function animateFrame(ai, frameBase64, clip) {
 
 // ── Step 3: Remove background ────────────────────────────────────────
 
-function removeBackground(inputMp4, outputWebm, clipName) {
+async function removeBackground(inputMp4, outputWebm, clipName) {
   const tempDir = path.join(TEMP_FRAMES_DIR, clipName);
   fs.mkdirSync(tempDir, { recursive: true });
 
@@ -263,27 +263,47 @@ function removeBackground(inputMp4, outputWebm, clipName) {
   );
 
   const frames = fs.readdirSync(tempDir).filter(f => f.endsWith(".png")).sort();
-  console.log(`    Removing background from ${frames.length} frames...`);
+  console.log(`    AI background removal on ${frames.length} frames...`);
 
-  for (const frame of frames) {
-    const p = path.join(tempDir, frame);
-    try {
-      // White background removal only — floodfill from 8 edge points
-      // NO black floodfill (it damages dark features like hair, cat faces, etc.)
-      const id = execSync(`magick identify -format "%w %h" "${p}"`, { encoding: "utf-8" }).trim();
-      const [w, h] = id.split(" ").map(Number);
-      const mx = Math.floor(w / 2), my = Math.floor(h / 2);
-      execSync(
-        `magick "${p}" -bordercolor white -border 1 -alpha set -fuzz 10% -fill none ` +
-        `-draw "color 0,0 floodfill" -draw "color ${w+1},0 floodfill" ` +
-        `-draw "color 0,${h+1} floodfill" -draw "color ${w+1},${h+1} floodfill" ` +
-        `-draw "color ${mx},0 floodfill" -draw "color ${mx},${h+1} floodfill" ` +
-        `-draw "color 0,${my} floodfill" -draw "color ${w+1},${my} floodfill" ` +
-        `-shave 1x1 "${p}"`,
-        { stdio: "pipe" }
-      );
-    } catch (e) { /* skip */ }
+  // Use @imgly/background-removal-node for smart AI-based removal
+  // Handles enclosed areas (between arms, gaps in hair, etc.)
+  const { removeBackground } = await import("@imgly/background-removal-node");
+
+  // Process frames in batches of 8 for memory management
+  const BATCH = 8;
+  for (let i = 0; i < frames.length; i += BATCH) {
+    const batch = frames.slice(i, i + BATCH);
+    await Promise.all(batch.map(async (frame) => {
+      const p = path.join(tempDir, frame);
+      const jpgPath = p.replace(".png", ".jpg");
+      try {
+        // Convert to JPG (imgly needs it)
+        execSync(`magick "${p}" "${jpgPath}"`, { stdio: "pipe" });
+        const result = await removeBackground(`file://${jpgPath}`);
+        const buf = Buffer.from(await result.arrayBuffer());
+        fs.writeFileSync(p, buf);
+        fs.unlinkSync(jpgPath);
+      } catch (e) {
+        // Fallback: ImageMagick floodfill
+        try { fs.unlinkSync(jpgPath); } catch (_) {}
+        try {
+          const id = execSync(`magick identify -format "%w %h" "${p}"`, { encoding: "utf-8" }).trim();
+          const [w, h] = id.split(" ").map(Number);
+          execSync(
+            `magick "${p}" -bordercolor white -border 1 -alpha set -fuzz 10% -fill none ` +
+            `-draw "color 0,0 floodfill" -draw "color ${w+1},0 floodfill" ` +
+            `-draw "color 0,${h+1} floodfill" -draw "color ${w+1},${h+1} floodfill" ` +
+            `-shave 1x1 "${p}"`,
+            { stdio: "pipe" }
+          );
+        } catch (_) {}
+      }
+    }));
+    if (i + BATCH < frames.length) {
+      process.stdout.write(`    ${i + BATCH}/${frames.length} frames done\r`);
+    }
   }
+  console.log(`    ${frames.length}/${frames.length} frames done`);
 
   // Scale frames down for web, then assemble as animated WebP with alpha
   // Using img2webp (not ffmpeg) because ffmpeg 8.x has broken VP9 alpha encoding
