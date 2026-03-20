@@ -225,6 +225,20 @@ export function StorySlide({
       fairyFiredRef.current = false;
       setShowFairy(false);
 
+      // Reset split pieces to their starting positions before replaying
+      if (hasSplit && splitContainerRef.current) {
+        splitContainerRef.current.querySelectorAll<HTMLElement>(".split-piece").forEach((el, i) => {
+          const piece = splitFg![i];
+          if (!piece) return;
+          gsap.set(el, {
+            xPercent: -50, yPercent: -50,
+            x: piece.fromX, y: piece.fromY,
+            scale: piece.fromScale, rotation: piece.fromRotate,
+            opacity: 0, force3D: true,
+          });
+        });
+      }
+
       // Reset the timeline to beginning and play
       tl.restart();
 
@@ -273,31 +287,13 @@ export function StorySlide({
       setShowEffect(false);
       setShowFairy(false);
 
-      // Kill only standalone tweens (KB, idle) — NOT the timeline's tweens
+      // Kill standalone tweens (KB, idle) and pause timeline.
+      // DON'T reset to hidden here — leave visuals in place while scrolling away.
+      // The reset happens at the START of the next entrance (tl.restart handles it).
       tl.pause();
       if (kbRef.current) { kbRef.current.kill(); kbRef.current = null; }
       if (idleRef.current) { idleRef.current.kill(); idleRef.current = null; }
       if (idleGlowRef.current) { idleGlowRef.current.kill(); idleGlowRef.current = null; }
-
-      // Immediately reset timeline to frame 0 (hidden state) so it's
-      // ready for re-entrance. This is instant — no visual effect since
-      // the slide is already scrolling away.
-      tl.progress(0).pause();
-
-      // Also reset split pieces to their starting positions
-      if (hasSplit && splitContainerRef.current) {
-        const pieces = splitContainerRef.current.querySelectorAll<HTMLElement>(".split-piece");
-        pieces.forEach((el, i) => {
-          const piece = splitFg![i];
-          if (!piece) return;
-          gsap.set(el, {
-            xPercent: -50, yPercent: -50,
-            x: piece.fromX, y: piece.fromY,
-            scale: piece.fromScale, rotation: piece.fromRotate,
-            opacity: 0, force3D: true,
-          });
-        });
-      }
     }
   }, [isActive, index, hasSplit, splitFg, stopTypewriter]);
 
