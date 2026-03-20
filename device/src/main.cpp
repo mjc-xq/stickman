@@ -108,11 +108,11 @@ static bool readIMUFull() {
 // Layer 2: Jerk (derivative) of filtered magnitude — taps produce huge jerk
 // Layer 3: Duration gate — tap energy dissipates within 50ms, tilts don't
 #define TAP_HP_ALPHA       0.8f   // high-pass filter coefficient (0.8 → ~4Hz cutoff at 100Hz)
-#define TAP_JERK_THRESH    0.6f   // minimum jerk to trigger candidate (g/sample)
-#define TAP_HP_MAG_THRESH  0.4f   // minimum HP-filtered magnitude at trigger (g)
-#define TAP_SETTLE_WINDOW  5      // samples to wait for energy to dissipate
-#define TAP_SETTLE_THRESH  0.15f  // HP magnitude must drop below this to confirm tap
-#define TAP_COOLDOWN_MS    500    // cooldown after confirmed tap (ms)
+#define TAP_JERK_THRESH    0.4f   // minimum jerk to trigger candidate (g/sample) — lowered for easier taps
+#define TAP_HP_MAG_THRESH  0.25f  // minimum HP-filtered magnitude at trigger (g) — lowered
+#define TAP_SETTLE_WINDOW  6      // samples to wait for energy to dissipate
+#define TAP_SETTLE_THRESH  0.18f  // HP magnitude must drop below this to confirm tap — slightly relaxed
+#define TAP_COOLDOWN_MS    400    // cooldown after confirmed tap (ms)
 
 // High-pass filter state (per-axis)
 static float hpPrevRaw[3] = {0, 0, 0};  // previous raw accel values
