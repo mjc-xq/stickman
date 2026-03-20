@@ -140,13 +140,20 @@ export function StoryView() {
     const t = setTimeout(restore, 1000);
   }, []);
 
-  // Advance slide on tap or toss (ignored during animations)
+  // Advance slide — simple, direct
   const advanceSlide = useCallback(() => {
-    if (animatingRef.current) return;
+    if (animatingRef.current) {
+      console.log("[story] tap ignored — animating");
+      return;
+    }
     const now = Date.now();
-    if (now - lastTapRef.current < TAP_DEBOUNCE_MS) return;
+    if (now - lastTapRef.current < TAP_DEBOUNCE_MS) {
+      console.log("[story] tap ignored — debounce");
+      return;
+    }
     lastTapRef.current = now;
     const next = Math.min(activeSlideRef.current + 1, TOTAL_SLIDES - 1);
+    console.log("[story] advancing to slide", next);
     goToSlide(next);
   }, [goToSlide]);
 
@@ -154,15 +161,17 @@ export function StoryView() {
   useEffect(() => {
     const unsub = bus.subscribeType("gesture", (event) => {
       if (event.gesture !== "Tap") return;
+      console.log("[story] tap event received");
       advanceSlide();
     });
     return unsub;
   }, [bus, advanceSlide]);
 
-  // Toss (caught or lost) -> also advance
+  // Toss (any state) -> also advance
   useEffect(() => {
     const unsub = bus.subscribeType("toss", (event) => {
-      if (event.state !== "landed" && event.state !== "lost") return;
+      console.log("[story] toss event:", event.state);
+      if (event.state === "airborne") return; // only on catch/lost
       advanceSlide();
     });
     return unsub;
