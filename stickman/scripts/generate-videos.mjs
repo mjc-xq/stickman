@@ -255,11 +255,10 @@ function removeBackground(inputMp4, outputWebm, clipName) {
   const tempDir = path.join(TEMP_FRAMES_DIR, clipName);
   fs.mkdirSync(tempDir, { recursive: true });
 
-  // Extract frames — aggressively crop black bars from Veo (7% top, 5% bottom)
-  // Then replace any remaining near-black edges with white so floodfill can remove them
+  // Extract frames — crop 10% top + 8% bottom to fully remove Veo black bars
   console.log("    Extracting frames...");
   execSync(
-    `ffmpeg -y -i "${inputMp4}" -vf "crop=iw:ih*0.88:0:ih*0.07,fps=24" "${tempDir}/frame-%04d.png" 2>/dev/null`,
+    `ffmpeg -y -i "${inputMp4}" -vf "crop=iw:ih*0.82:0:ih*0.10,fps=24" "${tempDir}/frame-%04d.png" 2>/dev/null`,
     { stdio: "pipe" }
   );
 
@@ -269,23 +268,13 @@ function removeBackground(inputMp4, outputWebm, clipName) {
   for (const frame of frames) {
     const p = path.join(tempDir, frame);
     try {
-      // Pass 1: Floodfill near-black edges with white (kills black bar residue)
-      let id = execSync(`magick identify -format "%w %h" "${p}"`, { encoding: "utf-8" }).trim();
-      let [w, h] = id.split(" ").map(Number);
-      execSync(
-        `magick "${p}" -bordercolor black -border 1 -fuzz 20% -fill white ` +
-        `-draw "color 0,0 floodfill" -draw "color ${w+1},0 floodfill" ` +
-        `-draw "color 0,${h+1} floodfill" -draw "color ${w+1},${h+1} floodfill" ` +
-        `-draw "color ${Math.floor(w/2)},0 floodfill" -draw "color ${Math.floor(w/2)},${h+1} floodfill" ` +
-        `-shave 1x1 "${p}"`,
-        { stdio: "pipe" }
-      );
-      // Pass 2: Floodfill white edges to transparent
-      id = execSync(`magick identify -format "%w %h" "${p}"`, { encoding: "utf-8" }).trim();
-      [w, h] = id.split(" ").map(Number);
+      // White background removal only — floodfill from 8 edge points
+      // NO black floodfill (it damages dark features like hair, cat faces, etc.)
+      const id = execSync(`magick identify -format "%w %h" "${p}"`, { encoding: "utf-8" }).trim();
+      const [w, h] = id.split(" ").map(Number);
       const mx = Math.floor(w / 2), my = Math.floor(h / 2);
       execSync(
-        `magick "${p}" -bordercolor white -border 1 -alpha set -fuzz 12% -fill none ` +
+        `magick "${p}" -bordercolor white -border 1 -alpha set -fuzz 10% -fill none ` +
         `-draw "color 0,0 floodfill" -draw "color ${w+1},0 floodfill" ` +
         `-draw "color 0,${h+1} floodfill" -draw "color ${w+1},${h+1} floodfill" ` +
         `-draw "color ${mx},0 floodfill" -draw "color ${mx},${h+1} floodfill" ` +
@@ -315,18 +304,29 @@ function removeBackground(inputMp4, outputWebm, clipName) {
     );
   }
 
+  // Trim black bars from scaled frames — the resize can add black letterboxing
+  console.log("    Trimming black bars...");
+  for (const sf of fs.readdirSync(scaledDir).filter(f => f.endsWith(".png"))) {
+    const fp = path.join(scaledDir, sf);
+    // Trim transparent/black edges, then re-center on a consistent canvas
+    execSync(`magick "${fp}" -fuzz 5% -trim +repage "${fp}"`, { stdio: "pipe" });
+  }
+  // After trim, force all frames to the same size (use first frame as reference)
+  const scaledFrames = fs.readdirSync(scaledDir).filter(f => f.endsWith(".png")).sort();
+  const refId = execSync(`magick identify -format "%w %h" "${path.join(scaledDir, scaledFrames[0])}"`, { encoding: "utf-8" }).trim();
+  const [refW, refH] = refId.split(" ").map(Number);
+  for (const sf of scaledFrames) {
+    execSync(`magick "${path.join(scaledDir, sf)}" -resize "${refW}x${refH}!" "${path.join(scaledDir, sf)}"`, { stdio: "pipe" });
+  }
+
   // Assemble animated WebP with img2webp — proper alpha support
   const webpOut = outputWebm.replace(/\.webm$/, ".webp");
-  const scaledFrames = fs.readdirSync(scaledDir).filter(f => f.endsWith(".png")).sort();
-  // -d 42 = ~24fps (1000/24 ≈ 42ms per frame), -lossy -q 75 for good compression
   const frameArgs = scaledFrames.map(f => `"${path.join(scaledDir, f)}"`).join(" ");
-  console.log(`    Assembling animated WebP (${scaledFrames.length} frames)...`);
+  console.log(`    Assembling animated WebP (${scaledFrames.length} frames, ${refW}x${refH})...`);
   execSync(`img2webp -d 42 -lossy -q 75 ${frameArgs} -o "${webpOut}"`, { stdio: "pipe" });
 
   // Clean up
   fs.rmSync(scaledDir, { recursive: true, force: true });
-
-  // Clean up temp frames
   fs.rmSync(tempDir, { recursive: true, force: true });
 }
 
