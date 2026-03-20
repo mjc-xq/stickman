@@ -339,11 +339,13 @@ async function removeBackground(inputMp4, outputWebm, clipName) {
     execSync(`magick "${path.join(scaledDir, sf)}" -resize "${refW}x${refH}!" "${path.join(scaledDir, sf)}"`, { stdio: "pipe" });
   }
 
-  // Assemble animated WebP with img2webp — proper alpha support
+  // Skip every other frame (24fps → 12fps) for reasonable file size
+  const finalFrames = scaledFrames.filter((_, i) => i % 2 === 0);
+  // Assemble animated WebP — play once (no loop), 12fps, good quality
   const webpOut = outputWebm.replace(/\.webm$/, ".webp");
-  const frameArgs = scaledFrames.map(f => `"${path.join(scaledDir, f)}"`).join(" ");
-  console.log(`    Assembling animated WebP (${scaledFrames.length} frames, ${refW}x${refH})...`);
-  execSync(`img2webp -d 42 -lossy -q 75 ${frameArgs} -o "${webpOut}"`, { stdio: "pipe" });
+  const frameArgs = finalFrames.map(f => `"${path.join(scaledDir, f)}"`).join(" ");
+  console.log(`    Assembling animated WebP (${finalFrames.length} frames @ 12fps, ${refW}x${refH})...`);
+  execSync(`img2webp -loop 1 -d 83 -lossy -q 70 ${frameArgs} -o "${webpOut}"`, { stdio: "pipe" });
 
   // Clean up
   fs.rmSync(scaledDir, { recursive: true, force: true });
