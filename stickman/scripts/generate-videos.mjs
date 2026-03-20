@@ -44,58 +44,61 @@ const CECE_DESC = `a young Black girl with brown skin, locs/dreadlocks hairstyle
 
 const HUEY_DESC = `a chunky tan/fawn bully breed dog with a big wrinkly face, cropped ears, stocky muscular build, and a pink tongue hanging out.`;
 
-const ALEX_DESC = `a teen girl with long straight dark brown hair, olive skin, confident expression, wearing a colorful striped outfit and holding a red wand. Wizards of Waverly Place style.`;
+const ALEX_DESC = `a teen girl with long straight dark brown hair, olive skin, confident expression, wearing a colorful striped outfit and holding a red wand.`;
+
+// CRITICAL framing instruction appended to every prompt
+const FRAMING = `CRITICAL FRAMING RULES: All characters must be FULLY visible in frame at ALL times — no cropping, no characters partially off-screen, no limbs or heads cut off at any edge. Keep characters centered with comfortable padding on all sides. The camera must NOT pan, zoom, or move in a way that cuts off any character. Characters can be smaller in the frame if needed to ensure they stay fully visible. Pure white background, absolutely no scenery, no ground plane, no shadows on ground. Bold cartoon animation style with strong black outlines.`;
 
 const CLIPS = [
   {
     name: "cece-wand-wave",
     refs: ["cece"],
-    prompt: `A cute cartoon girl (${CECE_DESC}) standing and waving a wooden magic wand in a figure-eight pattern. Golden sparkles and purple magical trails flow from the wand tip, swirling around her. She grins with excitement. Pure white background, no scenery. Cartoon animation style with bold outlines. 5 seconds.`,
+    prompt: `Full body shot of a cute cartoon girl (${CECE_DESC}) standing center frame, waving a wooden magic wand in a flowing figure-eight pattern. Golden sparkles and purple magical trails flow from the wand tip, swirling elegantly around her. She beams with pure excitement, bouncing slightly on her toes. The sparkles leave lingering trails that fade beautifully. ${FRAMING}`,
   },
   {
     name: "huey-lick",
     refs: ["cece", "huey"],
-    prompt: `A cute cartoon girl (${CECE_DESC}) sitting on the ground while a cartoon dog (${HUEY_DESC}) enthusiastically licks her entire face with its huge pink tongue. She laughs with her eyes squeezed shut, mouth wide open in giggly delight, glasses going askew. The dog's tail wags rapidly. Pure white background, no scenery. Bold cartoon animation style. 5 seconds.`,
+    prompt: `Full body shot of a cute cartoon girl (${CECE_DESC}) sitting cross-legged center frame while a cartoon dog (${HUEY_DESC}) enthusiastically licks her entire face with its huge pink tongue. She throws her head back laughing with eyes squeezed shut, mouth wide open in pure giggly delight, glasses going completely askew from the slobber. The dog's tail wags so fast it's a blur. Both characters fully visible. ${FRAMING}`,
   },
   {
     name: "cece-turns-alex-into-cat",
     refs: ["cece", "alex"],
-    prompt: `A cute cartoon girl (${CECE_DESC}) points her wand at a teen wizard girl (${ALEX_DESC}). A bright purple magical blast shoots from the wand and hits the teen girl. The teen girl transforms with a puff of purple smoke into a surprised-looking cat wearing her striped outfit. The younger girl covers her mouth laughing. Pure white background, no scenery. Bold cartoon animation style. 8 seconds.`,
+    prompt: `Wide shot of two characters fully visible center frame: a cute cartoon girl (${CECE_DESC}) on the left points her wand at a teen wizard girl (${ALEX_DESC}) on the right. A bright purple magical blast shoots from the wand. The teen girl is engulfed in swirling purple and gold smoke, and when the smoke clears she has transformed into a surprised fluffy cat still wearing the striped outfit. The younger girl doubles over covering her mouth, laughing uncontrollably. ${FRAMING}`,
   },
   {
     name: "cece-spell-sparkles",
     refs: ["cece"],
-    prompt: `A cute cartoon girl (${CECE_DESC}) holding her wand up high, concentrating intensely. Colorful magical energy — gold, purple, and pink sparkles — swirls up from the ground around her feet, spiraling up around her body and shooting out from the wand tip in a spectacular burst. Her wizard hat glows at the tip. Her locs float slightly from the magical energy. Pure white background, no scenery. Bold cartoon animation style. 6 seconds.`,
+    prompt: `Full body shot of a cute cartoon girl (${CECE_DESC}) standing center frame, holding her wand up high with both hands, eyes closed in deep concentration. Colorful magical energy — brilliant gold, deep purple, and hot pink sparkles — swirls up from below her feet in spiraling ribbons, wrapping around her body and exploding from the wand tip in a spectacular starburst. Her wizard hat glows intensely at the tip. Her locs lift and float from the magical energy. The whole scene radiates power and wonder. ${FRAMING}`,
   },
   {
     name: "cece-spell-levitate",
     refs: ["cece"],
-    prompt: `A cute cartoon girl (${CECE_DESC}) casting a levitation spell — she floats up off the ground with her arms spread wide, wizard hat lifting off her head slightly. Golden rings of magic circle around her as she rises. She looks down at the ground with amazed wide eyes and an open-mouth smile. Pure white background, no scenery. Bold cartoon animation style. 6 seconds.`,
+    prompt: `Full body shot of a cute cartoon girl (${CECE_DESC}) center frame, casting a levitation spell on herself. She gently floats upward off the ground with arms spread wide like wings, wizard hat lifting slightly off her head. Concentric golden rings of magic pulse outward from her body as she rises. She looks down with amazed wide eyes and a joyful open-mouth gasp. Sparkle dust drifts downward from her shoes. Leave room above her head for the float. ${FRAMING}`,
   },
   {
     name: "fairy-cece-laugh",
     refs: ["cece"],
-    prompt: `A tiny fairy version of a cute cartoon girl (${CECE_DESC}) — only 3 inches tall with delicate translucent wings on her back. She is laughing hysterically, holding her belly, stumbling and nearly falling over from laughing so hard. Her tiny wizard hat falls off. Sparkle dust falls from her wings as she shakes with laughter. Pure white background, no scenery. Bold cartoon animation style. 5 seconds.`,
+    prompt: `Center frame: a tiny fairy version of a cute cartoon girl (${CECE_DESC}) — miniature with delicate translucent iridescent wings on her back. She is laughing so hard she can barely stand, holding her belly with both hands, knees buckling, stumbling sideways. Her tiny wizard hat tumbles off her head. Golden sparkle dust puffs from her fluttering wings with each heave of laughter. She's absolutely losing it — the most contagious laugh ever. Fairy is centered with plenty of space around her. ${FRAMING}`,
   },
   {
     name: "fairy-cece-tumble",
     refs: ["cece"],
-    prompt: `A tiny fairy version of a cute cartoon girl (${CECE_DESC}) — only 3 inches tall with delicate translucent wings on her back. She tumbles and somersaults through the air doing acrobatic flips, leaving trails of golden sparkle dust behind her. She spins, dives, loops, and giggles the whole time. Her wizard hat stays on magically. Pure white background, no scenery. Bold cartoon animation style. 6 seconds.`,
+    prompt: `Center frame: a tiny fairy version of a cute cartoon girl (${CECE_DESC}) — miniature with delicate translucent iridescent wings on her back. She performs graceful acrobatic tumbles and somersaults through the air — spinning, looping, diving, and twirling. Golden sparkle dust trails behind her every movement, creating beautiful swirling patterns. Her wizard hat stays on magically. She giggles the whole time, clearly having the time of her life. All movement stays well within the frame. ${FRAMING}`,
   },
   {
     name: "cece-huey-dance",
     refs: ["cece", "huey"],
-    prompt: `A cute cartoon girl (${CECE_DESC}) and a cartoon dog (${HUEY_DESC}) doing a silly happy dance together. The girl bounces and waves her arms while the chunky dog spins in circles and hops clumsily. Both are having the time of their lives. Small music notes and sparkles float around them. Pure white background, no scenery. Bold cartoon animation style. 6 seconds.`,
+    prompt: `Wide shot of a cute cartoon girl (${CECE_DESC}) and a cartoon dog (${HUEY_DESC}) doing an adorably silly happy dance together, both fully visible center frame. The girl bounces from foot to foot waving her arms overhead while the chunky dog attempts to copy her — spinning in clumsy circles, hopping on his stubby legs, tongue flapping. Musical notes and colorful sparkles float around them. Both having the absolute time of their lives. Pure joy and silliness. ${FRAMING}`,
   },
   {
     name: "cece-alex-high-five",
     refs: ["cece", "alex"],
-    prompt: `A cute cartoon girl (${CECE_DESC}) and a teen wizard girl (${ALEX_DESC}) running toward each other and doing an epic jumping high five. When their hands meet, a massive burst of combined purple and gold magical energy explodes outward in a ring. Both freeze in mid-air for a moment with huge grins. Pure white background, no scenery. Bold cartoon animation style. 5 seconds.`,
+    prompt: `Wide shot with both characters fully visible: a cute cartoon girl (${CECE_DESC}) on the left and a teen wizard girl (${ALEX_DESC}) on the right run toward each other from opposite sides. They leap into the air and meet in the center for an epic mid-air high five. The moment their hands connect, a massive shockwave of combined purple and gold magical energy bursts outward in expanding rings. Both hang in the air for a beat with enormous triumphant grins before landing. ${FRAMING}`,
   },
   {
     name: "cece-wand-point",
     refs: ["cece"],
-    prompt: `A cute cartoon girl (${CECE_DESC}) dramatically pointing her wand directly at the camera/viewer. She has one eye narrowed with a mischievous confident grin. The wand tip crackles with purple and gold energy, building up to a magical blast. She winks. Pure white background, no scenery. Bold cartoon animation style. 5 seconds.`,
+    prompt: `Upper body shot of a cute cartoon girl (${CECE_DESC}) center frame, dramatically thrusting her wand forward directly toward the viewer. One eye narrowed, the other wide, with a mischievous confident smirk. The wand tip crackles and builds with purple and gold electrical energy, sparks arcing and growing more intense. She gives a playful wink. The energy reaches a crescendo and fires a sparkle blast. Character stays fully in frame throughout. ${FRAMING}`,
   },
 ];
 
