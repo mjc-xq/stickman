@@ -27,7 +27,7 @@ export interface Slide {
   fairyTriggerWord?: string; // triggers fairy flight animation when typed
   isTitle?: boolean; // renders as title card instead of story slide
   floatingBubble?: boolean; // shows floating bubble Cece animation
-  montage?: { ceceSrc: string; alexSrc: string }[]; // cycling image pairs
+  montage?: { ceceSrc: string; alexSrc: string; videoSrc?: string }[]; // cycling image/video pairs
   // Multi-piece foreground (replaces single fg when present)
   splitFg?: SplitPiece[];
 }
@@ -41,6 +41,7 @@ export const STORY_SLIDES: Slide[] = [
     ],
     bg: "/images/story/slide-01-bg.png",
     fg: "/images/story/split/title-group.png",
+    fgVideo: "/videos/animated/intro-all-laughing.webp",
     isTitle: true,
   },
 
@@ -52,6 +53,7 @@ export const STORY_SLIDES: Slide[] = [
     ],
     bg: "/images/story/slide-02-bg.png",
     fg: "/images/story/slide-02-fg.png",
+    fgVideo: "/videos/animated/slide02-alex-speaking.webp",
     effect: "shooting-star",
   },
 
@@ -149,8 +151,11 @@ export const STORY_SLIDES: Slide[] = [
     fg: "/images/story/slide-06-fg.png",
     montage: [
       { ceceSrc: "/images/story/split/montage-cece-zap.png", alexSrc: "/images/story/split/montage-alex-wow.png" },
+      { ceceSrc: "", alexSrc: "", videoSrc: "/videos/animated/cece-levitate.webp" },
       { ceceSrc: "/images/story/split/montage-cece-levitate.png", alexSrc: "/images/story/split/montage-alex-laugh.png" },
+      { ceceSrc: "", alexSrc: "", videoSrc: "/videos/animated/cece-turns-alex-cat.webp" },
       { ceceSrc: "/images/story/split/montage-cece-rain.png", alexSrc: "/images/story/split/montage-alex-proud.png" },
+      { ceceSrc: "", alexSrc: "", videoSrc: "/videos/animated/cece-wand-point.webp" },
     ],
   },
 

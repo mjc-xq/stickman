@@ -255,9 +255,13 @@ function removeBackground(inputMp4, outputWebm, clipName) {
   const tempDir = path.join(TEMP_FRAMES_DIR, clipName);
   fs.mkdirSync(tempDir, { recursive: true });
 
-  // Extract frames — crop 3% from top/bottom to remove any black bars from Veo
+  // Extract frames — aggressively crop black bars from Veo (7% top, 5% bottom)
+  // Then replace any remaining near-black edges with white so floodfill can remove them
   console.log("    Extracting frames...");
-  execSync(`ffmpeg -y -i "${inputMp4}" -vf "crop=iw:ih*0.94:0:ih*0.03,fps=24" "${tempDir}/frame-%04d.png" 2>/dev/null`, { stdio: "pipe" });
+  execSync(
+    `ffmpeg -y -i "${inputMp4}" -vf "crop=iw:ih*0.88:0:ih*0.07,fps=24" "${tempDir}/frame-%04d.png" 2>/dev/null`,
+    { stdio: "pipe" }
+  );
 
   const frames = fs.readdirSync(tempDir).filter(f => f.endsWith(".png")).sort();
   console.log(`    Removing background from ${frames.length} frames...`);
@@ -265,16 +269,27 @@ function removeBackground(inputMp4, outputWebm, clipName) {
   for (const frame of frames) {
     const p = path.join(tempDir, frame);
     try {
-      const identify = execSync(`magick identify -format "%w %h" "${p}"`, { encoding: "utf-8" }).trim();
-      const [w, h] = identify.split(" ").map(Number);
+      // Pass 1: Floodfill near-black edges with white (kills black bar residue)
+      let id = execSync(`magick identify -format "%w %h" "${p}"`, { encoding: "utf-8" }).trim();
+      let [w, h] = id.split(" ").map(Number);
+      execSync(
+        `magick "${p}" -bordercolor black -border 1 -fuzz 20% -fill white ` +
+        `-draw "color 0,0 floodfill" -draw "color ${w+1},0 floodfill" ` +
+        `-draw "color 0,${h+1} floodfill" -draw "color ${w+1},${h+1} floodfill" ` +
+        `-draw "color ${Math.floor(w/2)},0 floodfill" -draw "color ${Math.floor(w/2)},${h+1} floodfill" ` +
+        `-shave 1x1 "${p}"`,
+        { stdio: "pipe" }
+      );
+      // Pass 2: Floodfill white edges to transparent
+      id = execSync(`magick identify -format "%w %h" "${p}"`, { encoding: "utf-8" }).trim();
+      [w, h] = id.split(" ").map(Number);
       const mx = Math.floor(w / 2), my = Math.floor(h / 2);
-      // Lower fuzz (12%) to preserve dark hair, striped patterns, and colored details
       execSync(
         `magick "${p}" -bordercolor white -border 1 -alpha set -fuzz 12% -fill none ` +
-        `-draw "color 0,0 floodfill" -draw "color ${w},0 floodfill" ` +
-        `-draw "color 0,${h} floodfill" -draw "color ${w},${h} floodfill" ` +
-        `-draw "color ${mx},0 floodfill" -draw "color ${mx},${h} floodfill" ` +
-        `-draw "color 0,${my} floodfill" -draw "color ${w},${my} floodfill" ` +
+        `-draw "color 0,0 floodfill" -draw "color ${w+1},0 floodfill" ` +
+        `-draw "color 0,${h+1} floodfill" -draw "color ${w+1},${h+1} floodfill" ` +
+        `-draw "color ${mx},0 floodfill" -draw "color ${mx},${h+1} floodfill" ` +
+        `-draw "color 0,${my} floodfill" -draw "color ${w+1},${my} floodfill" ` +
         `-shave 1x1 "${p}"`,
         { stdio: "pipe" }
       );

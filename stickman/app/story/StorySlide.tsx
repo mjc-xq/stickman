@@ -23,6 +23,7 @@ interface StorySlideProps {
   lines: [string, string];
   bgSrc: string;
   fgSrc: string;
+  fgVideo?: string;
   index: number;
   isActive: boolean;
   effect?: Slide["effect"];
@@ -35,7 +36,7 @@ interface StorySlideProps {
 }
 
 export function StorySlide({
-  lines, bgSrc, fgSrc, index, isActive, effect, effectTriggerWord, splitFg, fairyTriggerWord, isTitle, floatingBubble, montage,
+  lines, bgSrc, fgSrc, fgVideo, index, isActive, effect, effectTriggerWord, splitFg, fairyTriggerWord, isTitle, floatingBubble, montage,
 }: StorySlideProps) {
   const hasSplit = splitFg && splitFg.length > 0;
   const isFirstSlide = index === 0;
@@ -390,7 +391,7 @@ export function StorySlide({
               }}
             >
               <img
-                src={fgSrc}
+                src={fgVideo || fgSrc}
                 alt={`Scene ${index + 1}`}
                 loading={index <= 1 ? "eager" : "lazy"}
                 className="relative w-full h-auto object-contain"

@@ -6,6 +6,8 @@ import gsap from "gsap";
 export interface MontageFrame {
   ceceSrc: string;
   alexSrc: string;
+  // If set, shows a single full-width animated WebP instead of the Cece/Alex pair
+  videoSrc?: string;
 }
 
 interface MontageSlideProps {
@@ -74,9 +76,26 @@ export function MontageSlide({ frames, isActive, cycleDuration = 3.5 }: MontageS
 
   return (
     <div ref={containerRef} className="absolute inset-0 flex items-center justify-center z-[11] pointer-events-none">
-      {/* Alex on the left */}
+      {/* Full-width video frames (when videoSrc is set) */}
+      <div className="absolute inset-0 flex items-center justify-center">
+        {frames.map((frame, i) => frame.videoSrc ? (
+          <img
+            key={`video-${i}`}
+            src={frame.videoSrc}
+            alt=""
+            className="montage-cece montage-alex absolute h-full object-contain"
+            style={{
+              opacity: i === 0 ? 1 : 0,
+              maxHeight: "70%",
+              filter: "drop-shadow(0 6px 20px rgba(0,0,0,0.5))",
+            }}
+          />
+        ) : null)}
+      </div>
+
+      {/* Alex on the left (for image-pair frames only) */}
       <div className="absolute" style={{ left: "5%", top: "15%", width: "40%", height: "65%" }}>
-        {frames.map((frame, i) => (
+        {frames.map((frame, i) => !frame.videoSrc ? (
           <img
             key={`alex-${i}`}
             src={frame.alexSrc}
@@ -87,12 +106,12 @@ export function MontageSlide({ frames, isActive, cycleDuration = 3.5 }: MontageS
               filter: "drop-shadow(0 6px 20px rgba(0,0,0,0.5))",
             }}
           />
-        ))}
+        ) : null)}
       </div>
 
-      {/* Cece on the right */}
+      {/* Cece on the right (for image-pair frames only) */}
       <div className="absolute" style={{ right: "5%", top: "10%", width: "45%", height: "70%" }}>
-        {frames.map((frame, i) => (
+        {frames.map((frame, i) => !frame.videoSrc ? (
           <img
             key={`cece-${i}`}
             src={frame.ceceSrc}
@@ -103,7 +122,7 @@ export function MontageSlide({ frames, isActive, cycleDuration = 3.5 }: MontageS
               filter: "drop-shadow(0 6px 20px rgba(0,0,0,0.5))",
             }}
           />
-        ))}
+        ) : null)}
       </div>
 
     </div>

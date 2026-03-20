@@ -218,6 +218,7 @@ export function StoryView() {
               lines={slide.lines}
               bgSrc={slide.bg}
               fgSrc={slide.fg}
+              fgVideo={slide.fgVideo}
               index={index}
               isActive={activeSlide === index}
               effect={slide.effect}
